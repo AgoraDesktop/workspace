@@ -1,0 +1,4 @@
+# build/ is where artefacts go
+build/
+# The app bundle is a build artefact, not a source.
+*.app/

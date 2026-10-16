@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Workspace.app's Info.plist. A program with an Info.plist IS a bundle, and this one is what the launch path
+  and `libagora-launchservices` read: the identifier a window's `set_app_id` is grouped by, and the name the
+  Dock and the menu bar would show. The document types Workspace ITSELF opens (a folder, a volume) are a later
+  stage's; W0 declares only that it is an application.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>org.agora.Workspace</string>
+	<key>CFBundleName</key>
+	<string>Workspace</string>
+	<key>CFBundleExecutable</key>
+	<string>Workspace</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@PROJECT_VERSION@</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+</dict>
+</plist>
