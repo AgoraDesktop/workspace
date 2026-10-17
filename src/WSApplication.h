@@ -16,11 +16,18 @@
 
 #import <Foundation/NSObject.h>
 
+/* **THE PROTOCOL'S OWN HEADER, BECAUSE A FORWARD DECLARATION IS NOT A CONFORMANCE.** `@protocol X;` is enough to
+ * NAME a protocol but not to ADOPT it — MEASURED, clang warns "cannot find protocol definition for
+ * 'WSPreferencesWindowTarget'" at the `@interface` line below. The header is one small window's and pulls in
+ * nothing but Foundation, so importing it here is the whole fix. */
+#import "WSPreferencesWindow.h"
+
 @class WSDesktopWindow;
 
-@interface WSApplication : NSObject
+@interface WSApplication : NSObject <WSPreferencesWindowTarget>
 {
 	WSDesktopWindow *_desktop;
+	WSPreferencesWindow *_preferences;
 }
 
 /* Create the desktop window and put it on the screen. NO if it could not be made. */
@@ -31,6 +38,15 @@
 - (void)runForSeconds:(double)seconds;
 
 - (void)stop;
+
+/* **THE TWO APPLICATION-MENU ROWS WHOSE MECHANISM IS THE APPLICATION'S.** `-orderFrontStandardAboutPanel:` is a
+ * NAMED REFUSAL in this tree and there is no preferences panel at all, so those two rows are the target's to
+ * answer — and the target is this object, which is what `WSMainMenu` is handed. */
+- (void)orderFrontAboutPanel:(id)sender;
+- (void)showPreferences:(id)sender;
+
+/* `WSPreferencesWindow`'s answer to a moved slider: apply the size and let the desktop re-lay out. */
+- (void)preferencesWindow:(id)window didChangeIconSize:(NSInteger)size;
 
 @end
 

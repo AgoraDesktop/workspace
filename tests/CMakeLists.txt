@@ -25,6 +25,20 @@ add_test(NAME workspace-metadata-store COMMAND metadata_store)
 set_tests_properties(workspace-metadata-store PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
 
+# **THE MENU BAR'S CONTENTS, WHICH NEED THE APPKIT BUT NOT A COMPOSITOR.** `-setMainMenu:` builds the bar's
+# WINDOW from the region the compositor sends, so with no compositor there is no window to look at — but the MENU
+# is built first and entirely, and every decision this component made is in it: which menus there are, what the
+# application menu offers, where each row is sent, and what `-update`'s enabling walk makes of the result. The ink
+# in the strip is the desktop suite's to measure; this is the menu's.
+add_executable(main_menu main_menu.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m")
+target_include_directories(main_menu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(main_menu PRIVATE AgoraApp::App Foundation::Foundation objc)
+add_test(NAME workspace-main-menu COMMAND main_menu)
+# The AppKit's own dependencies arrive through the prefix, and DT_RUNPATH is not inherited by a dependency — the
+# same reason libagora-app's tests set this, and it is the imported target's directory rather than a written path.
+set_tests_properties(workspace-main-menu PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")
+
 # The sibling's built outputs. Named and cached BEFORE use, so a fresh configure does not expand them to
 # nothing — the trap libagora-app's own tests record.
 set(AGORA_WINDOW_SERVER_BINARY

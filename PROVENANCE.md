@@ -68,6 +68,43 @@ the caller says where that is. `WSDesktopView` hands it `-layoutBounds` — the 
 icon's BOX begins at y = 34 (24 + 10) and its page glyph's ink at y = 42, the art carrying its own 8 pt inset.
 `tests/desktop_layout.m` now checks the first cell sits at the AREA'S origin, not at a margin.
 
+## The application menu — four findings, three of them the AppKit's
+
+W1's menu bar is Workspace's own code in `src/WSMainMenu.m`, and it is assembled from doors the AppKit already
+had. What it MEASURED on the way is below; the ones that are the AppKit's are recorded here because that is where
+the fix belongs, and named so the next reader does not re-derive them.
+
+**1. THE KEY EQUIVALENT'S MASK IS ZERO BY DEFAULT, WHERE APPLE'S IS COMMAND.**
+`-[NSMenuItem initWithTitle:action:keyEquivalent:]` sets the title, the action and the key string and leaves
+`_keyEquivalentModifierMask` at ZERO — Apple's sets `NSCommandKeyMask`. MEASURED in `NSMenu -performKeyEquivalent:`,
+which compares `[item keyEquivalentModifierMask] & mask` against the event's: with the mask at zero **Command-Q does
+not match and a bare `q` does**, so every item a portable application builds with the convenience factory answers
+the wrong keystroke. `WSMainMenu` therefore names `NSCommandKeyMask` on every row (`WSRow` in its implementation),
+and `workspace-main-menu` asserts it — "and its shortcut is COMMAND-Q, not a bare q". The AppKit fix is to the item's
+default and not to a caller, which is why it is recorded rather than worked around silently.
+
+**2. THE BAR'S WINDOW WAS A RACE, AND IS FIXED IN THE APPKIT.** `-setMainMenu:` can run before the compositor has
+sent the menu-bar region, and then it builds nothing; `-run` re-measured, but a loop of the application's own never
+goes through `-run`. Fixed at `-nextEventMatchingMask:` — see `../libagora-app/PROVENANCE.md` § 7. Before the fix
+Workspace showed a menu bar in some runs and not in others.
+
+**3. THE EDIT MENU'S FIVE CHAIN-ROUTED ROWS COME OUT ENABLED, AND NOTHING HERE ANSWERS THEM.** This tier's
+`NSResponder` implements `-cut:`, `-copy:`, `-paste:`, `-delete:` and `-selectAll:` in the BASE as forwarders to the
+next responder, where Apple leaves a plain view answering none of them — so the enabling walk's
+`-targetForAction:` finds an answer at every responder and leaves the row live. Apple's own Copy is disabled with no
+text view focused. The menu is right (a Finder's Edit menu is chain-routed) and the CHAIN is over-permissive; the
+fix belongs to `-targetForAction:` or to the base. `workspace-main-menu` PINS the measured outcome so that the day
+it changes, the change is visible.
+
+**4. THE APPLICATION MENU OPENS AND IS THEN DISMISSED — A TRACKING BUG, NOT A MENU ONE.** Clicking the bar's first
+title DOES open it: MEASURED, a window at **level 101** (a popup menu's), 180x246 at (36, 450), visible, and its
+shadow drawn. It is then lost, and the trace says why: the bar window receives a FLOOD of `NSLeftMouseDragged` —
+**170 in a few seconds with the button released** — and the tracking loop's motion handling dismisses a menu whose
+pointer is not over it. The same flood is a plausible source of the one `wayland` error seen here ("Data too big
+for buffer", which killed the connection), since a loop that keeps producing requests keeps filling the socket.
+This is the AppKit's menu tracking against this compositor, not Workspace's menu DEFINITION: what this component
+owes is the menus, and they are drawn (the bar, measured) and correct.
+
 ## Licence per file
 
 Every file is MIT. There is no third-party code in this component, so there is no per-file licence split to

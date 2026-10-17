@@ -114,6 +114,20 @@
 
 - (NSInteger)iconSize { return [_store iconSize]; }
 
+/* **AND THE ONE PREFERENCE THE APPLICATION HAS TODAY.** The size lives in the folder's `.agora` sidecar, so a change
+ * is a STORE change followed by a re-layout — and the sidecar is SAVED, because a preference that dies with the
+ * process is not one. The positions a person has set are KEPT: they are absolute, and `-reload` only places the
+ * items the store has no place for. */
+- (void)setIconSize:(NSInteger)size
+{
+	if (size == [_store iconSize]) {
+		return;
+	}
+	[_store setIconSize:size];
+	[_store save];
+	[self reload];
+}
+
 /* COCOA'S ORIGIN IS BOTTOM-LEFT AND THE STORED POSITION'S IS TOP-LEFT, so every rectangle is converted in the
  * one place that knows the view is not flipped. */
 - (NSRect)cocoaRectForPosition:(NSPoint)position size:(NSSize)size

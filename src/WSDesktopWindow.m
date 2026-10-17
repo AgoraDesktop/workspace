@@ -71,4 +71,14 @@
 	return NO;
 }
 
+- (NSInteger)iconSize
+{
+	return [(WSDesktopView *)[self contentView] iconSize];
+}
+
+- (void)setIconSize:(NSInteger)size
+{
+	[(WSDesktopView *)[self contentView] setIconSize:size];
+}
+
 @end

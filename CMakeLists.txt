@@ -31,12 +31,15 @@ find_package(AgoraLaunchServices CONFIG REQUIRED)
 
 add_executable(Workspace
     src/main.m
+    src/WSAboutPanel.m
     src/WSApplication.m
     src/WSDesktopWindow.m
     src/WSDesktopView.m
     src/WSIconLayout.m
     src/WSItemModel.m
-    src/WSMetadataStore.m)
+    src/WSMainMenu.m
+    src/WSMetadataStore.m
+    src/WSPreferencesWindow.m)
 
 target_include_directories(Workspace PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(Workspace PRIVATE

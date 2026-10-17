@@ -49,6 +49,43 @@ row clears the bar by ten and the CALLER — not the grid — says where the ico
 **And one gap named rather than implied:** the desktop is not LIVE yet. `libagora-watch` (F3) is built, but the
 model reloads on demand instead of from a stream callback — that wiring is the step after this surface.
 
+## W1b — the application menu
+
+**THE APPKIT OWNS THE MECHANISM AND WORKSPACE OWNS THE CONTENTS, AND THE SPLIT IS THE WHOLE DESIGN.**
+`-[NSApplication setMainMenu:]` takes a menu, INSERTS the application's own menu at its front — titled with
+`-[NSProcessInfo processName]`, because that rule is the HIG's and not each application's — moves Help to the back,
+and builds the borderless window at `NSMainMenuWindowLevel` (24) whose `NSMenuView` draws the titles and opens one on
+a click. What it cannot know is which menus a Mac file manager has; that is `src/WSMainMenu.m`, and it is the only
+thing this stage added to the menu bar.
+
+**FOUR DECISIONS, AND EACH IS A ROW THIS FILE DOES NOT BUILD.**
+
+- **The application menu is FILLED AFTER THE INSTALL, not before it.** The submenu to fill does not exist until
+  `-setMainMenu:` has made it; building it here would mean naming the application twice, and a bar reading
+  `Finder` above `Quit Workspace` is what two names for one thing looks like.
+- **About and Preferences are the application's own doors.** `-[NSApplication orderFrontStandardAboutPanel:]` is a
+  NAMED REFUSAL in this tree, and there is no preferences panel at all — so those two rows target `WSApplication`,
+  which puts up `WSAboutPanel` (the icon, the name, the version and the identifier, every string read out of
+  `Contents/Info.plist` through `NSBundle`) and `WSPreferencesWindow`.
+- **Preferences changes a preference that EXISTS.** Workspace has exactly two settings: which directory is the
+  desktop, and how big its icons are. The window shows both and lets a person change the second — the slider writes
+  through `WSMetadataStore` and SAVES, so the size in the sidecar is the size the next launch lays out with. A
+  window of controls wired to nothing would be worse than no window.
+- **A ROW WITH NO TARGET IS A DISABLED ROW, AND THAT IS THE DESIGN.** `-[NSMenu update]` enables an item when its
+  target answers its action, so every File/View/Go row — which names the Finder's own selector and has no
+  implementer yet — is drawn GREY. That is how a Mac application shows a command it cannot offer right now, and how
+  this bar says what Workspace can actually do instead of being a picture of the Finder. Each later stage lights its
+  own rows by giving them a target; nothing in `WSMainMenu.m` changes.
+
+**AND ONLY THE ACTIVE APPLICATION'S MENUS SHOW.** The bar window is ordered front by the AppKit's activation, which
+is the compositor's keyboard-focus decision — so a scene with an ordinary window in front of the desktop is a scene
+where Workspace's menus are correctly absent. The suite measures both: the bar present when Workspace is the active
+application, and the strip to the right of it still the server's own.
+
+**Two findings about the AppKit are recorded in `PROVENANCE.md` rather than worked around here:** this tier's
+`NSMenuItem` leaves a key equivalent's mask at zero where Apple's sets Command, so every row names its own mask; and
+the Edit menu's five chain-routed rows come out enabled because the base `NSResponder` implements them as forwarders.
+
 ## What W0 found that it did not set out to find
 
 **The server's menu-bar strip needed a level of its own, and now has one.** `output.c` painted the strip before

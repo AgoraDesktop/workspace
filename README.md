@@ -53,6 +53,27 @@ person can inspect. And the grid's **ORIGIN IS THE TOP OF ITS AREA**, not an ins
 a rectangle already padded by **the menu bar's height plus ten points** (`+[WSDesktopView topPadding]`, read from
 `NSStatusBar -thickness`), so the first row clears the bar by ten.
 
+### W1b: the application menu
+
+**THE APPLICATION HAS A MENU BAR, AND IT IS THE ONE A MAC APPLICATION HAS.** Seven titles, built by
+`src/WSMainMenu.m`: the application's own menu — About, Preferences…, Services, Hide, Hide Others, Show All, Quit —
+and File, Edit, View, Go, Window, Help beside it. The AppKit draws it: `-[NSApplication setMainMenu:]` inserts the
+application menu, moves Help last, and builds the window at `NSMainMenuWindowLevel` whose `NSMenuView` draws the
+titles and opens one on a click.
+
+**About and Preferences are real windows, not stubs.** `WSAboutPanel` shows the application's own icon, its name, its
+version and its bundle identifier — every string read out of `Contents/Info.plist`, so the box cannot disagree with
+the bundle it describes — and `WSPreferencesWindow` shows the one preference the application actually has and lets a
+person change it: the desktop icons' size, written through `WSMetadataStore` into the folder's `.agora` sidecar, so
+it survives the process. The two are the application's own doors because the AppKit's
+`-orderFrontStandardAboutPanel:` is a NAMED REFUSAL and there is no preferences panel at all.
+
+**AND THE MENUS BESIDE IT ARE A SKELETON, DELIBERATELY.** Every File, Edit, View and Go row names the selector the
+Finder's own row sends and has **no target yet** — so the enabling walk draws it greyed. That is the honest state of
+a command whose feature is not written, and it is MEASURED rather than asserted: `workspace-main-menu` runs the walk
+and checks the outcome, and the desktop suite reads the ink off the strip in two scenes — one where Workspace is the
+active application and one where an ordinary window is in front of it, where its menus are correctly absent.
+
 ### The strip that needed a level of its own — now fixed, and measured
 
 `window-server/src/output.c` drew its menu-bar strip **before** the windows and said so: *"until the strip has
@@ -61,7 +82,7 @@ exactly such a window, so the strip *was* covered by the desktop. The strip now 
 and is composited in the level walk, so the suite measures the fix instead: the bar is in the top rows, OVER the
 desktop, and the desktop's first icon row begins a menu-bar's height plus ten points down.
 
-## What is here (W0 and W1)
+## What is here (W0, W1 and W1b)
 
 ```
 src/

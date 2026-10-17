@@ -40,6 +40,11 @@
 - (instancetype)initWithFrame:(NSRect)frame directory:(NSString *)directory;
 - (NSString *)directory;
 
+/* The icon size this view lays out with, and the door a PREFERENCE comes in through. The size is the store's, so a
+ * change is a store change and a re-layout — see the implementation for why the sidecar is saved here too. */
+- (NSInteger)iconSize;
+- (void)setIconSize:(NSInteger)size;
+
 /* Re-read the directory and re-place the icons. The change stream (libagora-watch) will call this; W1 calls it
  * when the view is made and when a person changes something. */
 - (void)reload;

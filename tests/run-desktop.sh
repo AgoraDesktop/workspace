@@ -30,6 +30,8 @@ fi
 RUNTIME="${XDG_RUNTIME_DIR:-/tmp}"
 SOCK="aws-workspace-$$"
 SHOT="/tmp/agora-workspace-$$.ppm"
+MENU_SHOT="/tmp/agora-workspace-menu-$$.ppm"
+MENU_SOCK="aws-workspace-menu-$$"
 DESKTOP_DIR="/tmp/agora-workspace-desktop-$$"
 
 # THE WALLPAPER STUB: a full-screen window at the WALLPAPER level, in ARGENTUM's amber. It stands in for the
@@ -48,15 +50,17 @@ ICON_Y=300
 ICON_SIZE=64
 
 cleanup() {
-	for pid in "${SPID:-}" "${WALLPID:-}" "${WPID:-}" "${CPID:-}"; do
+	for pid in "${SPID:-}" "${WALLPID:-}" "${WPID:-}" "${CPID:-}" "${MSPID:-}" "${MWPID:-}"; do
 		[ -n "${pid}" ] && kill "${pid}" 2>/dev/null
 	done
-	rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock" "${SHOT}"
+	rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock" "${SHOT}" \
+	      "${RUNTIME}/${MENU_SOCK}" "${RUNTIME}/${MENU_SOCK}.lock" "${MENU_SHOT}"
 	rm -rf "${DESKTOP_DIR}"
 }
 trap cleanup EXIT
 
-rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock" "${SHOT}"
+rm -f "${RUNTIME}/${SOCK}" "${RUNTIME}/${SOCK}.lock" "${SHOT}" \
+      "${RUNTIME}/${MENU_SOCK}" "${RUNTIME}/${MENU_SOCK}.lock" "${MENU_SHOT}"
 rm -rf "${DESKTOP_DIR}"
 
 mkdir -p "${DESKTOP_DIR}"
@@ -114,3 +118,36 @@ if [ ! -f "${SHOT}" ]; then
 fi
 
 "${PYTHON}" "${CHECKER}" "${SHOT}" "${NORMAL_COLOUR}" "${WALL_COLOUR}" "${ICON_X}" "${ICON_Y}" "${ICON_SIZE}"
+STATUS=$?
+
+# **AND A SECOND SCENE, BECAUSE A MENU BAR BELONGS TO THE ACTIVE APPLICATION.** The compositor gives the keyboard
+# **AND A SECOND SCENE, BECAUSE A MENU BAR BELONGS TO THE ACTIVE APPLICATION.** The compositor gives the keyboard
+# to the window that is IN FRONT, and the scene above has an ordinary window (another client) in front of the
+# desktop — so Workspace is not the active application there and its menus are correctly absent. The scene below
+# is the application ALONE, which is the one where its own bar has something to say. Both screenshots go to the
+# same checker; the second group of checks is skipped when this scene did not happen.
+"${SERVER}" --socket "${MENU_SOCK}" --frames 1000000 --screenshot "${MENU_SHOT}" >/dev/null 2>&1 &
+MSPID=$!
+for _ in $(seq 1 50); do
+	[ -S "${RUNTIME}/${MENU_SOCK}" ] && break
+	sleep 0.1
+done
+if [ -S "${RUNTIME}/${MENU_SOCK}" ]; then
+	AGORA_DESKTOP="${DESKTOP_DIR}" WAYLAND_DISPLAY="${MENU_SOCK}" "${WORKSPACE}" --seconds 1000000 \
+		>/dev/null 2>/tmp/agora-workspace-menu-app.log &
+	MWPID=$!
+	# **THE WAIT IS FOR THE COMPOSITOR'S ACTIVATION ROUND TRIP, AND IT IS THREE SECONDS BECAUSE IT IS A WAIT AND NOT
+	# A MEASUREMENT.** A menu bar is shown by the ACTIVE application: the compositor gives this window the keyboard
+	# when it maps, the AppKit reads that on its next event and orders the bar front, and the bar is drawn a frame
+	# after that. MEASURED at two seconds: six runs out of six. Three is margin for a loaded machine, which is where
+	# the one intermittent failure this suite ever had came from.
+	sleep 3
+	kill -TERM "${MSPID}" 2>/dev/null
+	wait "${MSPID}" 2>/dev/null
+	kill "${MWPID}" 2>/dev/null
+	"${PYTHON}" "${CHECKER}" "${SHOT}" "${NORMAL_COLOUR}" "${WALL_COLOUR}" "${ICON_X}" "${ICON_Y}" "${ICON_SIZE}" \
+		"${MENU_SHOT}"
+	STATUS=$?
+fi
+
+exit "${STATUS}"
