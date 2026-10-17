@@ -16,7 +16,7 @@
  * respondsToSelector:[item action]])]`. A row whose feature has not been written yet therefore has no target, is
  * found not to answer, and is DRAWN GREY — which is exactly how a Mac application shows a command it cannot offer
  * right now, and how this bar says what Workspace can actually do instead of being a picture of the Finder. Each
- * later stage lights up its own rows by giving him a target; nothing here changes.
+ * later stage lights up its own rows by giving them a target; nothing here changes.
  *
  * **EVERY SHORTCUT NAMES ITS OWN MASK.** This tier's `-[NSMenuItem initWithTitle:action:keyEquivalent:]` sets the
  * title, the action and the key string and leaves `_keyEquivalentModifierMask` at ZERO, where Apple's sets
