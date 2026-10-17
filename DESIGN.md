@@ -18,10 +18,11 @@ file windows, the views and the file operations are later stages that hang off t
 
 ## The decisions W0 makes
 
-- **The wallpaper is the desktop's, not the server's.** `ARGENTUM.md` records that the server fills `#A8DED9`
-  "by request" and that "a vertical ramp is still the honest next step"; that ramp is now drawn here, because
-  the desktop is a *client* of the window server — the Finder's relationship to the WindowServer on the Mac.
-  The server's fill remains the thing seen before the desktop maps, or if it dies.
+- **The desktop is TWO LEVELS, and Workspace draws only the icons.** The wallpaper is a lower window at
+  `kCGDesktopWindowLevel` — the **Dock's** to draw, eventually — and Workspace's window is **TRANSPARENT** at
+  `kCGDesktopIconWindowLevel`, drawing only the items of the desktop directory; the compositor blends it over
+  the wallpaper. (W0 drew the wallpaper itself; the level split moved it out, so the desktop is a *shell*
+  surface rather than a file manager's private background.)
 - **`[NSScreen frame]`, not `visibleFrame`.** The desktop is what the Dock and the menu bar are drawn over, so
   sizing it to the work area would leave the wallpaper missing under their translucent parts.
 - **The bundle is a deliverable, not a packaging detail.** A program with an `Info.plist` beside it *is* a

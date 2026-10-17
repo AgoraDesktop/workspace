@@ -4,10 +4,11 @@
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
  * SPDX-License-Identifier: MIT
  *
- * WHAT MAKES IT THE DESKTOP IS THE LEVEL, NOT ITS SIZE. `kCGDesktopWindowLevel` (libagora-drawing's
- * `CGWindowLevel.h`) is BELOW every ordinary window, so the compositor draws this one first and everything
- * else over it; the Dock and the menu bar, being at higher levels, sit on top. That is the Mac's model and
- * the reason the level vocabulary had to exist before this window could.
+ * **THE DESKTOP IS TWO LEVELS, AND THIS IS THE UPPER ONE.** The wallpaper is a window at
+ * `kCGDesktopWindowLevel` — BELOW every ordinary window, and eventually the Dock's to draw; this window is at
+ * `kCGDesktopIconWindowLevel`, one above it, and draws only the ICONS. It is **TRANSPARENT**, so the wallpaper
+ * shows through everywhere there is no icon, which is what the compositor's source-over blend is for. Both
+ * levels come from libagora-drawing's `CGWindowLevel.h`, which is why that vocabulary had to exist first.
  *
  * IT SPANS `[NSScreen frame]` AND NOT `visibleFrame`, which is deliberate: the desktop is what the menu bar
  * and the Dock are drawn OVER, so sizing it to the work area would leave the wallpaper missing under their
@@ -42,8 +43,11 @@
 		return nil;
 	}
 
-	[self setLevel:kCGDesktopWindowLevel];
-	[self setOpaque:YES];
+	/* **THE ICON LEVEL, ONE ABOVE THE WALLPAPER'S.** The wallpaper is a window at `kCGDesktopWindowLevel` (the
+	 * Dock's, eventually); this is the layer of icons ON it. */
+	[self setLevel:kCGDesktopIconWindowLevel];
+	/* **TRANSPARENT**: the wallpaper shows through everywhere there is no icon. */
+	[self setOpaque:NO];
 	[self setHasShadow:NO];
 	[self setTitle:@"Desktop"];
 

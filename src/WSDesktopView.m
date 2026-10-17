@@ -40,16 +40,11 @@
 
 #include <stdlib.h>
 
-/* The wallpaper, from ARGENTUM.md's own two samples (top amber, bottom near-black). */
-#define WALLPAPER_TOP_R		108.0
-#define WALLPAPER_TOP_G		 55.0
-#define WALLPAPER_TOP_B		 29.0
-#define WALLPAPER_BOTTOM_R	 18.0
-#define WALLPAPER_BOTTOM_G	 14.0
-#define WALLPAPER_BOTTOM_B	  5.0
-#define WALLPAPER_BANDS		 64
-
 @implementation WSDesktopView
+
+/* NOT OPAQUE: the window is transparent and this view draws only the icons, so the wallpaper has to show
+ * through everywhere there is no icon. */
+- (BOOL)isOpaque { return NO; }
 
 - (instancetype)initWithFrame:(NSRect)frame directory:(NSString *)directory
 {
@@ -149,29 +144,17 @@
 
 - (void)drawRect:(NSRect)dirtyRect
 {
-	NSRect bounds = [self bounds];
-	CGFloat width = bounds.size.width;
-	CGFloat height = bounds.size.height;
-	CGFloat band = height / (CGFloat)WALLPAPER_BANDS;
 	NSArray *items = [_model items];
 	NSInteger iconSize = [self iconSize];
 	int i;
 
 	(void)dirtyRect;
 
-	/* 1. THE WALLPAPER. */
-	for (i = 0; i < WALLPAPER_BANDS; i++) {
-		CGFloat t = (CGFloat)i / (CGFloat)(WALLPAPER_BANDS - 1);
-		CGFloat red = (WALLPAPER_TOP_R + (WALLPAPER_BOTTOM_R - WALLPAPER_TOP_R) * t) / 255.0;
-		CGFloat green = (WALLPAPER_TOP_G + (WALLPAPER_BOTTOM_G - WALLPAPER_TOP_G) * t) / 255.0;
-		CGFloat blue = (WALLPAPER_TOP_B + (WALLPAPER_BOTTOM_B - WALLPAPER_TOP_B) * t) / 255.0;
+	/* **NO WALLPAPER HERE — ONLY WHAT IS ON THE DESKTOP.** The window is transparent and its pixels were cleared
+	 * to alpha zero before the tree drew, so this view's job is the icons, their labels and the selection; the
+	 * wallpaper shows through from the level below. */
 
-		[[NSColor colorWithCalibratedRed:red green:green blue:blue alpha:1.0] setFill];
-		[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, height - (CGFloat)(i + 1) * band, width, band + 1.0)]
-			fill];
-	}
-
-	/* 2. THE ICONS, each selected one's backing first. */
+	/* THE ICONS, each selected one's backing first. */
 	for (i = 0; i < (int)[items count]; i++) {
 		NSPoint position = [[_positions objectAtIndex:i] pointValue];
 		NSRect iconRect = [self cocoaRectForPosition:position

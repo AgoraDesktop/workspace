@@ -28,6 +28,29 @@ target, and doing so is what turned those rules on. On this machine the install 
 `-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON`, because the install-time relink wanted a `CMakeFiles/CMakeRelink.dir`
 copy it did not produce; that is a fact about this build tree and is recorded rather than hidden.
 
+## W1
+
+**The sidecar is XML, and that was MEASURED rather than chosen.** The plan said "binary plist"; this tree's
+`NSPropertyListSerialization` writes XML and REFUSES the binary format — measured, as a `save` that returned NO —
+so `.agora` is a text property list, which also diffs, which a binary one would not.
+
+**Icon positions are TOP-LEFT SCREEN COORDINATES**, the Finder's own convention and what the store persists;
+Cocoa's bottom-left appears only in the view's drawing and hit-testing, converted in one place.
+
+**An icon is an `IconRef` from `libagora-iconservices` (F2), cached per item.** `AGIconCreateWithURL` already
+prefers an application bundle's declared icon and falls back to the type's generic; a document's own icon is a
+later step. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built, and wiring its stream to
+`WSItemModel` is the step after this surface.
+
+## The desktop is two levels
+
+**The desktop is TWO LEVELS, and this is the change that made the icon window TRANSPARENT.**
+`kCGDesktopWindowLevel` is the WALLPAPER — a window of its own, the Dock's to draw — and
+`kCGDesktopIconWindowLevel` is the icons, which are Workspace's. Making a window transparent needed the AppKit to
+carry an ALPHA channel it did not have: `AGWindowSetTransparent` in the seam (ARGB8888 buffers, which the
+compositor already BLENDED source-over) and `NSWindow`'s backing store switching to
+`kCGImageAlphaPremultipliedFirst` when `-setOpaque:NO`. See `../libagora-app/PROVENANCE.md`.
+
 ## Licence per file
 
 Every file is MIT. There is no third-party code in this component, so there is no per-file licence split to

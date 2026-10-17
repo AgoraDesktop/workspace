@@ -9,8 +9,10 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0 and W1 are done: Workspace launches from its bundle, owns the desktop, and shows a directory on it as
-icons.**
+**W0 and W1 are done — and the desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
+launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
+draws only the items of a directory. The WALLPAPER is a separate window at `kCGDesktopWindowLevel`, and it is the
+**Dock's** to draw.
 
 ```
 $ .../Workspace.app/Contents/MacOS/Workspace --seconds 3
@@ -29,11 +31,10 @@ headless. It runs the **bundle's** executable (the bundle path is part of what W
 **normal** window over the desktop with the server's own test client, and reads the server's screenshot.
 **9 checks, 0 fail**:
 
-- the desktop window **covers the screen** — the corners are the wallpaper, not the compositor's background;
-- the wallpaper is a vertical **ramp the right way up**: an upper row is lighter than a lower one, and each row
-  matches the ramp's value at that height;
-- a **normal window created *after* the desktop is composited *over* it** — which can only be the level;
-- and the top rows are the wallpaper or the server's bar, never the compositor's background.
+- the **wallpaper window** (at `kCGDesktopWindowLevel`) covers the screen, at its own level;
+- **Workspace's icon window is TRANSPARENT** — the wallpaper shows through it wherever there is no icon;
+- an **icon** is drawn where its sidecar says it goes;
+- a **normal window created *after* the desktop is composited *over* it** — which can only be the level.
 
 ### W1: the desktop's icons
 
@@ -64,7 +65,7 @@ src/
   main.m            the entry point: NSApplication, the controller, a timed pump
   WSApplication.m   the controller that owns the desktop; why it is not an NSApplication subclass is in its header
   WSDesktopWindow.m the borderless window at kCGDesktopWindowLevel, the size of the screen
-  WSDesktopView.m   the wallpaper and the icons: selection, rubber band, drag, double-click open
+  WSDesktopView.m   the ICONS only — selection, rubber band, drag, double-click open (transparent; no wallpaper)
   WSIconLayout.m    the grid, the snap, the arrange order and the hit test — pure geometry
   WSItemModel.m     one directory's items, the one model every view reads
   WSMetadataStore.m the per-folder `.agora` sidecar: icon positions and the icon size
