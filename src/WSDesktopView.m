@@ -28,7 +28,6 @@
 #import <AppKit/NSColor.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
-#import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSStringDrawing.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSNumber.h>
@@ -160,7 +159,8 @@
 		NSRect iconRect = [self cocoaRectForPosition:position
 							size:NSMakeSize((CGFloat)iconSize, (CGFloat)iconSize)];
 		NSBitmapImageRep *rep;
-		NSMutableParagraphStyle *paragraph;
+		NSString *label;
+		NSSize labelSize;
 		NSDictionary *attributes;
 		NSRect labelRect;
 		NSUInteger s;
@@ -176,21 +176,21 @@
 		rep = [self iconRepForItemAtIndex:(NSUInteger)i];
 		if (rep != nil) [rep drawInRect:iconRect];
 
-		/* 3. THE LABEL under it, in the desktop's own ink. */
-		labelRect = [self cocoaRectForPosition:NSMakePoint(position.x - (CGFloat)WSIconPadding,
-								   position.y + (CGFloat)iconSize)
-						  size:NSMakeSize((CGFloat)iconSize + 2.0 * (CGFloat)WSIconPadding,
-								  (CGFloat)WSIconLabelHeight)];
-		paragraph = [[NSMutableParagraphStyle alloc] init];
-		/* **CENTRED UNDER THE ICON.** The rectangle is already centred on the icon — the same padding either side
-		 * — and the alignment is what puts the TEXT in the middle of it. */
-		[paragraph setAlignment:NSCenterTextAlignment];
+		/* THE LABEL under it, in the desktop's own ink, CENTRED ON THE ICON. **`-drawInRect:withAttributes:` DOES
+		 * NOT HONOUR A PARAGRAPH STYLE'S ALIGNMENT** — MEASURED: this tree's `NSStringDrawing.m` never mentions
+		 * alignment at all, which is why `NSCenterTextAlignment` left the text exactly where it was. So the centring
+		 * is GEOMETRIC: measure the string, and hand `-drawInRect:` a rectangle exactly as wide as the text, whose
+		 * LEFT edge is the icon's centre minus half the text's width. */
+		label = [[items objectAtIndex:i] name];
 		attributes = [NSDictionary dictionaryWithObjectsAndKeys:
 				[NSColor whiteColor], NSForegroundColorAttributeName,
-				paragraph, NSParagraphStyleAttributeName,
 				nil];
-		[[[items objectAtIndex:i] name] drawInRect:labelRect withAttributes:attributes];
-		[paragraph release];
+		labelSize = [label sizeWithAttributes:attributes];
+		labelRect = [self cocoaRectForPosition:NSMakePoint(
+						position.x + ((CGFloat)iconSize - labelSize.width) / 2.0,
+						position.y + (CGFloat)iconSize)
+					  size:NSMakeSize(labelSize.width, (CGFloat)WSIconLabelHeight)];
+		[label drawInRect:labelRect withAttributes:attributes];
 	}
 }
 
