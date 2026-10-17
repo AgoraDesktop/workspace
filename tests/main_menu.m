@@ -117,6 +117,34 @@ int main(void)
 		      "and \"Quit <application>\"");
 		check([itemTitled(appMenu, @"Services") submenu] != nil, "the Services row carries a menu");
 
+		/* **AND NOTHING IN THE BAR NAMES ANOTHER APPLICATION'S PRODUCT.** Agora's file manager is Workspace, so
+		 * the File menu's first row is "New Workspace Window" — the Mac's own pattern for this row is
+		 * "New <application> Window", and naming the Finder instead was this file copying Apple's STRING along
+		 * with Apple's SHAPE. Checked over the whole tree, because the row that is wrong is rarely the only one. */
+		{
+			NSArray *menus = [bar itemArray];
+			NSUInteger m, k;
+			BOOL mentionsFinder = NO;
+			NSInteger inspected = 0;
+
+			for (m = 0; m < [menus count]; m++) {
+				NSMenu *submenu = (NSMenu *)[[menus objectAtIndex:m] submenu];
+
+				for (k = 0; k < (NSUInteger)[submenu numberOfItems]; k++) {
+					NSString *title = [[submenu itemAtIndex:(NSInteger)k] title];
+
+					inspected++;
+					if ([title rangeOfString:@"Finder"].location != NSNotFound) {
+						mentionsFinder = YES;
+						printf("  (note: \"%s\" in the %s menu)\n", [title UTF8String],
+						       [[[menus objectAtIndex:m] title] UTF8String]);
+					}
+				}
+			}
+			check(inspected > 20, "the whole bar is walked");
+			check(!mentionsFinder, "and NO menu row names the Finder — this application is Workspace");
+		}
+
 		/* 3. WHERE EACH OF THEM GOES, WHICH IS THE PART A PICTURE CANNOT SHOW. */
 		item = itemTitled(appMenu, [NSString stringWithFormat:@"About %@", name]);
 		check(item != nil && [item target] == target && [item action] == @selector(orderFrontAboutPanel:),

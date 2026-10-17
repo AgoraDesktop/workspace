@@ -116,7 +116,7 @@ static NSMenu *WSFileMenu(void)
 {
 	NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"File"] autorelease];
 
-	WSRow(menu, @"New Finder Window", @selector(newFinderWindow:), nil, @"n", NSCommandKeyMask);
+	WSRow(menu, @"New Workspace Window", @selector(newWorkspaceWindow:), nil, @"n", NSCommandKeyMask);
 	WSRow(menu, @"New Folder", @selector(newFolder:), nil, @"n", NSCommandKeyMask | NSShiftKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Open", @selector(openDocument:), nil, @"o", NSCommandKeyMask);

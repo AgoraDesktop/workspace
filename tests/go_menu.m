@@ -95,6 +95,54 @@ int main(void)
 			check(YES, "DRAWING it returned");
 		}
 
+		/* **AND ITS COST, WHICH IS THE REPORT.** "It takes a long time to render" is a measurement, so this
+		 * times the first paint, a second paint with the cells' measurements already warm, and the two strings a
+		 * shortcut column is made of — because the arrow has no glyph in the system font and a fallback lookup
+		 * per draw would be exactly the kind of thing that is invisible until it is timed. */
+		{
+			NSDictionary *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+				[NSFont systemFontOfSize:12.0], NSFontAttributeName, nil];
+			NSRect box = NSMakeRect(0.0, 0.0, 200.0, 20.0);
+			double t;
+			int n;
+
+			t = [NSDate timeIntervalSinceReferenceDate];
+			[view drawRect:[view bounds]];
+			printf("  (note: FIRST paint of the Go menu: %.1f ms)\n",
+			       ([NSDate timeIntervalSinceReferenceDate] - t) * 1000.0);
+
+			t = [NSDate timeIntervalSinceReferenceDate];
+			[view drawRect:[view bounds]];
+			printf("  (note: second paint, measurements warm: %.1f ms)\n",
+			       ([NSDate timeIntervalSinceReferenceDate] - t) * 1000.0);
+
+			t = [NSDate timeIntervalSinceReferenceDate];
+			for (n = 0; n < 20; n++) [@"\uf700" drawInRect:box withAttributes:attributes];
+			printf("  (note: 20 draws of the up arrow: %.1f ms)\n",
+			       ([NSDate timeIntervalSinceReferenceDate] - t) * 1000.0);
+
+			{
+				/* WHERE THE BOUNDARY IS: a plain letter, two typographic characters every menu already uses,
+				 * an accented letter, and the Private Use Area arrow. */
+				struct { const char *name; NSString *text; } sample[] = {
+					{ "a letter", @"c" },
+					{ "ellipsis U+2026", @"\u2026" },
+					{ "copyright U+00A9", @"\u00a9" },
+					{ "e-acute U+00E9", @"\u00e9" },
+					{ "up arrow U+F700", @"\uf700" },
+				};
+				int k;
+
+				for (k = 0; k < (int)(sizeof sample / sizeof sample[0]); k++) {
+					t = [NSDate timeIntervalSinceReferenceDate];
+					[nil self];	/* keep the compiler quiet about the loop being otherwise trivial */
+					for (n = 0; n < 5; n++) [sample[k].text drawInRect:box withAttributes:attributes];
+					printf("  (note: 5 draws of %-20s %.1f ms)\n", sample[k].name,
+					       ([NSDate timeIntervalSinceReferenceDate] - t) * 1000.0);
+				}
+			}
+		}
+
 		/* 4. EVERY ROW HAS A BOX — what a click and the tracking loop ask of each item. */
 		{
 			BOOL every = YES;

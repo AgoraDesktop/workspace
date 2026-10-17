@@ -41,6 +41,16 @@ add_executable(Workspace
     src/WSMetadataStore.m
     src/WSPreferencesWindow.m)
 
+# **THE CHROME'S THEME, AS THE APPKIT'S OWN DEMONSTRATION DOES IT.** The library resolves a theme only when
+# `AGORA_CHROME_THEME` names one — the right default for a LIBRARY, which must not go looking for other people's
+# art. An APPLICATION is the other case: without a theme its windows draw the chrome's fallback marks, which is
+# why Workspace's About window showed flat grey stoplights beside the controls demo's real ones. The directory is
+# the sibling's and is git-ignored (it may be absent), and an explicit `AGORA_CHROME_THEME` still wins.
+# The path is resolved to a REAL one, so the resolved theme a log prints has no `..` in it.
+get_filename_component(_ws_chrome_themes
+    "${CMAKE_CURRENT_SOURCE_DIR}/../libagora-app/themes" REALPATH BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_definitions(Workspace PRIVATE AGORA_CHROME_DEFAULT_THEME="${_ws_chrome_themes}")
+
 target_include_directories(Workspace PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(Workspace PRIVATE
     AgoraApp::App
