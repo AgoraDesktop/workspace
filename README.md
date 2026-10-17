@@ -9,7 +9,14 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0 and W1 are done — and the desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
+**W0, W1 AND W1b ARE DONE; W2 IS PAUSED ON THE APPKIT.** The desktop (two levels), its icons, and the
+application menu all work. The FILE WINDOW — toolbar, sidebar, path bar, view switcher — cannot be built yet,
+because the AppKit has none of the classes it is made of; the inventory is in `WORKSPACE-PLAN.md` § W2p. What
+exists to build on: `NSWindow`, `NSWindowController`, `NSView`/`NSViewController`, `NSScrollView`/`NSClipView`/
+`NSScroller`, `NSTextField`/`Cell`, `NSButton`/`Cell`, `NSSlider`, `NSPopUpButton`, `NSTextView`, `NSImage`, the
+`NSMenu` family, `NSPasteboard` and `NSTrackingArea`.
+
+**The desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
 launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
 draws only the items of a directory. The WALLPAPER is a separate window at `kCGDesktopWindowLevel`, and it is the
 **Dock's** to draw.
