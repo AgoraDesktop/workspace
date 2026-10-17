@@ -34,7 +34,8 @@ file windows, the views and the file operations are later stages that hang off t
 Three objects, and the Finder **window's** views will be built from the same three:
 
 - **`WSItemModel`** — one directory's items, and the one model every view reads.
-- **`WSIconLayout`** — pure geometry: a column-major grid, the nearest-free snap a drop lands on, an arrange
+- **`WSIconLayout`** — pure geometry: a **top-to-bottom, RIGHT-TO-LEFT** grid (macOS's own desktop order), the
+  nearest-free snap a drop lands on, an arrange
   order, and a hit test. It needs no view, which is why it is checked offscreen.
 - **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
 

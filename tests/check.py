@@ -13,6 +13,7 @@ import sys
 from PIL import Image
 
 SERVER_BG = (168, 222, 217)      # output.c's AWS_BACKGROUND
+BAR = (235, 235, 235)            # server.h's AWS_MENU_BAR_COLOUR — now composited at its own LEVEL, above the desktop
 NORMAL_AT = (200, 200)
 NORMAL_SIZE = (320, 200)
 SCREEN = (1280, 720)
@@ -63,8 +64,9 @@ def main():
          near(px[5, SCREEN[1] - 5], cwall, 10) and near(px[SCREEN[0] - 5, SCREEN[1] - 5], cwall, 10)),
         ("and it is the wallpaper window and not the server's own background",
          not near(px[5, 400], SERVER_BG, 8)),
-        ("the desktop layers cover even the TOP rows the server's strip would be in",
-         near(px[640, 12], cwall, 10) and not near(px[640, 12], SERVER_BG, 8)),
+        # THE MENU BAR IS THE SERVER'S AND IT IS ABOVE THE DESKTOP NOW: both desktop layers are painted first and
+        # the bar covers their top rows, which is the LEVEL the server gives it.
+        ("the SERVER'S menu bar is at the top, OVER the desktop", near(px[640, 12], BAR, 6)),
 
         # 2. THE ICON WINDOW IS TRANSPARENT — the wallpaper shows through where there is no icon.
         (f"THE ICON WINDOW IS TRANSPARENT: the wallpaper shows through at {EMPTY_AT}",

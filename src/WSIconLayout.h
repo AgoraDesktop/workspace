@@ -37,7 +37,8 @@ extern const NSInteger WSIconPadding;
  * grid rather than a division by zero. */
 + (NSInteger)rowsPerColumnInBounds:(NSRect)bounds iconSize:(NSInteger)iconSize;
 
-/* The grid cell for the nth item, COLUMN-MAJOR: down a column first, then the next column to the right. */
+/* The grid cell for the nth item: **TOP-TO-BOTTOM, RIGHT-TO-LEFT.** A column fills downward, then the next
+ * column is one cell to the LEFT — macOS's own desktop order, not a left-to-right reading order. */
 + (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize;
 
 /* The free grid cell nearest `desired` — what a drop snaps to. `occupied` is an NSArray of NSValue NSPoints;

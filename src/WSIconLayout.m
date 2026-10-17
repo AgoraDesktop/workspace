@@ -41,7 +41,10 @@ const NSInteger WSIconPadding = 8;
 	NSInteger column = index / rows;
 	NSInteger row = index % rows;
 
-	return NSMakePoint((CGFloat)WSIconGridMargin + (CGFloat)column * cell.width,
+	/* **TOP-TO-BOTTOM, RIGHT-TO-LEFT.** The first column is at the RIGHT edge and each column after it is one
+	 * cell further LEFT — the order macOS's desktop and its icon view both fill in, and the reason the eye starts
+	 * at the right. */
+	return NSMakePoint(bounds.size.width - (CGFloat)WSIconGridMargin - (CGFloat)(column + 1) * cell.width,
 			   (CGFloat)WSIconGridMargin + (CGFloat)row * cell.height);
 }
 

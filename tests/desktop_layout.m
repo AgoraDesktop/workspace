@@ -42,19 +42,19 @@ int main(void)
 		      "the rows fit the height left after the margins");
 		check(rows >= 1, "and there is always at least one row, so a tiny view cannot divide by zero");
 
-		check(first.x == (CGFloat)WSIconGridMargin && first.y == (CGFloat)WSIconGridMargin,
-		      "the first cell is the top-left margin");
-		check(second.x == first.x && second.y > first.y, "the second is BELOW the first — column-major");
-		check(nextColumn.x == first.x + cell.width && nextColumn.y == first.y,
-		      "and the next column starts to the RIGHT of the first");
+		check(first.x == 800.0 - (CGFloat)WSIconGridMargin - cell.width && first.y == (CGFloat)WSIconGridMargin,
+		      "the first cell is at the RIGHT edge, at the top margin");
+		check(second.x == first.x && second.y > first.y, "the second is BELOW the first");
+		check(nextColumn.x == first.x - cell.width && nextColumn.y == first.y,
+		      "and the next column starts to the LEFT — right to left");
 
 		occupied = [NSArray arrayWithObject:[NSValue valueWithPoint:first]];
 		snapped = [WSIconLayout snapPosition:first inBounds:bounds iconSize:size avoiding:occupied];
 		check(!(snapped.x == first.x && snapped.y == first.y), "a snap onto a taken cell moves off it");
-		/* THE CELL IS WIDER THAN IT IS TALL, so the cell to the RIGHT is nearer the first than the one below it —
+		/* THE CELL IS WIDER THAN IT IS TALL, so the cell to the LEFT is nearer the first than the one below it —
 		 * the snap answers the NEAREST free cell, not the next one in reading order. */
 		check(snapped.x == nextColumn.x && snapped.y == nextColumn.y,
-		      "and lands on the NEAREST free cell, which is the one to the right");
+		      "and lands on the NEAREST free cell, which is the one to the LEFT");
 
 		names = [NSArray arrayWithObjects:@"banana", @"Apple", @"cherry", nil];
 		sorted = [WSIconLayout namesByArranging:names mode:WSArrangeByName];

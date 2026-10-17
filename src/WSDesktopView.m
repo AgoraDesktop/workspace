@@ -182,6 +182,9 @@
 						  size:NSMakeSize((CGFloat)iconSize + 2.0 * (CGFloat)WSIconPadding,
 								  (CGFloat)WSIconLabelHeight)];
 		paragraph = [[NSMutableParagraphStyle alloc] init];
+		/* **CENTRED UNDER THE ICON.** The rectangle is already centred on the icon — the same padding either side
+		 * — and the alignment is what puts the TEXT in the middle of it. */
+		[paragraph setAlignment:NSCenterTextAlignment];
 		attributes = [NSDictionary dictionaryWithObjectsAndKeys:
 				[NSColor whiteColor], NSForegroundColorAttributeName,
 				paragraph, NSParagraphStyleAttributeName,
