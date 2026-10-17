@@ -34,13 +34,27 @@ def near(a, b, tol=12):
     return all(abs(x - y) <= tol for x, y in zip(a, b))
 
 
+def icon_ink(px, x, y, size):
+    """Whether the stored rectangle holds LIGHT ink. The F2 generic document is a light page, and the wallpaper
+    at those rows is dark, so a light pixel inside the rectangle is the icon and nothing else."""
+    for j in range(y + 2, y + size - 2):
+        for i in range(x + 2, x + size - 2):
+            r, g, b = px[i, j]
+            if r > 200 and g > 200 and b > 200:
+                return True
+    return False
+
+
 def main():
-    if len(sys.argv) < 3:
-        print("usage: check.py SHOT.ppm NORMAL-RRGGBB")
+    if len(sys.argv) < 6:
+        print("usage: check.py SHOT.ppm NORMAL-RRGGBB ICON-X ICON-Y ICON-SIZE")
         return 2
 
     path = sys.argv[1]
     normal = int(sys.argv[2], 16)
+    icon_x = int(sys.argv[3])
+    icon_y = int(sys.argv[4])
+    icon_size = int(sys.argv[5])
     cnormal = ((normal >> 16) & 0xFF, (normal >> 8) & 0xFF, normal & 0xFF)
     im = Image.open(path).convert("RGB")
     px = im.load()
@@ -79,6 +93,12 @@ def main():
 
         ("and the normal window reaches its own far corner, so it is the whole window on top",
          near(px[low[0], low[1]], cnormal, 6)),
+
+        # THE DESKTOP'S OWN ITEM: a file placed on the desktop, whose sidecar says where its icon goes.
+        (f"an icon IS DRAWN at the position its sidecar stores ({icon_x},{icon_y})",
+         icon_ink(px, icon_x, icon_y, icon_size)),
+        ("and it is not the wallpaper showing through there",
+         not near(px[icon_x + icon_size // 2, icon_y + icon_size // 4], ramp(icon_y + icon_size // 4), 24)),
     ]
 
     failed = 0

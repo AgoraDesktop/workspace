@@ -14,7 +14,8 @@
  * translucent parts. Whether the SERVER's own menu-bar strip is currently above or below this window is a
  * separate question with a recorded answer — `window-server/src/output.c` draws the strip first and says "the
  * level is the next step"; until the strip has one, a full-screen window at any level covers it, and this one
- * does. That is a menubar task, not the desktop's, and the W0 suite measures it rather than assuming it away.
+ * does. That is a menubar task, not the desktop's, and the desktop suite measures it rather than assuming it
+ * away.
  *
  * IT IS NOT A NORMAL WINDOW: borderless, never key and never main, so it takes no keyboard focus and does not
  * appear in the window menu. The buttons, the shadow and the cycle are a window manager's business.
@@ -28,7 +29,7 @@
 
 @implementation WSDesktopWindow
 
-- (instancetype)initWithScreen:(NSScreen *)screen
+- (instancetype)initWithScreen:(NSScreen *)screen directory:(NSString *)directory
 {
 	NSRect frame = (screen != nil) ? [screen frame] : NSMakeRect(0.0, 0.0, 1280.0, 720.0);
 	WSDesktopView *view;
@@ -46,7 +47,8 @@
 	[self setHasShadow:NO];
 	[self setTitle:@"Desktop"];
 
-	view = [[WSDesktopView alloc] initWithFrame:NSMakeRect(0.0, 0.0, frame.size.width, frame.size.height)];
+	view = [[WSDesktopView alloc] initWithFrame:NSMakeRect(0.0, 0.0, frame.size.width, frame.size.height)
+					  directory:directory];
 	[self setContentView:view];
 	[view release];
 

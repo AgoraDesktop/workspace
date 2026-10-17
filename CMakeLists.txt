@@ -26,15 +26,23 @@ endif()
 # THE APPkit, AS A BUILT PACKAGE. It brings Foundation, Core Graphics, Core Text and the Objective-C runtime
 # on its own interface, so nothing else is found here.
 find_package(AgoraApp CONFIG REQUIRED)
+find_package(AgoraIconServices CONFIG REQUIRED)
+find_package(AgoraLaunchServices CONFIG REQUIRED)
 
 add_executable(Workspace
     src/main.m
     src/WSApplication.m
     src/WSDesktopWindow.m
-    src/WSDesktopView.m)
+    src/WSDesktopView.m
+    src/WSIconLayout.m
+    src/WSItemModel.m
+    src/WSMetadataStore.m)
 
 target_include_directories(Workspace PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(Workspace PRIVATE AgoraApp::App)
+target_link_libraries(Workspace PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices)
 
 # ---------------------------------------------------------------------------
 # The bundle: Workspace.app/Contents/{Info.plist, MacOS/Workspace}

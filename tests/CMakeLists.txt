@@ -7,6 +7,24 @@
 
 find_program(PYTHON3 python3 REQUIRED)
 
+# THE OFFSCREEN SUITES need Foundation and nothing else — no compositor, no AppKit.
+find_package(Foundation CONFIG REQUIRED)
+find_package(libobjc CONFIG REQUIRED)
+
+add_executable(desktop_layout desktop_layout.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m")
+target_include_directories(desktop_layout PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(desktop_layout PRIVATE Foundation::Foundation objc)
+add_test(NAME workspace-desktop-layout COMMAND desktop_layout)
+set_tests_properties(workspace-desktop-layout PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
+
+add_executable(metadata_store metadata_store.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+target_include_directories(metadata_store PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(metadata_store PRIVATE Foundation::Foundation objc)
+add_test(NAME workspace-metadata-store COMMAND metadata_store)
+set_tests_properties(workspace-metadata-store PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
+
 # The sibling's built outputs. Named and cached BEFORE use, so a fresh configure does not expand them to
 # nothing — the trap libagora-app's own tests record.
 set(AGORA_WINDOW_SERVER_BINARY

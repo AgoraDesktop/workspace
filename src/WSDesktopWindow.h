@@ -10,10 +10,12 @@
 #import <AppKit/NSWindow.h>
 
 @class NSScreen;
+@class NSString;
 
-/* A borderless window at the desktop level, as big as the screen, drawing the wallpaper. */
+/* A borderless window at the desktop level, as big as the screen, drawing the wallpaper and the icons of
+ * `directory`. */
 @interface WSDesktopWindow : NSWindow
-- (instancetype)initWithScreen:(NSScreen *)screen;
+- (instancetype)initWithScreen:(NSScreen *)screen directory:(NSString *)directory;
 @end
 
 #endif /* WORKSPACE_WSDESKTOPWINDOW_H */

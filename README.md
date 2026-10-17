@@ -9,7 +9,8 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0 is done: Workspace launches from its bundle and owns the desktop.**
+**W0 and W1 are done: Workspace launches from its bundle, owns the desktop, and shows a directory on it as
+icons.**
 
 ```
 $ .../Workspace.app/Contents/MacOS/Workspace --seconds 3
@@ -34,6 +35,20 @@ headless. It runs the **bundle's** executable (the bundle path is part of what W
 - a **normal window created *after* the desktop is composited *over* it** — which can only be the level;
 - and the top rows are the wallpaper or the server's bar, never the compositor's background.
 
+### W1: the desktop's icons
+
+Three objects, and the Finder **window's** views will be built from the same three:
+
+- **`WSItemModel`** — one directory's items, and the one model every view reads (`WORKSPACE-PLAN.md` §6).
+- **`WSIconLayout`** — pure geometry: a column-major grid, the nearest-free snap a drop lands on, an arrange
+  order, and a hit test. It needs no view, which is why it is checked **offscreen**.
+- **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
+
+**Positions are TOP-LEFT SCREEN COORDINATES** (the Finder's own convention, and what the store persists); the
+view converts to Cocoa only to draw and to hit-test. The sidecar is **XML**, because that is what this tree's
+`NSPropertyListSerialization` writes — MEASURED: it refuses the binary format — and a sidecar that diffs is one a
+person can inspect.
+
 ### The one thing W0 does not fix, measured rather than assumed away
 
 `window-server/src/output.c` draws its menu-bar strip **before** the windows and says so: *"until the strip has
@@ -42,24 +57,33 @@ exactly such a window, so **the strip is currently covered by the desktop**. Giv
 own is the menubar's task, not the desktop's, and the suite accepts either the strip or the wallpaper in the
 top rows while refusing the background — so the fact is measured, not hidden.
 
-## What is here (W0)
+## What is here (W0 and W1)
 
 ```
 src/
   main.m            the entry point: NSApplication, the controller, a timed pump
   WSApplication.m   the controller that owns the desktop; why it is not an NSApplication subclass is in its header
   WSDesktopWindow.m the borderless window at kCGDesktopWindowLevel, the size of the screen
-  WSDesktopView.m   the Argentum wallpaper, a vertical ramp
+  WSDesktopView.m   the wallpaper and the icons: selection, rubber band, drag, double-click open
+  WSIconLayout.m    the grid, the snap, the arrange order and the hit test — pure geometry
+  WSItemModel.m     one directory's items, the one model every view reads
+  WSMetadataStore.m the per-folder `.agora` sidecar: icon positions and the icon size
 Info.plist.in       the bundle's Info.plist
-tests/              run-desktop.sh + check.py — the W0 suite
+tests/              the three suites: run-desktop.sh + check.py (pixels), desktop_layout, metadata_store
 ```
 
 ## What is deliberately not here yet
 
-The plan's later stages: desktop **icons** (W1), the file **window** and its views (W2–W5), file operations and
-the Trash (W6), drag and drop (W7), Get Info (W8), Quick Look (W9), search (W10), volumes (W11) and the shell
-integration (W13). Their substrate — Launch Services, Icon Services and the change stream — is already built
+The plan's later stages: the file **window** and its views (W2–W5), file operations and the Trash (W6), drag and
+drop (W7), Get Info (W8), Quick Look (W9), search (W10), volumes (W11) and the shell integration (W13). Their
+substrate — Launch Services, Icon Services and the change stream — is already built
 (`../libagora-launchservices`, `../libagora-iconservices`, `../libagora-watch`).
+
+**What W1 does not do yet, named:** the desktop is not LIVE (`libagora-watch` is built, but `WSItemModel`
+reloads on demand rather than from a stream callback); a folder double-click is a Finder window, which is W2; a
+document's icon is its TYPE's generic and not its own content (`AGIconCreateWithURL` already prefers an
+application's declared icon); and the sidecar holds the icon size and the positions, not yet grid spacing or
+label placement.
 
 ## Build and run
 

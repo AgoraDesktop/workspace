@@ -28,6 +28,22 @@ file windows, the views and the file operations are later stages that hang off t
   bundle, which is what the launch path and `libagora-launchservices` read, so the build lays out
   `Workspace.app/Contents/` rather than leaving a bare executable.
 
+## W1 — the desktop's icons
+
+Three objects, and the Finder **window's** views will be built from the same three:
+
+- **`WSItemModel`** — one directory's items, and the one model every view reads.
+- **`WSIconLayout`** — pure geometry: a column-major grid, the nearest-free snap a drop lands on, an arrange
+  order, and a hit test. It needs no view, which is why it is checked offscreen.
+- **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
+
+**Two decisions.** Positions are **TOP-LEFT SCREEN COORDINATES** — the Finder's own convention, and what the
+store persists — so the view converts to Cocoa only to draw and to hit-test; and the sidecar is **XML**, because
+that is what this tree's `NSPropertyListSerialization` writes.
+
+**And one gap named rather than implied:** the desktop is not LIVE yet. `libagora-watch` (F3) is built, but the
+model reloads on demand instead of from a stream callback — that wiring is the step after this surface.
+
 ## What W0 found that it did not set out to find
 
 **The server's menu-bar strip is below a full-screen window, and only a level fixes it.** `output.c` paints the
