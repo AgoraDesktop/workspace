@@ -39,6 +39,18 @@ add_test(NAME workspace-main-menu COMMAND main_menu)
 set_tests_properties(workspace-main-menu PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")
 
+
+# **THE GO MENU, LAID OUT AND DRAWN.** It is the one menu with a key equivalent that is not a character (⌘↑, the
+# UP ARROW function key in the Private Use Area), and drawing a dropdown MEASURES that string and inks its glyph —
+# so this is where a font with nothing for that code point shows up. Opening the menu crashed; this is that,
+# offscreen.
+add_executable(go_menu go_menu.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m")
+target_include_directories(go_menu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(go_menu PRIVATE AgoraApp::App Foundation::Foundation objc)
+add_test(NAME workspace-go-menu COMMAND go_menu)
+set_tests_properties(workspace-go-menu PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")
+
 # The sibling's built outputs. Named and cached BEFORE use, so a fresh configure does not expand them to
 # nothing — the trap libagora-app's own tests record.
 set(AGORA_WINDOW_SERVER_BINARY
