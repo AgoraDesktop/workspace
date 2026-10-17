@@ -115,6 +115,15 @@ pointer a focus on a MOTION, and a probe that teleports to its target races that
 the AppKit's menu suites — `appkit-menu-headless`, `appkit-menu-activation` and `appkit-popup-menu` all pass — plus
 the trace above, rather than a photograph.
 
+## Known gaps, recorded rather than left to be found
+
+**THE ABOUT PANEL SHOWS A GENERIC FOLDER AS THE APPLICATION'S ICON.** `WSAboutPanel` asks Icon Services for the
+bundle's icon with `AGIconCreateWithURL` on `[[NSBundle mainBundle] bundlePath]`, and the bundle IS a directory — so
+Icon Services answers the folder it is looking at rather than an application. The drawing, the layout and the bundle
+identity around it are all correct; only the picture is the wrong KIND. Deferred by request ("we can worry about
+icons later"); the fix is on the Icon Services side, which needs a rule for a bundle: an `APPL` directory is an
+application, and its icon is the application's.
+
 ## Licence per file
 
 Every file is MIT. There is no third-party code in this component, so there is no per-file licence split to
