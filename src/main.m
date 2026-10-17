@@ -23,6 +23,7 @@ int main(int argc, char **argv)
 	double seconds = 3.0;
 	WSApplication *workspace;
 	int i;
+	int showAbout = 0;
 
 	/* **THE CHROME'S THEME, BEFORE THE FIRST WINDOW EXISTS.** `AGChromeTheme` resolves ONCE per process, and asking
 	 * after a window has been made is asking for something already decided — so this comes before anything else.
@@ -43,8 +44,14 @@ int main(int argc, char **argv)
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
 			seconds = atof(argv[++i]);
+		} else if (strcmp(argv[i], "--show-about") == 0) {
+			/* **A TEST'S DOOR, AND NAMED AS ONE.** The About panel is reached by a menu action, and a menu action
+			 * needs a click — which is the one thing a probe of this tier cannot fake reliably (a synthetic click
+			 * reaches the compositor's MOTION path and not its BUTTON path on this host). Opening it from here
+			 * reproduces the same window creation, the same chrome and the same activation, on any display. */
+			showAbout = 1;
 		} else {
-			fprintf(stderr, "usage: %s [--seconds N]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--seconds N] [--show-about]\n", argv[0]);
 			return 2;
 		}
 	}
@@ -62,6 +69,7 @@ int main(int argc, char **argv)
 		[application finishLaunching];
 
 		workspace = [[WSApplication alloc] init];
+		[workspace setShowsAboutOnStart:showAbout];
 		if (![workspace start]) {
 			fprintf(stderr, "workspace: THE DESKTOP WINDOW WAS NOT MADE\n");
 			return 1;

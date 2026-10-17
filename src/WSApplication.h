@@ -28,6 +28,7 @@
 {
 	WSDesktopWindow *_desktop;
 	WSPreferencesWindow *_preferences;
+	BOOL _showsAboutOnStart;
 }
 
 /* Create the desktop window and put it on the screen. NO if it could not be made. */
@@ -38,6 +39,10 @@
  * fetches events only while `-[NSApplication isRunning]` — so an application that pumps by hand gets a menu that is
  * begun and never handled. The deadline rides the loop's per-pass `-applicationDidUpdate:`. Later stages replace
  * only the DEADLINE: a desktop is a thing that stays, and the suite is what needs it to be able to leave. */
+/* **OPEN THE ABOUT PANEL AS PART OF STARTING UP**, which is what `--show-about` is for: the panel is otherwise
+ * reached by a menu action, and that needs a click. Set before `-start`. */
+- (void)setShowsAboutOnStart:(BOOL)flag;
+
 - (void)runForSeconds:(double)seconds;
 
 - (void)stop;

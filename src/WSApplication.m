@@ -98,6 +98,12 @@
 	 * the two rows the AppKit refuses — About and Preferences. */
 	[WSMainMenu installWithTarget:self];
 
+	/* **AND THE ABOUT PANEL, WHEN THE TEST'S DOOR ASKED FOR IT.** Opening it from here is the same window, the
+	 * same chrome and the same activation a menu action would cause — which is the point: a probe cannot click. */
+	if (_showsAboutOnStart) {
+		[self orderFrontAboutPanel:nil];
+	}
+
 	fprintf(stderr, "workspace: desktop window at level %ld, frame %gx%g at (%g,%g), showing %s\n",
 		(long)[_desktop level], (double)[_desktop frame].size.width, (double)[_desktop frame].size.height,
 		(double)[_desktop frame].origin.x, (double)[_desktop frame].origin.y, [directory UTF8String]);
@@ -139,6 +145,11 @@
 }
 
 /* ---- THE APPLICATION MENU'S OWN TWO ROWS ----------------------------------------------------------- */
+
+- (void)setShowsAboutOnStart:(BOOL)flag
+{
+	_showsAboutOnStart = flag;
+}
 
 - (void)orderFrontAboutPanel:(id)sender
 {

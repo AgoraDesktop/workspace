@@ -26,6 +26,11 @@ $ .../Workspace.app/Contents/MacOS/Workspace --seconds 3
 workspace: desktop window at level -2147483628, frame 1280x720 at (0,0)
 ```
 
+Two arguments, both TEST DOORS and named as ones: `--seconds N` ends the ordinary run loop after N seconds (a
+desktop is a thing that stays, and the suite needs it to be able to leave), and `--show-about` opens the About panel
+as part of starting up — the panel is otherwise reached by a menu action, and a synthetic click reaches a
+compositor's motion path and not its button path on some hosts.
+
 `-2147483628` is `kCGDesktopWindowLevel` (`INT32_MIN + 20`, from `libagora-drawing`'s `CGWindowLevel.h`) — the
 level **below every ordinary window**, which is what makes this the desktop rather than a window. The frame is
 the whole screen, `[NSScreen frame]` and not `visibleFrame`, because the Dock and the menu bar are drawn
