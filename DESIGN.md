@@ -82,6 +82,14 @@ is the compositor's keyboard-focus decision — so a scene with an ordinary wind
 where Workspace's menus are correctly absent. The suite measures both: the bar present when Workspace is the active
 application, and the strip to the right of it still the server's own.
 
+**AND THE LOOP IS THE APPKIT'S NOW, WHICH THE MENU BAR REQUIRED RATHER THAN MERELY ALLOWED.** `NSMenuView -mouseDown:`
+begins a tracking session and fetches each next event only while `-[NSApplication isRunning]` — so an application
+that pumps its own events gets a menu that is begun and never driven: it cannot be picked, dismissed or moved. W0's
+hand-rolled pump was always standing in for the ordinary loop and the plan said so; `-runForSeconds:` now calls
+`-[NSApplication run]`, and the suite's `--seconds` deadline rides the loop's per-pass `-applicationDidUpdate:`
+notification, which is what Apple gives that pair for. The desktop's events, its window updates and its frame
+pacing are the AppKit's from here on.
+
 **Two findings about the AppKit are recorded in `PROVENANCE.md` rather than worked around here:** this tier's
 `NSMenuItem` leaves a key equivalent's mask at zero where Apple's sets Command, so every row names its own mask; and
 the Edit menu's five chain-routed rows come out enabled because the base `NSResponder` implements them as forwarders.

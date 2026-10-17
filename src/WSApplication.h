@@ -33,8 +33,11 @@
 /* Create the desktop window and put it on the screen. NO if it could not be made. */
 - (BOOL)start;
 
-/* Pump events for `seconds`. W0 runs for a length of time because it has nothing to be told yet: a desktop is
- * a thing that stays. Later stages replace this with the ordinary run loop and a delegate. */
+/* Run the ordinary application loop for `seconds`. **THE LOOP IS THE APPKIT'S NOW, NOT A PUMP OF W0'S OWN**, and
+ * that is load-bearing rather than tidy: a menu opened from the bar is driven by `NSMenuView`'s own loop, which
+ * fetches events only while `-[NSApplication isRunning]` — so an application that pumps by hand gets a menu that is
+ * begun and never handled. The deadline rides the loop's per-pass `-applicationDidUpdate:`. Later stages replace
+ * only the DEADLINE: a desktop is a thing that stays, and the suite is what needs it to be able to leave. */
 - (void)runForSeconds:(double)seconds;
 
 - (void)stop;

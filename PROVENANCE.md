@@ -96,14 +96,24 @@ text view focused. The menu is right (a Finder's Edit menu is chain-routed) and 
 fix belongs to `-targetForAction:` or to the base. `workspace-main-menu` PINS the measured outcome so that the day
 it changes, the change is visible.
 
-**4. THE APPLICATION MENU OPENS AND IS THEN DISMISSED — A TRACKING BUG, NOT A MENU ONE.** Clicking the bar's first
-title DOES open it: MEASURED, a window at **level 101** (a popup menu's), 180x246 at (36, 450), visible, and its
-shadow drawn. It is then lost, and the trace says why: the bar window receives a FLOOD of `NSLeftMouseDragged` —
-**170 in a few seconds with the button released** — and the tracking loop's motion handling dismisses a menu whose
-pointer is not over it. The same flood is a plausible source of the one `wayland` error seen here ("Data too big
-for buffer", which killed the connection), since a loop that keeps producing requests keeps filling the socket.
-This is the AppKit's menu tracking against this compositor, not Workspace's menu DEFINITION: what this component
-owes is the menus, and they are drawn (the bar, measured) and correct.
+**4. THE APPLICATION MENU WAS OPENED AND THEN LOST — DIAGNOSED, AND FIXED IN TWO COMPONENTS.** Clicking the bar's
+first title DOES open it: MEASURED, a window at **level 101** (a popup menu's), 180x246 at (36, 450), visible. It
+then went away at once, and the AppKit's own diagnostic said why in two steps:
+
+- **This application never entered `-[NSApplication run]`.** W0 pumped its own events, which was enough for a
+  desktop that only had to stay on the screen — but `NSMenuView`'s bar loop fetches each next event only while
+  `-[NSApplication isRunning]`, so the session was BEGUN and never driven. MEASURED: `APPKIT_MENU_DIAG` printed
+  `the menu is on screen now` and then not one line of the loop that would have handled the click. W0's pump was
+  always standing in for the ordinary loop and the plan said so; `-runForSeconds:` now uses the real one, with the
+  suite's deadline riding the loop's per-pass `-applicationDidUpdate:` notification.
+- **And a RELEASE ended the session.** With the loop running, the trace showed the session ending on a `type 2`
+  three times running: the rule was written for a menu that owns its own loop, and a bar's loop drains every
+  window's queue instead. Fixed in the AppKit — see `../libagora-app/PROVENANCE.md` § 8.
+
+The nested-X11 probe used to demonstrate this by hand is unreliable for its own reasons (a compositor gives the
+pointer a focus on a MOTION, and a probe that teleports to its target races that enter), so what verifies the fix is
+the AppKit's menu suites — `appkit-menu-headless`, `appkit-menu-activation` and `appkit-popup-menu` all pass — plus
+the trace above, rather than a photograph.
 
 ## Licence per file
 

@@ -15,10 +15,56 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSScreen.h>
 #import <Foundation/NSDate.h>
+#import <Foundation/NSNotification.h>
 #import <Foundation/NSString.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+
+/* **THE DEADLINE, WHICH IS A DELEGATE BECAUSE THE LOOP ANNOUNCES ITS OWN PASSES.** `-[NSApplication run]` posts
+ * `NSApplicationWillUpdate`/`DidUpdate` to its delegate once per pass — "a place to change what is shown BETWEEN
+ * passes", which is Apple's own reason for the pair — and that is exactly where a bounded run belongs: the flag
+ * `-[NSApplication stop:]` sets is read at the top of the loop, so setting it from the pass that passes the
+ * deadline ends the loop within a frame. */
+@interface WSRunDeadline : NSObject
+{
+	NSDate *_deadline;
+	NSUInteger _passes;
+}
+- (instancetype)initWithSeconds:(double)seconds;
+- (NSUInteger)passes;
+- (void)applicationDidUpdate:(NSNotification *)notification;
+@end
+
+@implementation WSRunDeadline
+
+- (instancetype)initWithSeconds:(double)seconds
+{
+	self = [super init];
+	if (self != nil) {
+		_deadline = [[NSDate dateWithTimeIntervalSinceNow:seconds] retain];
+	}
+	return self;
+}
+
+- (void)dealloc
+{
+	[_deadline release];
+	[super dealloc];
+}
+
+- (NSUInteger)passes { return _passes; }
+
+- (void)applicationDidUpdate:(NSNotification *)notification
+{
+	(void)notification;
+	_passes++;
+	if ([_deadline timeIntervalSinceNow] <= 0.0) {
+		[[NSApplication sharedApplication] stop:nil];
+	}
+}
+
+@end
 
 @implementation WSApplication
 
@@ -58,24 +104,29 @@
 	return YES;
 }
 
+/* **THE ORDINARY RUN LOOP, AND IT TOOK A MENU BAR TO GET HERE.** W0 pumped its own events, which was enough for a
+ * desktop that only had to stay on the screen — but a menu opened from the bar is DRIVEN BY THE APPLICATION'S OWN
+ * LOOP. `NSMenuView -mouseDown:` begins the session and then fetches each next event only while
+ * `-[NSApplication isRunning]`, a deliberately narrow gate whose other half is `-cg_connectionIsGone`; an
+ * application that pumps by hand is therefore NOT running, and gets a menu that is begun and never driven — it
+ * cannot be picked, dismissed, or moved to another title. MEASURED, in the live scene: the AppKit's own
+ * `APPKIT_MENU_DIAG` printed `the menu is on screen now` and then not one line of the loop that would have handled
+ * the click that followed.
+ *
+ * SO THE GATE IS NOT WRONG — THE PROXY WAS. `-isRunning` answers "is the application in its run loop", and it is
+ * true the moment this door uses the loop the AppKit names instead of one of its own. The deadline is enforced
+ * from the loop's own per-pass notification, so `--seconds` survives; the desktop's events, its windows and its
+ * frame pacing are now the AppKit's, which is what the plan always said W0's pump was standing in for. */
 - (void)runForSeconds:(double)seconds
 {
 	NSApplication *application = [NSApplication sharedApplication];
-	NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:seconds];
-	int events = 0;
+	WSRunDeadline *deadline = [[WSRunDeadline alloc] initWithSeconds:seconds];
 
-	while ([deadline timeIntervalSinceNow] > 0.0) {
-		NSEvent *event = [application nextEventMatchingMask:NSAnyEventMask
-							  untilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]
-							     inMode:nil
-							    dequeue:YES];
-
-		if (event != nil) {
-			[application sendEvent:event];
-			events++;
-		}
-	}
-	fprintf(stderr, "workspace: %d event(s)\n", events);
+	[application setDelegate:deadline];
+	[application run];
+	[application setDelegate:nil];
+	fprintf(stderr, "workspace: ran %lu loop pass(es)\n", (unsigned long)[deadline passes]);
+	[deadline release];
 }
 
 - (void)stop
