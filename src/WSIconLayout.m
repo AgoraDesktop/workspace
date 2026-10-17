@@ -28,7 +28,10 @@ const NSInteger WSIconPadding = 8;
 + (NSInteger)rowsPerColumnInBounds:(NSRect)bounds iconSize:(NSInteger)iconSize
 {
 	NSSize cell = [self cellSizeForIconSize:iconSize];
-	CGFloat usable = bounds.size.height - 2.0 * (CGFloat)WSIconGridMargin;
+	/* **THE BOTTOM MARGIN ONLY.** The TOP of the area is the bounds' ORIGIN, not an inset: the CALLER decides
+	 * where the area begins — the desktop pads it by the menu bar's height plus ten points — and the grid fills
+	 * from there. */
+	CGFloat usable = bounds.size.height - (CGFloat)WSIconGridMargin;
 	NSInteger rows = (NSInteger)floor(usable / cell.height);
 
 	return (rows >= 1) ? rows : 1;
@@ -41,11 +44,12 @@ const NSInteger WSIconPadding = 8;
 	NSInteger column = index / rows;
 	NSInteger row = index % rows;
 
-	/* **TOP-TO-BOTTOM, RIGHT-TO-LEFT.** The first column is at the RIGHT edge and each column after it is one
-	 * cell further LEFT — the order macOS's desktop and its icon view both fill in, and the reason the eye starts
-	 * at the right. */
-	return NSMakePoint(bounds.size.width - (CGFloat)WSIconGridMargin - (CGFloat)(column + 1) * cell.width,
-			   (CGFloat)WSIconGridMargin + (CGFloat)row * cell.height);
+	/* **TOP-TO-BOTTOM, RIGHT-TO-LEFT, AND THE ORIGIN IS THE TOP-LEFT OF THE USABLE AREA.** The first column is at
+	 * the area's RIGHT edge and each column after it is one cell further LEFT; the first ROW is the AREA'S TOP,
+	 * not an inset — the caller says where the area starts. */
+	return NSMakePoint(bounds.origin.x + bounds.size.width - (CGFloat)WSIconGridMargin -
+				   (CGFloat)(column + 1) * cell.width,
+			   bounds.origin.y + (CGFloat)row * cell.height);
 }
 
 + (NSPoint)snapPosition:(NSPoint)desired

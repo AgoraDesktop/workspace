@@ -25,7 +25,9 @@ static void check(BOOL condition, const char *name)
 int main(void)
 {
 	@autoreleasepool {
-		NSRect bounds = NSMakeRect(0.0, 0.0, 800.0, 600.0);
+		/* THE USABLE AREA, in top-left coordinates: an 800x600 view less the desktop's top padding of 34 (the menu
+		 * bar's 24 plus ten). Its ORIGIN is the first row's top, which is the whole point. */
+		NSRect bounds = NSMakeRect(0.0, 34.0, 800.0, 566.0);
 		NSInteger size = WSIconDefaultSize;
 		NSSize cell = [WSIconLayout cellSizeForIconSize:size];
 		NSInteger rows = [WSIconLayout rowsPerColumnInBounds:bounds iconSize:size];
@@ -38,12 +40,12 @@ int main(void)
 
 		check(cell.width == (CGFloat)(size + 2 * WSIconPadding), "the cell is the icon plus its padding");
 		check(cell.height == (CGFloat)(size + WSIconLabelHeight + WSIconPadding), "and the label's height");
-		check(rows == (NSInteger)floor((600.0 - 2.0 * (CGFloat)WSIconGridMargin) / cell.height),
-		      "the rows fit the height left after the margins");
+		check(rows == (NSInteger)floor((566.0 - (CGFloat)WSIconGridMargin) / cell.height),
+		      "the rows fit the area, less the bottom margin (the top is the origin)");
 		check(rows >= 1, "and there is always at least one row, so a tiny view cannot divide by zero");
 
-		check(first.x == 800.0 - (CGFloat)WSIconGridMargin - cell.width && first.y == (CGFloat)WSIconGridMargin,
-		      "the first cell is at the RIGHT edge, at the top margin");
+		check(first.x == 800.0 - (CGFloat)WSIconGridMargin - cell.width && first.y == 34.0,
+		      "the first cell is at the area's RIGHT edge and at its TOP — the origin, not an inset");
 		check(second.x == first.x && second.y > first.y, "the second is BELOW the first");
 		check(nextColumn.x == first.x - cell.width && nextColumn.y == first.y,
 		      "and the next column starts to the LEFT — right to left");

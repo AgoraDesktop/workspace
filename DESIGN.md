@@ -39,17 +39,21 @@ Three objects, and the Finder **window's** views will be built from the same thr
   order, and a hit test. It needs no view, which is why it is checked offscreen.
 - **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
 
-**Two decisions.** Positions are **TOP-LEFT SCREEN COORDINATES** — the Finder's own convention, and what the
-store persists — so the view converts to Cocoa only to draw and to hit-test; and the sidecar is **XML**, because
-that is what this tree's `NSPropertyListSerialization` writes.
+**Three decisions.** Positions are **TOP-LEFT SCREEN COORDINATES** — the Finder's own convention, and what the
+store persists — so the view converts to Cocoa only to draw and to hit-test; the sidecar is **XML**, because
+that is what this tree's `NSPropertyListSerialization` writes; and the grid's **ORIGIN IS THE TOP OF ITS AREA**,
+not an inset it adds. The desktop hands it a rectangle already padded by **the menu bar's height plus ten
+points** (`+[WSDesktopView topPadding]`, read from `NSStatusBar -thickness` rather than a constant), so the first
+row clears the bar by ten and the CALLER — not the grid — says where the icons may begin.
 
 **And one gap named rather than implied:** the desktop is not LIVE yet. `libagora-watch` (F3) is built, but the
 model reloads on demand instead of from a stream callback — that wiring is the step after this surface.
 
 ## What W0 found that it did not set out to find
 
-**The server's menu-bar strip is below a full-screen window, and only a level fixes it.** `output.c` paints the
-strip first — "until the strip has a LEVEL of its own such a window covers it. The level is the next step" —
-so placing a full-screen window at *any* level, the desktop included, covers the bar. That is a menubar
-task (`window-server`'s), and W0 records it here and measures it in `tests/check.py` rather than pretending
-the top rows are something they are not.
+**The server's menu-bar strip needed a level of its own, and now has one.** `output.c` painted the strip before
+the windows and said so — "until the strip has a LEVEL of its own such a window covers it. The level is the next
+step" — which meant a full-screen window at *any* level, the desktop included, covered the bar. The strip is now
+composited at `AWS_MENU_BAR_LEVEL` (24) in the level walk, and the suite measures what that fixed: the MENU BAR
+is in the top rows, over the desktop, and the desktop's icons begin below it — padded by the bar's height plus
+ten points, so the top row is not something other than what it looks like.

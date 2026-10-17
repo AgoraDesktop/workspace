@@ -49,15 +49,17 @@ Three objects, and the Finder **window's** views will be built from the same thr
 **Positions are TOP-LEFT SCREEN COORDINATES** (the Finder's own convention, and what the store persists); the
 view converts to Cocoa only to draw and to hit-test. The sidecar is **XML**, because that is what this tree's
 `NSPropertyListSerialization` writes — MEASURED: it refuses the binary format — and a sidecar that diffs is one a
-person can inspect.
+person can inspect. And the grid's **ORIGIN IS THE TOP OF ITS AREA**, not an inset it adds: the desktop hands it
+a rectangle already padded by **the menu bar's height plus ten points** (`+[WSDesktopView topPadding]`, read from
+`NSStatusBar -thickness`), so the first row clears the bar by ten.
 
-### The one thing W0 does not fix, measured rather than assumed away
+### The strip that needed a level of its own — now fixed, and measured
 
-`window-server/src/output.c` draws its menu-bar strip **before** the windows and says so: *"until the strip has
+`window-server/src/output.c` drew its menu-bar strip **before** the windows and said so: *"until the strip has
 a LEVEL of its own such a window covers it. The level is the next step."* A full-screen desktop window is
-exactly such a window, so **the strip is currently covered by the desktop**. Giving the strip a level of its
-own is the menubar's task, not the desktop's, and the suite accepts either the strip or the wallpaper in the
-top rows while refusing the background — so the fact is measured, not hidden.
+exactly such a window, so the strip *was* covered by the desktop. The strip now has `AWS_MENU_BAR_LEVEL` (24)
+and is composited in the level walk, so the suite measures the fix instead: the bar is in the top rows, OVER the
+desktop, and the desktop's first icon row begins a menu-bar's height plus ten points down.
 
 ## What is here (W0 and W1)
 

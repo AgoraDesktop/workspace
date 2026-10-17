@@ -42,6 +42,11 @@ prefers an application bundle's declared icon and falls back to the type's gener
 later step. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built, and wiring its stream to
 `WSItemModel` is the step after this surface.
 
+**And the labels are centred GEOMETRICALLY, because the text system does not honour ALIGNMENT.** MEASURED, the
+hard way: `-drawInRect:withAttributes:` never mentions alignment in `libagora-app/NSStringDrawing.m`, so a
+paragraph style's `NSCenterTextAlignment` left the text exactly where it was. The view now measures the string
+with `-sizeWithAttributes:` and hands `-drawInRect:` a rectangle of exactly that width, centred on the icon.
+
 ## The desktop is two levels
 
 **The desktop is TWO LEVELS, and this is the change that made the icon window TRANSPARENT.**
@@ -50,6 +55,18 @@ later step. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built,
 carry an ALPHA channel it did not have: `AGWindowSetTransparent` in the seam (ARGB8888 buffers, which the
 compositor already BLENDED source-over) and `NSWindow`'s backing store switching to
 `kCGImageAlphaPremultipliedFirst` when `-setOpaque:NO`. See `../libagora-app/PROVENANCE.md`.
+
+## The desktop's top padding — the icon grid's origin is its AREA, not an inset
+
+**MEASURED BUG:** the first row of icons was placed at the grid's `WSIconGridMargin` (16 pt) from the view's top
+edge — which is *under* the menu bar, whose strip is 24 pt tall. Icons belong below it.
+
+**FIX:** `WSIconLayout` no longer adds a top inset; the **bounds' ORIGIN is the top of the area it fills**, and
+the caller says where that is. `WSDesktopView` hands it `-layoutBounds` — the view less
+`+[WSDesktopView topPadding]` — and the padding is **the menu bar's height plus ten points**, read from
+`NSStatusBar -thickness` rather than hard-coded, so it follows the bar. MEASURED after the change: the first
+icon's BOX begins at y = 34 (24 + 10) and its page glyph's ink at y = 42, the art carrying its own 8 pt inset.
+`tests/desktop_layout.m` now checks the first cell sits at the AREA'S origin, not at a margin.
 
 ## Licence per file
 

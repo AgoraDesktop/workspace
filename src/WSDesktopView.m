@@ -29,6 +29,7 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSStatusBar.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
@@ -61,6 +62,25 @@
 
 - (NSString *)directory { return [_model directory]; }
 
+/* **THE DESKTOP'S TOP PADDING: THE MENU BAR'S HEIGHT PLUS TEN POINTS.** The bar is a window the SERVER draws at its
+ * own level, OVER the desktop, so an icon placed at the view's top edge goes UNDER it. The height comes from the
+ * AppKit's own door — `NSStatusBar -thickness` — rather than a constant, so the padding follows the bar if the
+ * bar's height ever changes. */
++ (CGFloat)topPadding
+{
+	return [[NSStatusBar systemStatusBar] thickness] + 10.0;
+}
+
+/* The area the grid lays icons out in: the whole view, less the top padding. Its ORIGIN is the area's top-left and
+ * `WSIconLayout` fills from there, so the padding is the gap and not an inset the grid adds again. */
+- (NSRect)layoutBounds
+{
+	NSRect bounds = [self bounds];
+	CGFloat top = [WSDesktopView topPadding];
+
+	return NSMakeRect(bounds.origin.x, top, bounds.size.width, bounds.size.height - top);
+}
+
 /* Give every item a place: the one the store remembers, or the next free grid cell. */
 - (void)reload
 {
@@ -79,7 +99,7 @@
 			position = [_store iconPositionForName:[item name]];
 		} else {
 			position = [WSIconLayout gridPositionForIndex:(NSInteger)i
-							     inBounds:[self bounds]
+							     inBounds:[self layoutBounds]
 							     iconSize:iconSize];
 		}
 		[positions addObject:[NSValue valueWithPoint:position]];
@@ -313,7 +333,7 @@
 		NSInteger index = [[_selection objectAtIndex:s] integerValue];
 		WSItem *item = [[_model items] objectAtIndex:(NSUInteger)index];
 		NSPoint position = [WSIconLayout snapPosition:[[_positions objectAtIndex:(NSUInteger)index] pointValue]
-						     inBounds:[self bounds]
+						     inBounds:[self layoutBounds]
 						     iconSize:[self iconSize]
 						     avoiding:occupied];
 
