@@ -9,7 +9,7 @@
  *   toolbar       Back, Forward and the three-way view switcher (only Icon enabled)
  *   path bar      the current folder, one component per path element
  *   sidebar       PLACES and DEVICES, in an NSOutlineView inside an NSSplitView
- *   content       the icon view, or the list view (Column is W5)
+ *   content       the icon view, the list view or the column view
  *   status bar    "N items", from the model's own count
  *
  * **THE RESPONDER CHAIN IS HOW THE MENUS REACH THE WINDOW.** The window's `-nextResponder` is this controller, so
@@ -18,6 +18,7 @@
  */
 #import "WSFileWindowController.h"
 
+#import "WSColumnView.h"
 #import "WSIconView.h"
 #import "WSListView.h"
 #import "WSHistory.h"
@@ -324,6 +325,14 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 			[_listView tile];
 		}
 	}
+	if (_columnView != nil) {
+		if ([_columnView model] != _model) {
+			[_columnView setModel:_model];
+		} else {
+			[_columnView reloadData];
+		}
+		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
+	}
 	[_pathBar setURL:[NSURL fileURLWithPath:_directory]];
 	[_status setStringValue:[NSString stringWithFormat:@"%ld %@", (long)count,
 				  (count == 1) ? @"item" : @"items"]];
@@ -459,7 +468,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 
 - (void)setViewMode:(NSInteger)mode
 {
-	if (mode < 0 || mode > 1 || mode == _viewMode) {
+	if (mode < 0 || mode > 2 || mode == _viewMode) {
 		if (_viewSwitcher != nil) {
 			[_viewSwitcher setSelectedSegment:mode];
 		}
@@ -473,7 +482,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		[_contentScroll setDocumentView:_iconView];
 		[_iconView setModel:_model];
 		[self refreshIconFrame];
-	} else {
+	} else if (mode == 1) {
 		if (_listView == nil) {
 			_listView = [[WSListView alloc] initWithFrame:[[_contentScroll contentView] bounds]
 							       model:_model];
@@ -484,6 +493,16 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		[_contentScroll setDocumentView:_listView];
 		[_listView reloadData];
 		[_listView tile];
+	} else {
+		if (_columnView == nil) {
+			_columnView = [[WSColumnView alloc] initWithFrame:[[_contentScroll contentView] bounds]
+								   model:_model];
+			[_columnView setViewDelegate:(id <WSColumnViewDelegate>)self];
+		} else {
+			[_columnView setModel:_model];
+		}
+		[_contentScroll setDocumentView:_columnView];
+		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
 	}
 }
 
@@ -499,14 +518,18 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	[self setViewMode:1];
 }
 
-- (void)cg_useColumnView:(id)sender { (void)sender; }
+- (void)cg_useColumnView:(id)sender
+{
+	(void)sender;
+	[self setViewMode:2];
+}
 
 - (void)viewSwitcherChanged:(id)sender
 {
 	NSInteger segment = [_viewSwitcher selectedSegment];
 
 	(void)sender;
-	if (segment < 0 || segment > 1) {
+	if (segment < 0 || segment > 2) {
 		[_viewSwitcher setSelectedSegment:_viewMode];
 		return;
 	}
@@ -539,6 +562,18 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 }
 
 - (void)listViewDidChangeModel:(WSListView *)view
+{
+	(void)view;
+	[self refresh];
+}
+
+- (void)columnView:(WSColumnView *)view openItem:(WSItem *)item
+{
+	(void)view;
+	[self openItem:item];
+}
+
+- (void)columnViewDidChangeModel:(WSColumnView *)view
 {
 	(void)view;
 	[self refresh];
@@ -603,7 +638,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		for (i = 0; i < 3; i++) {
 			[_viewSwitcher setLabel:[labels objectAtIndex:(NSUInteger)i] forSegment:i];
 			[_viewSwitcher setWidth:70.0 forSegment:i];
-			[_viewSwitcher setEnabled:(i <= 1) forSegment:i];
+			[_viewSwitcher setEnabled:YES forSegment:i];
 		}
 		[_viewSwitcher setSelectedSegment:0];
 		[_viewSwitcher setTarget:self];
@@ -728,6 +763,9 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	if (_viewMode == 1 && _listView != nil) {
 		[_listView tile];
 	}
+	if (_viewMode == 2 && _columnView != nil) {
+		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
+	}
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
@@ -747,7 +785,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		return YES;
 	}
 	if (action == @selector(cg_useColumnView:)) {
-		return NO;
+		return YES;
 	}
 	if (action == @selector(goToEnclosingFolder:)) {
 		return [_directory isEqual:@"/"] ? NO : YES;
@@ -766,6 +804,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 - (NSTextField *)cg_statusField { return _status; }
 - (WSIconView *)cg_iconView { return _iconView; }
 - (WSListView *)cg_listView { return _listView; }
+- (WSColumnView *)cg_columnView { return _columnView; }
 - (NSSegmentedControl *)cg_viewSwitcher { return _viewSwitcher; }
 - (NSSplitView *)cg_splitView { return _split; }
 

@@ -111,9 +111,9 @@ DEVICES (Computer) — and owns the desktop-path rule (`AGORA_DESKTOP`, else `~/
 sidebar and a second window cannot disagree. The sidebar is an `NSOutlineView` in an `NSSplitView`, with the
 source-list highlight.
 
-**ICON AND LIST ARE ENABLED; COLUMN IS NOT.** The three-way switcher is the platform's `NSSegmentedControl` in a
-toolbar item; Column belongs to W5, so its segment and menu row answer NO rather than showing an empty mode. W2's
-simple icon grid is W3's icon view now; W4 adds `WSListView` in the same content area, over the same model.
+**ALL THREE VIEWS ARE ENABLED.** The three-way switcher is the platform's `NSSegmentedControl` in a toolbar item.
+W2's simple icon grid is W3's icon view now; W4 adds `WSListView`; W5 adds `WSColumnView`, an `NSBrowser` with the
+preview panel. Each is a content view over the same per-directory model.
 
 **THE CONTENT VIEW KEEPS COCOA'S y-UP DIRECTION.** The strips want a top-down layout, but this tier's live drawing
 path enters a flipped ROOT view without mirroring it, so a flipped content view put its top strip at the bottom
@@ -185,6 +185,26 @@ that collapses whenever the folder changes.
 **RENAME IS THE TABLE'S FIELD EDITOR.** The Name column is editable; Return starts the session. The table ends an
 edit through its own data-source door with a row, not the outline's item door, so `WSListView` implements both and
 routes them to one `NSFileManager` move, a parent-model reload, the expansion restore and the new row's selection.
+
+## W5 — the column view
+
+**THE BROWSER IS `libagora-app`'S; THE COLUMNS ARE THE MODEL'S.** `WSColumnView` owns an `NSBrowser`; each column's
+rows are a sorted `WSItemModel` — the root's for column zero, and a child model made on demand for a selected folder.
+The browser's delegate fills the `NSBrowserCell`s and the selection loads the next column; a leaf returns zero rows
+and opens nothing.
+
+**THE PREVIEW IS A FIXED RIGHTMOST PANEL.** It shows the selected item's icon, name, Kind, size and modification
+date. Selecting a folder previews it and loads its children; selecting a file previews the file. The panel stays
+while the browser's columns scroll, which is the shape this stage calls the preview column; a Quick Look preview
+inside the column is W9's.
+
+**THE BROWSER IS TABLE-BACKED, WITH THE 10.6 DELEGATE SURFACE.** Apple's class is an `NSMatrix` of `NSBrowserCell`s;
+this tree has no `NSMatrix`, so `NSBrowser` is one `NSScrollView` of side-by-side `NSTableView`s with
+`numberOfRowsInColumn:`, `willDisplayCell:atRow:column:`, `selectedColumn`, `path`, column width and horizontal
+scrolling. The old `createRowsForColumn:inMatrix:` form is absent and named in its header.
+
+**A RELOAD REBUILDS THE COLUMNS FROM THE ROOT.** `-reloadData` clears child models and the column cache, reloads the
+root and asks for column zero; the selection in the test is then made again, so a new child appears where it belongs.
 
 ## What W0 found that it did not set out to find
 

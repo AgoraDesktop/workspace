@@ -117,8 +117,8 @@ the trace above, rather than a photograph.
 
 ## W2 — the file window, and a drawing finding
 
-**`WSFileWindowController`, `WSIconView`, `WSListView`, `WSItemSort`, `WSItemKind`, `WSHistory`, `WSItemIcons` and
-`WSPlaces` are this repository's own
+**`WSFileWindowController`, `WSIconView`, `WSListView`, `WSColumnView`, `WSItemSort`, `WSItemKind`, `WSHistory`,
+`WSItemIcons` and `WSPlaces` are this repository's own
 code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToolbarItem`, `NSSplitView`, `NSOutlineView`,
 `NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
 separate so each can be measured without the others.
@@ -194,6 +194,32 @@ expanded set is not persisted to disk; that is W5's outline autosave, if it is w
 four column values; a folder open across a reload with its child visible; a rename through the field editor; the
 Return/Right/Left/Command-Down keys; and an undeclared `.md` file's kind not being a `dyn.…` UTI. Still absent: list
 drag/drop and row icons (the W4 deliverable is the columns, disclosure, sorting and rename).
+
+## W5 — the column view, and the browser it stands on
+
+**`WSColumnView` IS THIS REPOSITORY'S OWN CODE; `NSBrowser` IS `libagora-app`'S.** The browser is table-backed
+because this tree has no `NSMatrix`: one `NSScrollView` of side-by-side `NSTableView`s, with the 10.6 delegate surface
+and `NSBrowserCell`. The workspace's view owns the child models, the cell contents, the selection-to-next-column
+relationship and the preview.
+
+**THE PREVIEW IS A FIXED RIGHTMOST PANEL, NOT A BROWSER COLUMN.** The plan's "preview column" is satisfied visually
+and functionally: it is the rightmost column of the window, it follows the browser's selection, and it stays put while
+the columns scroll. Putting a Quick Look preview *inside* the browser would need W9's generators and panel; this
+panel shows metadata only, and `README.md` names that boundary.
+
+**SELECTING A FOLDER OPENS THE NEXT COLUMN; SELECTING A FILE DOES NOT.** The browser's delegate returns the child
+count for column N+1 from the selected row in column N; a file returns zero, so the browser leaves the columns as they
+are and the preview shows the file. A programmatic selection (`-selectRow:inColumn:`) updates the preview through the
+delegate's `-browser:selectRow:inColumn:` hook even though the control's action is suppressed for it.
+
+**AND THE BROWSER FOUND A TABLE BUG.** `NSTableView` released the proposed selection set before copying it; a
+delegate that returned that same set (the browser does) made the copy read freed memory and the selection become
+empty. The table retains the answer across the release now; the browser's probe is the regression. That fix and the
+browser's own design are recorded in `../libagora-app/PROVENANCE.md` § 18.
+
+`tests/column_view.m` measures the three root cells, the two-child column, the grandchild column, a leaf adding no
+column, the preview's name/Kind/size/date, an empty folder opening no column, the delegate's open door, a reload with
+a new child and the browser's width beside the preview.
 
 ## Known gaps, recorded rather than left to be found
 

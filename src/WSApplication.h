@@ -33,7 +33,7 @@
 	NSMutableArray *_fileWindows;		/* RETAINED: WSFileWindowController */
 	BOOL _showsAboutOnStart;
 	BOOL _showsFileWindowOnStart;
-	BOOL _fileWindowListView;
+	NSInteger _fileWindowViewMode;
 }
 
 /* Create the desktop window and put it on the screen. NO if it could not be made. */
@@ -55,6 +55,7 @@
 /* **THE FIRST FILE WINDOW'S MODE, FOR THE PROBE'S DOOR.** `--list-view` is `--file-window` with W4's List chosen;
  * the switcher still works afterwards. */
 - (void)setFileWindowUsesListView:(BOOL)flag;
+- (void)setFileWindowUsesColumnView:(BOOL)flag;
 
 /* THE FILE MENU'S NEW-WINDOW ROW. It is the application's, because a second window is the application's to own,
  * and every window keeps its own model, history and path bar. */

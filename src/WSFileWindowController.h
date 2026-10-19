@@ -6,8 +6,7 @@
  *
  * **W2 IS THE SHELL, NOT THE VIEWS.** One folder, one `WSItemModel`, and the chrome a person navigates with: a
  * toolbar, a sidebar of places, a path bar, a status bar and the three-way view switcher. The Icon mode is W3's
- * `WSIconView`; the List mode is W4's `WSListView`; Column is W5's, and its segment is disabled rather than
- * pretending.
+ * `WSIconView`; the List mode is W4's `WSListView`; the Column mode is W5's `WSColumnView`.
  *
  * **THE WINDOW IS A SHELL OVER THE MODEL.** The title, the status bar, the path bar and the content view are all
  * renderings of the same `WSItemModel`; navigating replaces that model and tells every one of them, rather than
@@ -31,6 +30,7 @@
 @class NSSegmentedControl;
 @class NSSplitView;
 @class NSTextField;
+@class WSColumnView;
 @class WSIconView;
 @class WSListView;
 @class WSHistory;
@@ -50,8 +50,9 @@
 	NSScrollView *_sidebarScroll;		/* RETAINED by the split view */
 	WSIconView *_iconView;		/* RETAINED by its scroll view */
 	WSListView *_listView;		/* RETAINED by the scroll view when List is chosen */
+	WSColumnView *_columnView;		/* RETAINED by the scroll view when Column is chosen */
 	NSScrollView *_contentScroll;		/* RETAINED by the split view */
-	NSInteger _viewMode;			/* 0 Icon, 1 List; Column is W5 */
+	NSInteger _viewMode;			/* 0 Icon, 1 List, 2 Column */
 	NSTextField *_status;			/* RETAINED by the content view */
 	NSToolbar *_toolbar;			/* RETAINED by the window */
 	NSSegmentedControl *_viewSwitcher;	/* RETAINED by its toolbar item */
@@ -94,6 +95,7 @@
 - (nullable NSTextField *)cg_statusField;
 - (nullable WSIconView *)cg_iconView;
 - (nullable WSListView *)cg_listView;
+- (nullable WSColumnView *)cg_columnView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
 - (nullable NSSplitView *)cg_splitView;
 

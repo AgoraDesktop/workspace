@@ -193,7 +193,12 @@
 
 - (void)setFileWindowUsesListView:(BOOL)flag
 {
-	_fileWindowListView = flag;
+	_fileWindowViewMode = flag ? 1 : 0;
+}
+
+- (void)setFileWindowUsesColumnView:(BOOL)flag
+{
+	_fileWindowViewMode = flag ? 2 : 0;
 }
 
 /* **ONE FOLDER, ONE WINDOW, ONE MODEL.** The controller owns its own history and path bar; the application owns
@@ -208,8 +213,8 @@
 	[_fileWindows addObject:controller];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(fileWindowWillClose:)
 		name:NSWindowWillCloseNotification object:[controller window]];
-	if (_fileWindowListView) {
-		[controller setViewMode:1];
+	if (_fileWindowViewMode != 0) {
+		[controller setViewMode:_fileWindowViewMode];
 	}
 	[controller showWindow:nil];
 	fprintf(stderr, "workspace: file window for %s\n", [directory UTF8String]);

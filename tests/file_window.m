@@ -9,6 +9,7 @@
  * Back/Forward is the only thing that decides which folder is shown; and a second controller is a second folder
  * with its own model and its own cursor. Offscreen: no compositor, no click, no menu tracking.
  */
+#import "WSColumnView.h"
 #import "WSIconView.h"
 #import "WSFileWindowController.h"
 #import "WSItemModel.h"
@@ -114,8 +115,8 @@ int main(void)
 	check([[first cg_viewSwitcher] selectedSegment] == 0, "with Icon selected");
 	check([[first cg_viewSwitcher] isEnabledForSegment:0]
 	      && [[first cg_viewSwitcher] isEnabledForSegment:1]
-	      && ![[first cg_viewSwitcher] isEnabledForSegment:2],
-	      "Icon and List are enabled; Column is W5");
+	      && [[first cg_viewSwitcher] isEnabledForSegment:2],
+	      "all three views are enabled");
 	check([[[first window] toolbar] items] != nil && [[[[first window] toolbar] items] count] >= 4,
 	      "the toolbar has its items");
 	check(![first canGoBack] && ![first canGoForward], "a new window has nowhere to go back or forward to");
@@ -134,13 +135,17 @@ int main(void)
 	columnItem = [[NSMenuItem alloc] initWithTitle:@"as Columns" action:@selector(cg_useColumnView:) keyEquivalent:@""];
 	check(![first validateMenuItem:backItem], "Back is disabled at the first location");
 	check([first validateMenuItem:listItem], "List is enabled (W4)");
-	check(![first validateMenuItem:columnItem], "and Columns is disabled until W5");
+	check([first validateMenuItem:columnItem], "and Columns is enabled (W5)");
 
 	/* THE SWITCHER ACTUALLY SWAPS THE CONTENT VIEW, AND THE LIST READS THE SAME MODEL. */
 	[first cg_useListView:nil];
 	check([first viewMode] == 1 && [first cg_listView] != nil
 	      && [[first cg_listView] numberOfRows] == 4,
 	      "choosing List builds the outline and it has the model's four rows");
+	[first cg_useColumnView:nil];
+	check([first viewMode] == 2 && [first cg_columnView] != nil
+	      && [[[first cg_columnView] cg_browser] numberOfRowsInColumn:0] == 4,
+	      "choosing Column builds the browser over the same four items");
 	[first cg_useIconView:nil];
 	check([first viewMode] == 0, "and choosing Icon returns to the grid");
 

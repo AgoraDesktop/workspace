@@ -90,6 +90,7 @@ find_package(AgoraLaunchServices CONFIG REQUIRED)
 
 add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
@@ -143,3 +144,22 @@ target_link_libraries(list_view PRIVATE
 add_test(NAME workspace-list-view COMMAND list_view)
 set_tests_properties(workspace-list-view PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
+
+# **W5'S COLUMN VIEW.** The browser's columns, the selection that opens the next one, and the preview. Needs the
+# AppKit, Icon Services and Launch Services; no compositor.
+add_executable(column_view column_view.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m")
+target_include_directories(column_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(column_view PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-column-view COMMAND column_view)
+set_tests_properties(workspace-column-view PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
