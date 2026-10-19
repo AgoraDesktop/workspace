@@ -6,7 +6,7 @@
  *
  * THE LOAD-BEARING CLASS (WORKSPACE-PLAN.md §6): the desktop, and later the icon, list and column views, are
  * all renderings of THIS — a directory, its items, and a change stream. Four views over four enumerations is
- * the classic way a Finder clone becomes four subtly different file managers, and one model is what prevents
+ * the classic way a file-manager clone becomes four subtly different file managers, and one model is what prevents
  * it.
  *
  * THE CHANGE STREAM IS NOT WIRED YET, AND IT IS NAMED RATHER THAN IMPLIED: `-reload` re-reads the directory and

@@ -1,6 +1,6 @@
 # workspace
 
-**Workspace is Agora's file manager and desktop** — the Finder's role: the windows that browse the filesystem
+**Workspace is Agora's file manager and desktop** — the file manager's role: the windows that browse the filesystem
 and the wallpaper-and-icons surface behind everything.
 
 Agora is an installable desktop environment for Linux and the BSDs; see the project README in the parent
@@ -50,7 +50,7 @@ headless. It runs the **bundle's** executable (the bundle path is part of what W
 
 ### W1: the desktop's icons
 
-Three objects, and the Finder **window's** views will be built from the same three:
+Three objects, and the file **window's** views will be built from the same three:
 
 - **`WSItemModel`** — one directory's items, and the one model every view reads (`WORKSPACE-PLAN.md` §6).
 - **`WSIconLayout`** — pure geometry: a **top-to-bottom, RIGHT-TO-LEFT** grid (macOS's own desktop order), the
@@ -58,7 +58,7 @@ Three objects, and the Finder **window's** views will be built from the same thr
   order, and a hit test. It needs no view, which is why it is checked **offscreen**.
 - **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
 
-**Positions are TOP-LEFT SCREEN COORDINATES** (the Finder's own convention, and what the store persists); the
+**Positions are TOP-LEFT SCREEN COORDINATES** (the reference file manager's own convention, and what the store persists); the
 view converts to Cocoa only to draw and to hit-test. The sidecar is **XML**, because that is what this tree's
 `NSPropertyListSerialization` writes — MEASURED: it refuses the binary format — and a sidecar that diffs is one a
 person can inspect. And the grid's **ORIGIN IS THE TOP OF ITS AREA**, not an inset it adds: the desktop hands it
@@ -81,7 +81,7 @@ it survives the process. The two are the application's own doors because the App
 `-orderFrontStandardAboutPanel:` is a NAMED REFUSAL and there is no preferences panel at all.
 
 **AND THE MENUS BESIDE IT ARE A SKELETON, DELIBERATELY.** Every File, Edit, View and Go row names the selector the
-Finder's own row sends and has **no target yet** — so the enabling walk draws it greyed. That is the honest state of
+reference file manager's own row sends and has **no target yet** — so the enabling walk draws it greyed. That is the honest state of
 a command whose feature is not written, and it is MEASURED rather than asserted: `workspace-main-menu` runs the walk
 and checks the outcome, and the desktop suite reads the ink off the strip in two scenes — one where Workspace is the
 active application and one where an ordinary window is in front of it, where its menus are correctly absent.
@@ -117,7 +117,7 @@ substrate — Launch Services, Icon Services and the change stream — is alread
 (`../libagora-launchservices`, `../libagora-iconservices`, `../libagora-watch`).
 
 **What W1 does not do yet, named:** the desktop is not LIVE (`libagora-watch` is built, but `WSItemModel`
-reloads on demand rather than from a stream callback); a folder double-click is a Finder window, which is W2; a
+reloads on demand rather than from a stream callback); a folder double-click is a file window, which is W2; a
 document's icon is its TYPE's generic and not its own content (`AGIconCreateWithURL` already prefers an
 application's declared icon); and the sidecar holds the icon size and the positions, not yet grid spacing or
 label placement.

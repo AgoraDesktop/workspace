@@ -10,7 +10,7 @@
  * Apple's private one. THE ENCODING IS XML, because that is what this tree's `NSPropertyListSerialization`
  * writes — MEASURED: it refuses the binary format — and a sidecar that diffs is one a person can inspect.
  *
- * ICON POSITIONS ARE IN TOP-LEFT SCREEN COORDINATES, which is the Finder's own convention and the one a
+ * ICON POSITIONS ARE IN TOP-LEFT SCREEN COORDINATES, which is the reference file manager's own convention and the one a
  * persisted position should have: the view converts to Cocoa's bottom-left only when it draws.
  */
 #ifndef WORKSPACE_WSMETADATASTORE_H

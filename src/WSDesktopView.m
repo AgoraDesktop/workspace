@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: MIT
  *
  * THE WALLPAPER IS W0'S, and the icons are W1's. Every position here is in TOP-LEFT SCREEN COORDINATES — the
- * space the metadata store persists and the Finder uses — and the conversion to Cocoa's bottom-left happens
+ * space the metadata store persists and the reference file manager uses — and the conversion to Cocoa's bottom-left happens
  * only where something is drawn or hit-tested.
  *
  * AN ICON IS AN `IconRef` (libagora-iconservices, F2): the item's URL goes in and a `CGImageRef` comes out, and
@@ -360,7 +360,7 @@
 }
 
 /* Double-click. An application bundle launches; a document opens in its default application (both are
- * `LSOpenCFURLRef`, F1). A FOLDER is not handled yet — opening one is a Finder WINDOW, which is W2. */
+ * `LSOpenCFURLRef`, F1). A FOLDER is not handled yet — opening one is a file window, which is W2. */
 - (void)openItemAtIndex:(NSUInteger)index
 {
 	WSItem *item = [[_model items] objectAtIndex:index];

@@ -9,13 +9,13 @@
  * rules are the HIG's and belong to the framework rather than to each application. So this file builds the five
  * menus an application writes, installs the bar, and then fills the application menu the install just made. Filling
  * it first would mean naming it here, and a second copy of "what is this application called" is how a bar comes to
- * read `Finder` above `Quit Workspace`. (The mechanism is `-cg_arrangeMenuBar` in `NSApplication.m`.)
+ * read the reference file manager's name above `Quit Workspace`. (The mechanism is `-cg_arrangeMenuBar` in `NSApplication.m`.)
  *
  * **A ROW WITH NO TARGET IS A DISABLED ROW, AND THAT IS THE DESIGN RATHER THAN AN OMISSION.** `-[NSMenu update]`
  * walks every item before a menu tracks and sets `[item setEnabled:([item action] != NULL && [target
  * respondsToSelector:[item action]])]`. A row whose feature has not been written yet therefore has no target, is
  * found not to answer, and is DRAWN GREY — which is exactly how a Mac application shows a command it cannot offer
- * right now, and how this bar says what Workspace can actually do instead of being a picture of the Finder. Each
+ * right now, and how this bar says what Workspace can actually do instead of being a picture of the reference file manager. Each
  * later stage lights up its own rows by giving them a target; nothing here changes.
  *
  * **EVERY SHORTCUT NAMES ITS OWN MASK.** This tier's `-[NSMenuItem initWithTitle:action:keyEquivalent:]` sets the
@@ -108,7 +108,7 @@ static void WSFillApplicationMenu(NSMenu *menu, id target)
 }
 
 /* ---------------------------------------------------------------------------------------------------
- * THE FIVE BESIDE IT. Nothing here invents a command: each row names the selector the Finder's own row sends, and
+ * THE FIVE BESIDE IT. Nothing here invents a command: each row names the selector the reference file manager's own row sends, and
  * the target is nil until the stage that answers it exists.
  * --------------------------------------------------------------------------------------------------- */
 

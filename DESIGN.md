@@ -8,7 +8,7 @@ file windows, the views and the file operations are later stages that hang off t
 - **`WSApplication` is a CONTROLLER, not an `NSApplication` subclass.** This tree's
   `+[NSApplication sharedApplication]` allocates an `NSApplication` itself, so a subclass would never be the
   application object. `WSApplication` owns what is the application's — the desktop — and drives the
-  `NSApplication` the entry point makes. On the Mac the Finder is likewise an application that owns a desktop,
+  `NSApplication` the entry point makes. On the Mac the system file manager is likewise an application that owns a desktop,
   not a subclass of the application object.
 - **`WSDesktopWindow` is the desktop.** Borderless, `kCGDesktopWindowLevel`, the size of `[NSScreen frame]`,
   never key and never main. **The level is what makes it the desktop**: everything else is above it, so the
@@ -31,7 +31,7 @@ file windows, the views and the file operations are later stages that hang off t
 
 ## W1 — the desktop's icons
 
-Three objects, and the Finder **window's** views will be built from the same three:
+Three objects, and the file **window's** views will be built from the same three:
 
 - **`WSItemModel`** — one directory's items, and the one model every view reads.
 - **`WSIconLayout`** — pure geometry: a **top-to-bottom, RIGHT-TO-LEFT** grid (macOS's own desktop order), the
@@ -39,7 +39,7 @@ Three objects, and the Finder **window's** views will be built from the same thr
   order, and a hit test. It needs no view, which is why it is checked offscreen.
 - **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
 
-**Three decisions.** Positions are **TOP-LEFT SCREEN COORDINATES** — the Finder's own convention, and what the
+**Three decisions.** Positions are **TOP-LEFT SCREEN COORDINATES** — the reference file manager's own convention, and what the
 store persists — so the view converts to Cocoa only to draw and to hit-test; the sidecar is **XML**, because
 that is what this tree's `NSPropertyListSerialization` writes; and the grid's **ORIGIN IS THE TOP OF ITS AREA**,
 not an inset it adds. The desktop hands it a rectangle already padded by **the menu bar's height plus ten
@@ -62,7 +62,7 @@ thing this stage added to the menu bar.
 
 - **The application menu is FILLED AFTER THE INSTALL, not before it.** The submenu to fill does not exist until
   `-setMainMenu:` has made it; building it here would mean naming the application twice, and a bar reading
-  `Finder` above `Quit Workspace` is what two names for one thing looks like.
+  the reference file manager's name above `Quit Workspace` is what two names for one thing looks like.
 - **About and Preferences are the application's own doors.** `-[NSApplication orderFrontStandardAboutPanel:]` is a
   NAMED REFUSAL in this tree, and there is no preferences panel at all — so those two rows target `WSApplication`,
   which puts up `WSAboutPanel` (the icon, the name, the version and the identifier, every string read out of
@@ -72,9 +72,9 @@ thing this stage added to the menu bar.
   through `WSMetadataStore` and SAVES, so the size in the sidecar is the size the next launch lays out with. A
   window of controls wired to nothing would be worse than no window.
 - **A ROW WITH NO TARGET IS A DISABLED ROW, AND THAT IS THE DESIGN.** `-[NSMenu update]` enables an item when its
-  target answers its action, so every File/View/Go row — which names the Finder's own selector and has no
+  target answers its action, so every File/View/Go row — which names the reference file manager's own selector and has no
   implementer yet — is drawn GREY. That is how a Mac application shows a command it cannot offer right now, and how
-  this bar says what Workspace can actually do instead of being a picture of the Finder. Each later stage lights its
+  this bar says what Workspace can actually do instead of being a picture of the reference file manager. Each later stage lights its
   own rows by giving them a target; nothing in `WSMainMenu.m` changes.
 
 **AND ONLY THE ACTIVE APPLICATION'S MENUS SHOW.** The bar window is ordered front by the AppKit's activation, which

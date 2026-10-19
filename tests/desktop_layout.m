@@ -4,7 +4,7 @@
  * Copyright © 2026 Kyle J. Cardoza. MIT licensed. SPDX-License-Identifier: MIT
  *
  * PURE GEOMETRY, SO NO COMPOSITOR AND NO WINDOW: a cell size, a column-major grid, a snap that avoids what is
- * taken, an arrange order and a hit test. These are the numbers a desktop and a Finder window's icon view will
+ * taken, an arrange order and a hit test. These are the numbers a desktop and a file window's icon view will
  * both be built from, so they are checked where they live rather than through a screenshot.
  */
 #import "WSIconLayout.h"

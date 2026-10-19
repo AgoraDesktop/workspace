@@ -27,7 +27,7 @@
 
 /* **THE RANGE IS THE STORE'S, NOT THIS WINDOW'S.** `-[WSMetadataStore setIconSize:]` accepts 16..512 and ignores
  * anything else, so a slider that offered more would be offering sizes the answer would silently drop. The default
- * is 64 (the Finder's own large-icon size); 16 is the small end the store allows and 128 the largest a desktop
+ * is 64 (the reference file manager's large-icon size); 16 is the small end the store allows and 128 the largest a desktop
  * wants. */
 static const NSInteger WSPreferencesMinimumIconSize = 16;
 static const NSInteger WSPreferencesMaximumIconSize = 128;

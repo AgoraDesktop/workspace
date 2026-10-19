@@ -5,9 +5,9 @@
  * SPDX-License-Identifier: MIT
  *
  * PURE GEOMETRY, AND THAT IS WHY IT IS A CLASS OF ITS OWN: a grid, an arrange order and a collision rule are
- * the arithmetic every icon surface shares — the desktop now, and the icon view of a Finder window later — and
+ * the arithmetic every icon surface shares — the desktop now, and the icon view of a file window later — and
  * none of it needs a view. Everything here is in TOP-LEFT SCREEN COORDINATES, the same space the metadata
- * store persists and the Finder's own `.DS_Store` uses; a view converts to Cocoa only to draw.
+ * store persists and the reference file manager's own `.DS_Store` uses; a view converts to Cocoa only to draw.
  */
 #ifndef WORKSPACE_WSICONLAYOUT_H
 #define WORKSPACE_WSICONLAYOUT_H

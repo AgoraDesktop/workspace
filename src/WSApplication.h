@@ -8,7 +8,7 @@
  * `+[NSApplication sharedApplication]` allocates an `NSApplication` ITSELF — `s_shared = [[NSApplication alloc]
  * init]` — so calling it on a subclass would answer an `NSApplication` and a subclass of it would never be the
  * application. Rather than fight that, this is a CONTROLLER that owns the application's own object (the
- * desktop) and drives the `NSApplication` the entry point makes. On the Mac the Finder is likewise not an
+ * desktop) and drives the `NSApplication` the entry point makes. On the Mac the system file manager is likewise not an
  * `NSApplication` subclass; it is an application that owns a desktop and windows.
  */
 #ifndef WORKSPACE_WSAPPLICATION_H

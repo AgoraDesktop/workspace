@@ -7,7 +7,7 @@
  * W1 MAKES THIS A FILE MANAGER SURFACE RATHER THAN WALLPAPER: it draws one icon per item in a directory, lets a
  * person select them, rubber-band a group, drag them to new places and open them. The three pieces it is built
  * from are separate on purpose — `WSItemModel` (what is there), `WSIconLayout` (where icons go) and
- * `WSMetadataStore` (where a person put them) — because the Finder WINDOW's views will be built from the same
+ * `WSMetadataStore` (where a person put them) — because the file window's views will be built from the same
  * three.
  */
 #ifndef WORKSPACE_WSDESKTOPVIEW_H

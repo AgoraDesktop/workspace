@@ -7,7 +7,7 @@
  * WHY THIS IS WORKSPACE'S AND NOT THE APPKIT'S. `-[NSApplication orderFrontStandardAboutPanel:]` is a NAMED REFUSAL
  * in this tree — "a panel AND text drawing, neither of which this tier has" — and the first half of that is no
  * longer true: the AppKit now has `NSWindow`, a view that draws text and Icon Services to make the icon. So the
- * panel is an application's to build, which is where the Finder's own About box lives too. What is NOT here is the
+ * panel is an application's to build, which is where the reference file manager's About box lives too. What is NOT here is the
  * AppKit's standard panel, with its options dictionary, its credits and its `NSPanel` behaviour; this is the small
  * honest one, and the day a second application wants one is the day it moves into the AppKit.
  */

@@ -16,7 +16,7 @@ third-party code to licence.
 
 **The wallpaper is an application's, not the server's.** `ARGENTUM.md` records the server filling `#A8DED9`
 "by request" and calls a vertical ramp "the honest next step". W0 takes that step in the place it belongs: the
-desktop is a client, as the Finder is on the Mac, so the ramp is a view in an application.
+desktop is a client, as the system file manager is on the Mac, so the ramp is a view in an application.
 
 **`WSApplication` is a controller rather than an `NSApplication` subclass**, because this tree's
 `+[NSApplication sharedApplication]` allocates an `NSApplication` and not the receiver's class. The header says
@@ -34,7 +34,7 @@ copy it did not produce; that is a fact about this build tree and is recorded ra
 `NSPropertyListSerialization` writes XML and REFUSES the binary format — measured, as a `save` that returned NO —
 so `.agora` is a text property list, which also diffs, which a binary one would not.
 
-**Icon positions are TOP-LEFT SCREEN COORDINATES**, the Finder's own convention and what the store persists;
+**Icon positions are TOP-LEFT SCREEN COORDINATES**, the reference file manager's own convention and what the store persists;
 Cocoa's bottom-left appears only in the view's drawing and hit-testing, converted in one place.
 
 **An icon is an `IconRef` from `libagora-iconservices` (F2), cached per item.** `AGIconCreateWithURL` already
@@ -92,7 +92,7 @@ Workspace showed a menu bar in some runs and not in others.
 `NSResponder` implements `-cut:`, `-copy:`, `-paste:`, `-delete:` and `-selectAll:` in the BASE as forwarders to the
 next responder, where Apple leaves a plain view answering none of them — so the enabling walk's
 `-targetForAction:` finds an answer at every responder and leaves the row live. Apple's own Copy is disabled with no
-text view focused. The menu is right (a Finder's Edit menu is chain-routed) and the CHAIN is over-permissive; the
+text view focused. The menu is right (a system file manager's Edit menu is chain-routed) and the CHAIN is over-permissive; the
 fix belongs to `-targetForAction:` or to the base. `workspace-main-menu` PINS the measured outcome so that the day
 it changes, the change is visible.
 
