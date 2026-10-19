@@ -9,12 +9,11 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0, W1 AND W1b ARE DONE; W2 IS PAUSED ON THE APPKIT.** The desktop (two levels), its icons, and the
-application menu all work. The FILE WINDOW — toolbar, sidebar, path bar, view switcher — cannot be built yet,
-because the AppKit has none of the classes it is made of; the inventory is in `WORKSPACE-PLAN.md` § W2p. What
-exists to build on: `NSWindow`, `NSWindowController`, `NSView`/`NSViewController`, `NSScrollView`/`NSClipView`/
-`NSScroller`, `NSTextField`/`Cell`, `NSButton`/`Cell`, `NSSlider`, `NSPopUpButton`, `NSTextView`, `NSImage`, the
-`NSMenu` family, `NSPasteboard` and `NSTrackingArea`.
+**W0, W1, W1b AND W2 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE WINDOW
+shell all work. The window is assembled from the platform's parts — a toolbar, an `NSOutlineView` sidebar in an
+`NSSplitView`, an `NSPathControl`, a status bar and an `NSSegmentedControl` — and every strip reads the SAME
+`WSItemModel`. The Icon mode is W2's simple grid; W3 replaces it with the icon view proper, and List, Columns and
+Cover Flow are W4's and W5's (their switcher segments are disabled).
 
 **The desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
 launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
@@ -22,31 +21,38 @@ draws only the items of a directory. The WALLPAPER is a separate window at `kCGD
 **Dock's** to draw.
 
 ```
-$ .../Workspace.app/Contents/MacOS/Workspace --seconds 3
-workspace: desktop window at level -2147483628, frame 1280x720 at (0,0)
+$ .../Workspace.app/Contents/MacOS/Workspace --seconds 3 --file-window
+workspace: file window for /home/kyle/Desktop
+workspace: desktop window at level -2147483627, frame 1280x720 at (0,0)
 ```
 
-Two arguments, both TEST DOORS and named as ones: `--seconds N` ends the ordinary run loop after N seconds (a
-desktop is a thing that stays, and the suite needs it to be able to leave), and `--show-about` opens the About panel
-as part of starting up — the panel is otherwise reached by a menu action, and a synthetic click reaches a
-compositor's motion path and not its button path on some hosts.
+Three arguments, all TEST DOORS and named as ones: `--seconds N` ends the ordinary run loop after N seconds (a
+desktop is a thing that stays, and the suite needs it to be able to leave); `--show-about` opens the About panel as
+part of starting up; and `--file-window` opens a file window on the desktop folder. The last two are otherwise
+reached by menu actions, and a synthetic click reaches a compositor's motion path and not its button path on some
+hosts.
 
-`-2147483628` is `kCGDesktopWindowLevel` (`INT32_MIN + 20`, from `libagora-drawing`'s `CGWindowLevel.h`) — the
-level **below every ordinary window**, which is what makes this the desktop rather than a window. The frame is
+`-2147483627` is `kCGDesktopIconWindowLevel` — one level above `kCGDesktopWindowLevel` (`-2147483628`, both from
+`libagora-drawing`'s `CGWindowLevel.h`). The level is **below every ordinary window**, which is what makes this the
+desktop rather than a window; the wallpaper is the window one level below it. The frame is
 the whole screen, `[NSScreen frame]` and not `visibleFrame`, because the Dock and the menu bar are drawn
 *over* the wallpaper.
 
 ### What is measured, not assumed
 
-`ctest` runs one suite, `tests/run-desktop.sh` + `tests/check.py`, against **Agora's own window server**,
-headless. It runs the **bundle's** executable (the bundle path is part of what W0 proves), then places a
-**normal** window over the desktop with the server's own test client, and reads the server's screenshot.
-**9 checks, 0 fail**:
+`ctest` runs **seven tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
+against **Agora's own window server**, headless: it runs the **bundle's** executable (the bundle path is part of what
+W0 proves), places a **normal** window over the desktop with the server's own test client, and reads the server's
+screenshot. **9 checks, 0 fail**:
 
 - the **wallpaper window** (at `kCGDesktopWindowLevel`) covers the screen, at its own level;
 - **Workspace's icon window is TRANSPARENT** — the wallpaper shows through it wherever there is no icon;
 - an **icon** is drawn where its sidecar says it goes;
 - a **normal window created *after* the desktop is composited *over* it** — which can only be the level.
+
+The other six are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
+`workspace-go-menu` and — the shell's own — `workspace-history` (**15 checks**) and `workspace-file-window`
+(**38 checks**). The last one is the W2 proof below.
 
 ### W1: the desktop's icons
 
@@ -81,10 +87,52 @@ it survives the process. The two are the application's own doors because the App
 `-orderFrontStandardAboutPanel:` is a NAMED REFUSAL and there is no preferences panel at all.
 
 **AND THE MENUS BESIDE IT ARE A SKELETON, DELIBERATELY.** Every File, Edit, View and Go row names the selector the
-reference file manager's own row sends and has **no target yet** — so the enabling walk draws it greyed. That is the honest state of
+reference file manager's own row sends and — except W2's **New Workspace Window**, which the application answers —
+has **no target yet**, so the enabling walk draws it greyed. That is the honest state of
 a command whose feature is not written, and it is MEASURED rather than asserted: `workspace-main-menu` runs the walk
 and checks the outcome, and the desktop suite reads the ink off the strip in two scenes — one where Workspace is the
 active application and one where an ordinary window is in front of it, where its menus are correctly absent.
+
+### W2: the file window shell
+
+**ONE FOLDER, ONE MODEL, FOUR STRIPS.** `WSFileWindowController` opens a folder, owns its `WSItemModel` and its
+`WSHistory`, and gives the model to every part of the window: the title is the folder's name, the `NSPathControl` is
+its URL, the status bar says the model's own count, and `WSFileIconView` draws the model's items. A navigation
+replaces the model and tells all four; none of them has a directory of its own.
+
+**THE CHROME IS THE PLATFORM'S.** The toolbar is an `NSToolbar` with Back, Forward and a custom `NSSegmentedControl`
+view switcher. The sidebar is an `NSOutlineView` (source-list highlight) inside an `NSSplitView`, with two sections:
+**PLACES** (Desktop, Home, Applications) and **DEVICES** (Computer), from `WSPlaces`. The path bar is an
+`NSPathControl` in the Navigation Bar style; a component click navigates to that component's URL. The status bar is a
+bordered-free `NSTextField` reading "N items".
+
+**BACK AND FORWARD ARE `WSHistory`'S.** The stack, the cursor and the truncation rule are a separate object, and
+`tests/history.m` measures them without a window: a new navigation drops everything that was forward, pushing the
+current location is a no-op, and an arrow at the end of the stack does nothing. The controller only asks
+`-canGoBack`/`-canGoForward` for the toolbar and the menu walk.
+
+**ONLY ICON IS ENABLED.** The switcher has four segments because the Finder's does; List, Columns and Cover Flow are
+the stages after this one, so their segments are disabled and their menu rows answer NO from
+`-validateMenuItem:`. W2's Icon mode is a simple left-to-right grid (`WSFileIconView`) with selection and
+double-click open; it is NOT W3's icon view — rename, keyboard navigation, type-select, drag and drop and
+spring-loaded folders are W3's.
+
+**A SECOND WINDOW IS A SECOND MODEL.** File > New Workspace Window creates another controller on the desktop
+folder; a folder double-clicked on the desktop posts `WSDesktopViewOpenFolderNotification`, and `WSApplication`
+opens it in a file window of its own. Each controller keeps its own folder, history and path bar, and closing one
+removes it from the application's list without touching the desktop or the other windows.
+
+**THE CONTENT VIEW IS NOT FLIPPED, AND THAT IS A MEASURED CHOICE.** The strips want a top-down layout, but this
+tier's live drawing path enters the content view without mirroring a flipped ROOT, so a flipped content view placed
+its top strip at the bottom. The window keeps Cocoa's y-up direction and the three strip frames do the arithmetic:
+path bar at the top edge, status bar at the bottom, split view between. `tests/file_window.m` checks those frames
+after a resize, and the finding is recorded in `PROVENANCE.md`.
+
+`tests/file_window.m` is the proof: a temporary tree of folders, a file and a hidden file; the model's count and the
+status bar's; the path bar's URL; the sidebar's two sections and four places; the switcher's four segments and their
+enablement; the toolbar's items; Back disabled at the first location; a double-click that navigates and updates
+every strip; Back/Forward and a new navigation's truncation; the resize's strip geometry; and a second controller
+with its own model and history.
 
 ### The strip that needed a level of its own — now fixed, and measured
 
@@ -94,33 +142,40 @@ exactly such a window, so the strip *was* covered by the desktop. The strip now 
 and is composited in the level walk, so the suite measures the fix instead: the bar is in the top rows, OVER the
 desktop, and the desktop's first icon row begins a menu-bar's height plus ten points down.
 
-## What is here (W0, W1 and W1b)
+## What is here (W0–W2)
 
 ```
 src/
-  main.m            the entry point: NSApplication, the controller, a timed pump
-  WSApplication.m   the controller that owns the desktop; why it is not an NSApplication subclass is in its header
-  WSDesktopWindow.m the borderless window at kCGDesktopWindowLevel, the size of the screen
-  WSDesktopView.m   the ICONS only — selection, rubber band, drag, double-click open (transparent; no wallpaper)
-  WSIconLayout.m    the grid, the snap, the arrange order and the hit test — pure geometry
-  WSItemModel.m     one directory's items, the one model every view reads
-  WSMetadataStore.m the per-folder `.agora` sidecar: icon positions and the icon size
-Info.plist.in       the bundle's Info.plist
-tests/              the three suites: run-desktop.sh + check.py (pixels), desktop_layout, metadata_store
+  main.m                   the entry point: NSApplication, the controller, the loop
+  WSApplication.m          the controller that owns the desktop and the file windows
+  WSDesktopWindow.m        the borderless window at kCGDesktopIconWindowLevel, the size of the screen
+  WSDesktopView.m          the desktop's icons — selection, rubber band, drag, double-click open
+  WSFileWindowController.m the file window: toolbar, sidebar, path bar, status bar and view switcher
+  WSFileIconView.m         W2's icon grid over one model (W3 replaces it)
+  WSHistory.m              Back/Forward: the stack, the cursor and the truncation
+  WSIconLayout.m           the grid, the snap, the arrange order and the hit test — pure geometry
+  WSItemIcons.m            Icon Services' CGImage as an NSImage
+  WSItemModel.m            one directory's items, the one model every view reads
+  WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions and the icon size
+  WSPlaces.m               the sidebar's PLACES and DEVICES, and the desktop path
+Info.plist.in              the bundle's Info.plist
+tests/                     the pixel suite (run-desktop.sh + check.py) and six offscreen suites
 ```
 
 ## What is deliberately not here yet
 
-The plan's later stages: the file **window** and its views (W2–W5), file operations and the Trash (W6), drag and
-drop (W7), Get Info (W8), Quick Look (W9), search (W10), volumes (W11) and the shell integration (W13). Their
-substrate — Launch Services, Icon Services and the change stream — is already built
-(`../libagora-launchservices`, `../libagora-iconservices`, `../libagora-watch`).
+The plan's later stages: the icon view proper and drag/drop within it (W3), the list and column views (W4/W5),
+file operations and the Trash (W6), the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
+(W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon
+Services and the change stream — is already built (`../libagora-launchservices`, `../libagora-iconservices`,
+`../libagora-watch`).
 
-**What W1 does not do yet, named:** the desktop is not LIVE (`libagora-watch` is built, but `WSItemModel`
-reloads on demand rather than from a stream callback); a folder double-click is a file window, which is W2; a
-document's icon is its TYPE's generic and not its own content (`AGIconCreateWithURL` already prefers an
-application's declared icon); and the sidecar holds the icon size and the positions, not yet grid spacing or
-label placement.
+**What W2 does not do yet, named:** the Icon mode is the shell's simple grid, without inline rename, keyboard
+navigation, type-select, drag and drop or spring-loaded folders (W3); List, Columns and Cover Flow are disabled
+(W4/W5); the desktop is still not LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand rather than
+from a stream callback); a document's icon is its TYPE's generic and not its own content
+(`AGIconCreateWithURL` already prefers an application's declared icon); and the sidecar holds the icon size and the
+positions, not yet grid spacing or label placement.
 
 ## Build and run
 
@@ -128,7 +183,7 @@ label placement.
 cmake -S . -B build -DCMAKE_C_COMPILER=/usr/bin/clang-19 -DCMAKE_OBJC_COMPILER=/usr/bin/clang-19 \
       -DCMAKE_PREFIX_PATH=../build-prefix -DCMAKE_INSTALL_PREFIX=../build-prefix
 cmake --build build
-cd build && ctest -R workspace-desktop --output-on-failure
+cd build && ctest --output-on-failure
 ```
 
 The AppKit must be built and **installed** into the prefix first (`cmake --install ../libagora-app/build`);

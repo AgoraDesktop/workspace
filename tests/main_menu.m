@@ -12,8 +12,9 @@
  *
  * **AND THE LAST GROUP IS THE ONE THAT WOULD OTHERWISE BE TAKEN ON TRUST.** `-update` is the walk that decides
  * whether a row is enabled, and this tree's rule is that an enabled row whose action nobody answers is a promise
- * the menu cannot keep. So the test runs the walk and checks the OUTCOME: the application menu's rows are live,
- * every row of File/Edit/View/Go is not, and "Bring All to Front" — the one Window row with a target — is.
+ * the menu cannot keep. So the test runs the walk and checks the OUTCOME: the application menu's rows are live; in
+ * File/View/Go every row but W2's New Workspace Window is greyed; and "Bring All to Front" — the one Window row with
+ * a target — is.
  */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSMenu.h>
@@ -39,12 +40,16 @@ static void check(BOOL condition, const char *name)
 @interface WSMenuTestTarget : NSObject
 - (void)orderFrontAboutPanel:(id)sender;
 - (void)showPreferences:(id)sender;
+/* W2's File > New Workspace Window is the one row in the five menus with a target: the application owns the
+ * second window, so the test's stand-in answers it too and the enabling walk can be measured. */
+- (void)newWorkspaceWindow:(id)sender;
 @end
 
 @implementation WSMenuTestTarget
 
 - (void)orderFrontAboutPanel:(id)sender { (void)sender; }
 - (void)showPreferences:(id)sender { (void)sender; }
+- (void)newWorkspaceWindow:(id)sender { (void)sender; }
 
 @end
 
@@ -192,6 +197,12 @@ int main(void)
 		item = itemTitled([itemTitled(appMenu, @"Services") submenu], @"No Services Apply");
 		check(item != nil && ![item isEnabled], "the Services placeholder is DISABLED, because nothing answers it");
 
+		/* **THE ONE ROW W2 LIGHTS.** It is the application's target, and the walk can see that it answers. */
+		item = itemTitled([itemTitled(bar, @"File") submenu], @"New Workspace Window");
+		check(item != nil && [item target] == target && [item action] == @selector(newWorkspaceWindow:),
+		      "New Workspace Window is the application's own row");
+		check(item != nil && [item isEnabled], "and it is ENABLED, because the application answers it");
+
 		/* AND THE MENUS BESIDE IT ARE A SKELETON: every row names the reference file manager's own selector and none of them has a
 		 * target until the stage that implements it exists. Greyed is the honest state — an enabled row nobody
 		 * answers is a promise the menu cannot keep. */
@@ -211,6 +222,11 @@ int main(void)
 					if ([row isSeparatorItem]) {
 						continue;
 					}
+					/* NEW WORKSPACE WINDOW IS W2'S, and is checked above; every other row here still waits for
+					 * its stage and must be grey. */
+					if ([row action] == @selector(newWorkspaceWindow:)) {
+						continue;
+					}
 					inspected++;
 					if ([row isEnabled]) {
 						allDisabled = NO;
@@ -218,7 +234,7 @@ int main(void)
 				}
 			}
 			check(inspected > 10, "the File, View and Go menus are populated");
-			check(allDisabled, "and EVERY row in them is disabled, because their features are not written yet");
+			check(allDisabled, "and every OTHER row in them is disabled, because its feature is not written yet");
 		}
 
 		/* **AND THE EXCEPTION, WHICH IS MEASURED RATHER THAN WISHED AWAY.** The Edit menu's five chain-routed rows

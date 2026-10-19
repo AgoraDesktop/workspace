@@ -115,6 +115,25 @@ pointer a focus on a MOTION, and a probe that teleports to its target races that
 the AppKit's menu suites — `appkit-menu-headless`, `appkit-menu-activation` and `appkit-popup-menu` all pass — plus
 the trace above, rather than a photograph.
 
+## W2 — the file window, and a drawing finding
+
+**`WSFileWindowController`, `WSFileIconView`, `WSHistory`, `WSItemIcons` and `WSPlaces` are this repository's own
+code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToolbarItem`, `NSSplitView`, `NSOutlineView`,
+`NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
+separate so each can be measured without the others.
+
+**THE FINDING: A FLIPPED ROOT CONTENT VIEW IS PLACED AS IF IT WERE UNFLIPPED IN THE LIVE DRAWING PATH.**
+`NSWindow -cg_drawContentInContext:` calls `[_contentView displayRect:]` directly, while the offscreen walk
+(`fn_draw_view`) is the one that enters a root view's own coordinate system and mirrors a flipped one. MEASURED:
+the first live screenshot put the path bar at the bottom and the status bar at the top; the frames were correct
+for a flipped view, the DRAW was not. The window keeps an unflipped content view and lays the three strips out in
+Cocoa's y-up space. This is an AppKit-side defect for the next time the view tree is touched; it is recorded here
+rather than fixed by making the shell's layout depend on an accident.
+
+**AND THE CONTENT VIEW'S STRIPS ARE THE SHELL'S, NOT A VIEW'S.** `-resizeSubviewsWithOldSize:` lays out the path bar
+(24 points), the status bar (22) and the split view between them; `tests/file_window.m` checks those frames after a
+700×400 resize, so the window is a shell that can be resized rather than one that only looks right at birth.
+
 ## Known gaps, recorded rather than left to be found
 
 **THE ABOUT PANEL SHOWS A GENERIC FOLDER AS THE APPLICATION'S ICON.** `WSAboutPanel` asks Icon Services for the

@@ -7,15 +7,22 @@
 #import "WSApplication.h"
 
 #import "WSAboutPanel.h"
+#import "WSDesktopView.h"
 #import "WSDesktopWindow.h"
+#import "WSFileWindowController.h"
+#import "WSPlaces.h"
 #import "WSMainMenu.h"
 #import "WSPreferencesWindow.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSMenuItem.h>
+#import <AppKit/NSWindow.h>
 #import <AppKit/NSScreen.h>
+#import <Foundation/NSArray.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSNotification.h>
+#import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSString.h>
 
 #include <stdio.h>
@@ -66,19 +73,29 @@
 
 @end
 
+@interface WSApplication ()
+- (void)openFileWindowAtDirectory:(NSString *)directory;
+- (void)desktopOpenFolder:(NSNotification *)notification;
+- (void)fileWindowWillClose:(NSNotification *)notification;
+@end
+
 @implementation WSApplication
+
+- (instancetype)init
+{
+	self = [super init];
+	if (self != nil) {
+		_fileWindows = [[NSMutableArray alloc] init];
+	}
+	return self;
+}
 
 /* WHICH DIRECTORY IS THE DESKTOP. `~/Desktop`, or `AGORA_DESKTOP` when it is set — the door the suite uses to
  * point a desktop at a directory it controls. A shell session names the real one; W1 does not yet have a
  * preferences system to name it any other way. */
 + (NSString *)desktopDirectory
 {
-	const char *override = getenv("AGORA_DESKTOP");
-	const char *home = getenv("HOME");
-
-	if (override != NULL && *override != '\0') return [NSString stringWithUTF8String:override];
-	if (home == NULL || *home == '\0') return @"/tmp";
-	return [[NSString stringWithUTF8String:home] stringByAppendingPathComponent:@"Desktop"];
+	return [WSPlaces desktopDirectory];
 }
 
 - (BOOL)start
@@ -98,10 +115,19 @@
 	 * the two rows the AppKit refuses — About and Preferences. */
 	[WSMainMenu installWithTarget:self];
 
+	/* **A FOLDER FROM THE DESKTOP IS A WINDOW REQUEST.** The desktop view posts; this object is the only one that
+	 * knows what a file window is. */
+	[[NSNotificationCenter defaultCenter] addObserver:self
+		selector:@selector(desktopOpenFolder:)
+		name:WSDesktopViewOpenFolderNotification object:nil];
+
 	/* **AND THE ABOUT PANEL, WHEN THE TEST'S DOOR ASKED FOR IT.** Opening it from here is the same window, the
 	 * same chrome and the same activation a menu action would cause — which is the point: a probe cannot click. */
 	if (_showsAboutOnStart) {
 		[self orderFrontAboutPanel:nil];
+	}
+	if (_showsFileWindowOnStart) {
+		[self newWorkspaceWindow:nil];
 	}
 
 	fprintf(stderr, "workspace: desktop window at level %ld, frame %gx%g at (%g,%g), showing %s\n",
@@ -137,11 +163,83 @@
 
 - (void)stop
 {
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
+	while ([_fileWindows count] > 0) {
+		WSFileWindowController *controller = [[_fileWindows lastObject] retain];
+
+		[_fileWindows removeLastObject];
+		[controller close];
+		[controller release];
+	}
 	[_preferences release];
 	_preferences = nil;
 	[_desktop close];
 	[_desktop release];
 	_desktop = nil;
+}
+
+- (void)setShowsFileWindowOnStart:(BOOL)flag
+{
+	_showsFileWindowOnStart = flag;
+}
+
+/* **ONE FOLDER, ONE WINDOW, ONE MODEL.** The controller owns its own history and path bar; the application owns
+ * the list of them and is the thing a close notification removes one from. */
+- (void)openFileWindowAtDirectory:(NSString *)directory
+{
+	WSFileWindowController *controller = [[WSFileWindowController alloc] initWithDirectory:directory];
+
+	if (controller == nil) {
+		return;
+	}
+	[_fileWindows addObject:controller];
+	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(fileWindowWillClose:)
+		name:NSWindowWillCloseNotification object:[controller window]];
+	[controller showWindow:nil];
+	fprintf(stderr, "workspace: file window for %s\n", [directory UTF8String]);
+	[controller release];
+}
+
+- (void)newWorkspaceWindow:(id)sender
+{
+	(void)sender;
+	[self openFileWindowAtDirectory:[WSPlaces desktopDirectory]];
+}
+
+- (void)desktopOpenFolder:(NSNotification *)notification
+{
+	NSString *path = [[notification userInfo] objectForKey:WSDesktopViewPathKey];
+
+	if (path != nil) {
+		[self openFileWindowAtDirectory:path];
+	}
+}
+
+- (void)fileWindowWillClose:(NSNotification *)notification
+{
+	NSWindow *window = [notification object];
+	NSUInteger i;
+
+	for (i = 0; i < [_fileWindows count]; i++) {
+		WSFileWindowController *controller = [_fileWindows objectAtIndex:i];
+
+		if ([controller window] == window) {
+			[[NSNotificationCenter defaultCenter] removeObserver:self
+				name:NSWindowWillCloseNotification object:window];
+			/* DEFERRED: the close that posted this notification is still on the stack. */
+			[controller retain];
+			[_fileWindows removeObjectAtIndex:i];
+			[controller autorelease];
+			return;
+		}
+	}
+}
+
+/* THE APPLICATION'S OWN ROW. Everything else the menus offer is a window's or the responder chain's. */
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+{
+	(void)menuItem;
+	return YES;
 }
 
 /* ---- THE APPLICATION MENU'S OWN TWO ROWS ----------------------------------------------------------- */
@@ -181,6 +279,7 @@
 - (void)dealloc
 {
 	[self stop];
+	[_fileWindows release];
 	[super dealloc];
 }
 

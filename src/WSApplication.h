@@ -23,12 +23,16 @@
 #import "WSPreferencesWindow.h"
 
 @class WSDesktopWindow;
+@class WSFileWindowController;
+@class NSMutableArray;
 
 @interface WSApplication : NSObject <WSPreferencesWindowTarget>
 {
 	WSDesktopWindow *_desktop;
 	WSPreferencesWindow *_preferences;
+	NSMutableArray *_fileWindows;		/* RETAINED: WSFileWindowController */
 	BOOL _showsAboutOnStart;
+	BOOL _showsFileWindowOnStart;
 }
 
 /* Create the desktop window and put it on the screen. NO if it could not be made. */
@@ -42,6 +46,14 @@
 /* **OPEN THE ABOUT PANEL AS PART OF STARTING UP**, which is what `--show-about` is for: the panel is otherwise
  * reached by a menu action, and that needs a click. Set before `-start`. */
 - (void)setShowsAboutOnStart:(BOOL)flag;
+
+/* **A FILE WINDOW AS PART OF STARTING UP**, which is `--file-window`'s door and the way a probe sees the shell
+ * without clicking a menu. The window is otherwise reached by File > New Workspace Window. */
+- (void)setShowsFileWindowOnStart:(BOOL)flag;
+
+/* THE FILE MENU'S NEW-WINDOW ROW. It is the application's, because a second window is the application's to own,
+ * and every window keeps its own model, history and path bar. */
+- (void)newWorkspaceWindow:(id)sender;
 
 - (void)runForSeconds:(double)seconds;
 

@@ -72,10 +72,11 @@ thing this stage added to the menu bar.
   through `WSMetadataStore` and SAVES, so the size in the sidecar is the size the next launch lays out with. A
   window of controls wired to nothing would be worse than no window.
 - **A ROW WITH NO TARGET IS A DISABLED ROW, AND THAT IS THE DESIGN.** `-[NSMenu update]` enables an item when its
-  target answers its action, so every File/View/Go row — which names the reference file manager's own selector and has no
-  implementer yet — is drawn GREY. That is how a Mac application shows a command it cannot offer right now, and how
-  this bar says what Workspace can actually do instead of being a picture of the reference file manager. Each later stage lights its
-  own rows by giving them a target; nothing in `WSMainMenu.m` changes.
+  target answers its action, so every File/View/Go row — which names the reference file manager's own selector and has
+  no implementer yet — is drawn GREY. W2's **New Workspace Window** is the first exception: the application answers
+  it, so the walk enables that one row and the rest stay grey. That is how a Mac application shows a command it cannot offer right now, and how
+  this bar says what Workspace can actually do instead of being a picture of the reference file manager. W2 gives New Workspace
+  Window its target; each later stage lights its own rows the same way.
 
 **AND ONLY THE ACTIVE APPLICATION'S MENUS SHOW.** The bar window is ordered front by the AppKit's activation, which
 is the compositor's keyboard-focus decision — so a scene with an ordinary window in front of the desktop is a scene
@@ -93,6 +94,37 @@ pacing are the AppKit's from here on.
 **Two findings about the AppKit are recorded in `PROVENANCE.md` rather than worked around here:** this tier's
 `NSMenuItem` leaves a key equivalent's mask at zero where Apple's sets Command, so every row names its own mask; and
 the Edit menu's five chain-routed rows come out enabled because the base `NSResponder` implements them as forwarders.
+
+## W2 — the file window shell
+
+**ONE MODEL, FOUR STRIPS.** `WSFileWindowController` owns the folder's `WSItemModel` and its `WSHistory`; the
+title, the `NSPathControl`, the status bar and `WSFileIconView` are four renderings of that one model. A navigation
+replaces it once and every strip follows, which is the property `tests/file_window.m` measures. The window is not
+a view: it is the shell the later views (W3–W5) will be swapped into.
+
+**THE HISTORY IS ITS OWN OBJECT.** `WSHistory` is the stack, the cursor and the rule that a new navigation drops
+what was forward; the controller asks it only whether Back and Forward are possible. That is what lets
+`tests/history.m` measure the semantics without a window, and it is the same split the plan's §8 asks for.
+
+**THE PLACES ARE DATA.** `WSPlaces` names the two sections this stage has — PLACES (Desktop, Home, Applications) and
+DEVICES (Computer) — and owns the desktop-path rule (`AGORA_DESKTOP`, else `~/Desktop`) so the application, the
+sidebar and a second window cannot disagree. The sidebar is an `NSOutlineView` in an `NSSplitView`, with the
+source-list highlight.
+
+**ONLY ICON IS ENABLED, AND THE OTHER THREE SEGMENTS ARE DISABLED.** The four-way switcher is the platform's
+`NSSegmentedControl` in a toolbar item; List, Columns and Cover Flow belong to W4 and W5, so their segments and
+their menu rows answer NO rather than showing an empty mode. W2's Icon mode is a simple left-to-right grid; W3
+replaces it with the icon view (rename, keyboard, type-select, drag/drop, spring-loading).
+
+**THE CONTENT VIEW KEEPS COCOA'S y-UP DIRECTION.** The strips want a top-down layout, but this tier's live drawing
+path enters a flipped ROOT view without mirroring it, so a flipped content view put its top strip at the bottom
+(MEASURED in the first live run). The window therefore lays out path bar at the top edge, status bar at the bottom
+and the split view between, in the ordinary coordinate system; the finding is recorded in `PROVENANCE.md`.
+
+**A SECOND WINDOW IS A SECOND MODEL.** File > New Workspace Window is the application's action; the desktop's
+folder double-click posts `WSDesktopViewOpenFolderNotification` and the application opens a controller at that
+path. The window is the key window when it is front, and its `-nextResponder` is the controller — which is how the
+View and Go menu rows (no target) reach the window that has a model.
 
 ## What W0 found that it did not set out to find
 

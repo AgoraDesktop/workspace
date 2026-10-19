@@ -7,7 +7,8 @@
 
 find_program(PYTHON3 python3 REQUIRED)
 
-# THE OFFSCREEN SUITES need Foundation and nothing else — no compositor, no AppKit.
+# THE OFFSCREEN SUITES need no compositor. Most need Foundation alone; the file window needs the AppKit too, and the
+# icon service because its sidebar and grid draw real icons.
 find_package(Foundation CONFIG REQUIRED)
 find_package(libobjc CONFIG REQUIRED)
 
@@ -71,3 +72,37 @@ add_test(NAME workspace-desktop
 set_tests_properties(workspace-desktop PROPERTIES
     SKIP_RETURN_CODE 77
     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>")
+
+# **THE HISTORY, WITHOUT A WINDOW.** Back/Forward is a stack and a cursor; the view only asks whether the arrows
+# are possible. Foundation-only, so it runs anywhere.
+add_executable(history history.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m")
+target_include_directories(history PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(history PRIVATE Foundation::Foundation objc)
+add_test(NAME workspace-history COMMAND history)
+set_tests_properties(workspace-history PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
+
+# **THE W2 SHELL, OFFSCREEN.** One folder, one model: the title, path bar, status bar and icon view are four
+# renderings of it, and a second controller is a second model and history. It needs the AppKit but no compositor;
+# the icon service is the real one, because the sidebar and the grid draw real icons.
+find_package(AgoraIconServices CONFIG REQUIRED)
+find_package(AgoraLaunchServices CONFIG REQUIRED)
+
+add_executable(file_window file_window.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m")
+target_include_directories(file_window PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(file_window PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-file-window COMMAND file_window)
+set_tests_properties(workspace-file-window PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")

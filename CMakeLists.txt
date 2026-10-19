@@ -35,10 +35,15 @@ add_executable(Workspace
     src/WSApplication.m
     src/WSDesktopWindow.m
     src/WSDesktopView.m
+    src/WSFileIconView.m
+    src/WSFileWindowController.m
+    src/WSHistory.m
     src/WSIconLayout.m
+    src/WSItemIcons.m
     src/WSItemModel.m
     src/WSMainMenu.m
     src/WSMetadataStore.m
+    src/WSPlaces.m
     src/WSPreferencesWindow.m)
 
 # **THE CHROME'S THEME, AS THE APPKIT'S OWN DEMONSTRATION DOES IT.** The library resolves a theme only when

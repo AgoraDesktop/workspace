@@ -31,6 +31,8 @@
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSStatusBar.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSDictionary.h>
+#import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSValue.h>
@@ -39,6 +41,9 @@
 #import <IconServices/IconServices.h>
 
 #include <stdlib.h>
+
+NSString *WSDesktopViewOpenFolderNotification = @"WSDesktopViewOpenFolderNotification";
+NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 
 @implementation WSDesktopView
 
@@ -360,7 +365,8 @@
 }
 
 /* Double-click. An application bundle launches; a document opens in its default application (both are
- * `LSOpenCFURLRef`, F1). A FOLDER is not handled yet — opening one is a file window, which is W2. */
+ * `LSOpenCFURLRef`, F1); a FOLDER is a file window, and the APPLICATION makes it. The desktop asks rather than
+ * building one: a folder is a navigation surface, and this view's job is the icon that was clicked. */
 - (void)openItemAtIndex:(NSUInteger)index
 {
 	WSItem *item = [[_model items] objectAtIndex:index];
@@ -369,9 +375,11 @@
 
 	CFRelease(path);
 	if ([item isDirectory]) {
-		/* NO WINDOW TO OPEN IT IN YET, and it is said here rather than failing silently in the launcher. */
-		fprintf(stderr, "workspace: a folder was double-clicked; opening one is W2 (%s)\n", [[item name] UTF8String]);
+		NSDictionary *info = [NSDictionary dictionaryWithObject:[item path] forKey:WSDesktopViewPathKey];
+
 		CFRelease(url);
+		[[NSNotificationCenter defaultCenter] postNotificationName:WSDesktopViewOpenFolderNotification
+								    object:self userInfo:info];
 		return;
 	}
 	LSOpenCFURLRef(url, NULL);

@@ -108,15 +108,18 @@ static void WSFillApplicationMenu(NSMenu *menu, id target)
 }
 
 /* ---------------------------------------------------------------------------------------------------
- * THE FIVE BESIDE IT. Nothing here invents a command: each row names the selector the reference file manager's own row sends, and
- * the target is nil until the stage that answers it exists.
+ * THE FIVE BESIDE IT. Nothing here invents a command: each row names the selector the reference file manager's own row sends.
+ * The target is nil until the stage that answers it exists — except New Workspace Window, which W2 gives to the
+ * application, because a second window is the application's to own.
  * --------------------------------------------------------------------------------------------------- */
 
-static NSMenu *WSFileMenu(void)
+static NSMenu *WSFileMenu(id target)
 {
 	NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"File"] autorelease];
 
-	WSRow(menu, @"New Workspace Window", @selector(newWorkspaceWindow:), nil, @"n", NSCommandKeyMask);
+	/* THE NEW-WINDOW ROW IS THE APPLICATION'S, because a second window is the application's to own. Every other
+	 * row here still has no target and is greyed until its stage gives it one. */
+	WSRow(menu, @"New Workspace Window", @selector(newWorkspaceWindow:), target, @"n", NSCommandKeyMask);
 	WSRow(menu, @"New Folder", @selector(newFolder:), nil, @"n", NSCommandKeyMask | NSShiftKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Open", @selector(openDocument:), nil, @"o", NSCommandKeyMask);
@@ -207,7 +210,7 @@ static NSMenu *WSHelpMenu(void)
 	NSApplication *application = [NSApplication sharedApplication];
 	NSMenu *bar = [[NSMenu alloc] initWithTitle:@"MainMenu"];
 
-	[bar addItem:WSBarTitle(@"File", WSFileMenu())];
+	[bar addItem:WSBarTitle(@"File", WSFileMenu(target))];
 	[bar addItem:WSBarTitle(@"Edit", WSEditMenu())];
 	[bar addItem:WSBarTitle(@"View", WSViewMenu())];
 	[bar addItem:WSBarTitle(@"Go", WSGoMenu())];

@@ -20,6 +20,13 @@
 @class WSItemModel;
 @class WSMetadataStore;
 
+/* **A FOLDER IS THE APPLICATION'S TO OPEN, NOT THIS VIEW'S.** The desktop posts this when a folder is
+ * double-clicked; `WSApplication` makes the file window. A view that made windows itself would be a second place
+ * that knows what a window is, and the desktop is not a file manager's private background. The userInfo carries
+ * the folder's path under `WSDesktopViewPathKey`. */
+extern NSString *WSDesktopViewOpenFolderNotification;
+extern NSString *WSDesktopViewPathKey;
+
 @interface WSDesktopView : NSView
 {
 	WSItemModel *_model;
