@@ -6,7 +6,8 @@
  *
  * **W2 IS THE SHELL, NOT THE VIEWS.** One folder, one `WSItemModel`, and the chrome a person navigates with: a
  * toolbar, a sidebar of places, a path bar, a status bar and the three-way view switcher. The Icon mode is W3's
- * `WSIconView`; the List mode is W4's `WSListView`; the Column mode is W5's `WSColumnView`.
+ * `WSIconView`; the List mode is W4's `WSListView`; the Column mode is W5's `WSColumnView`; and the file
+ * operations, undo, Trash and progress are W6's `WSFileOperations`/`WSTrash`.
  *
  * **THE WINDOW IS A SHELL OVER THE MODEL.** The title, the status bar, the path bar and the content view are all
  * renderings of the same `WSItemModel`; navigating replaces that model and tells every one of them, rather than
@@ -31,8 +32,12 @@
 @class NSSplitView;
 @class NSTextField;
 @class WSColumnView;
+@class WSFileOperations;
 @class WSIconView;
 @class WSListView;
+@class WSProgressWindow;
+@class WSTrash;
+@class NSUndoManager;
 @class WSHistory;
 @class WSItemModel;
 
@@ -53,6 +58,10 @@
 	WSColumnView *_columnView;		/* RETAINED by the scroll view when Column is chosen */
 	NSScrollView *_contentScroll;		/* RETAINED by the split view */
 	NSInteger _viewMode;			/* 0 Icon, 1 List, 2 Column */
+	NSUndoManager *_undoManager;		/* RETAINED */
+	WSFileOperations *_fileOperations;	/* RETAINED */
+	WSTrash *_trash;			/* RETAINED */
+	WSProgressWindow *_progressWindow;	/* RETAINED, made on demand */
 	NSTextField *_status;			/* RETAINED by the content view */
 	NSToolbar *_toolbar;			/* RETAINED by the window */
 	NSSegmentedControl *_viewSwitcher;	/* RETAINED by its toolbar item */

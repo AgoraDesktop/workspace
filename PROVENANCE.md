@@ -117,8 +117,9 @@ the trace above, rather than a photograph.
 
 ## W2 — the file window, and a drawing finding
 
-**`WSFileWindowController`, `WSIconView`, `WSListView`, `WSColumnView`, `WSItemSort`, `WSItemKind`, `WSHistory`,
-`WSItemIcons` and `WSPlaces` are this repository's own
+**`WSFileWindowController`, `WSIconView`, `WSListView`, `WSColumnView`, `WSFileOperations`, `WSTrash`,
+`WSProgressWindow`, `WSConflictSheet`, `WSItemSort`, `WSItemKind`, `WSHistory`, `WSItemIcons` and `WSPlaces` are
+this repository's own
 code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToolbarItem`, `NSSplitView`, `NSOutlineView`,
 `NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
 separate so each can be measured without the others.
@@ -220,6 +221,33 @@ browser's own design are recorded in `../libagora-app/PROVENANCE.md` § 18.
 `tests/column_view.m` measures the three root cells, the two-child column, the grandchild column, a leaf adding no
 column, the preview's name/Kind/size/date, an empty folder opening no column, the delegate's open door, a reload with
 a new child and the browser's width beside the preview.
+
+## W6 — the file operations, the Trash and the ZIP
+
+**`WSFileOperations`, `WSTrash`, `WSProgressWindow` AND `WSConflictSheet` ARE THIS REPOSITORY'S OWN CODE.** The
+manager performs the operations and registers inverses with the window's `NSUndoManager`; the views ask it and then
+reload their model. The inline renames in `WSIconView` and `WSListView` go through `-renamePath:toName:error:` when a
+manager is set, which is what makes them undoable.
+
+**TWO HANDLERS ARE THE POLICY SEAMS.** A conflict is a `Skip`/`Replace`/`Keep Both`/default answer, supplied by a
+probe or by `WSConflictSheet`; progress is `(completed, total, path)` supplied by the controller and drawn by
+`WSProgressWindow`. A one-item operation does not open the window.
+
+**THE TRASH IS RECORDS, NOT A PICTURE.** `WSTrash` chooses `~/.Trash` or a per-volume `.Trash-<uid>`, uniquifies a
+name already there, writes an XML plist under `.putback/`, and Put Back reads it. The Dock's Trash icon and the
+drop-on-it contract are §5.3's and W7's; the **operation** is complete and tested behind them. Empty is not undoable.
+
+**COMPRESS IS A ZIP WRITER, NOT A SHELL-OUT.** zlib's raw deflate with a stored fallback, local headers, a central
+directory and an EOCD, written by `AGZipBuilder` in `WSFileOperations.m`. The probe reads the local signature and the
+entry name from the bytes. ZIP64 is absent, so an archive over 4 GB or 65,535 entries is refused by name.
+
+**NAMED DEVIATIONS.** The conflict question is a MODAL PANEL, not a sheet, because this tier has no
+`NSPanel`/`NSAlert`; the progress window has no Cancel; a multi-item operation that fails halfway can leave the
+items already moved. `README.md` names all three rather than implying a rollback the code does not perform.
+
+`tests/file_ops.m` measures New Folder, Duplicate, Rename, Move, Copy across `/dev/shm`, conflict Skip/Keep Both,
+progress counts, Trash/Undo/Put Back, Empty and Compress with Undo; `tests/trash.m` measures recycle, unique names,
+Put Back, a directory and an empty over an explicit trash root.
 
 ## Known gaps, recorded rather than left to be found
 

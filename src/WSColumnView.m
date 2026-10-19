@@ -294,6 +294,13 @@ static NSString *fn_size_string(WSItem *item)
 	return (column >= 0) ? [self itemAtRow:[_browser selectedRowInColumn:column] column:column] : nil;
 }
 
+- (NSArray *)selectedItems
+{
+	WSItem *item = [self selectedItem];
+
+	return (item != nil) ? [NSArray arrayWithObject:item] : [NSArray array];
+}
+
 - (void)updatePreviewForItem:(WSItem *)item
 {
 	[_preview setItem:item];

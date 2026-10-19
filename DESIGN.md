@@ -206,6 +206,30 @@ scrolling. The old `createRowsForColumn:inMatrix:` form is absent and named in i
 **A RELOAD REBUILDS THE COLUMNS FROM THE ROOT.** `-reloadData` clears child models and the column cache, reloads the
 root and asks for column zero; the selection in the test is then made again, so a new child appears where it belongs.
 
+## W6 — the file operations, undo and the Trash
+
+**THE MANAGER IS THE ONE PLACE THAT MOVES FILES.** `WSFileOperations` owns New Folder, Duplicate, Rename, Move/Copy,
+Trash, Put Back, Empty and Compress. A view asks and then reloads; it does not perform the operation. The inline
+rename in the icon and list views routes through the manager, which is what makes it undoable.
+
+**UNDO IS `NSUndoManager`'S.** Each reversible operation registers its inverse: a folder is removed, a copy is
+removed, a move is moved back, a rename is renamed back, a trash is put back, an archive is removed. Redo falls out of
+the same mechanism because the undo itself goes through the manager.
+
+**A CONFLICT IS A HANDLER, A PROGRESS IS A HANDLER.** The destination question is `Skip`, `Replace`, `Keep Both` or
+the default; the File window answers it with `WSConflictSheet` (a modal panel — this tier has no
+`NSPanel`/`NSAlert`), and a probe answers directly. Progress is called once per top-level item and drives
+`WSProgressWindow`, whose bar is the new `NSProgressIndicator`.
+
+**THE TRASH IS A DIRECTORY, A UNIQUE NAME AND A PUT BACK PLIST.** `WSTrash` uses `~/.Trash` for the home volume and
+a per-volume `.Trash-<uid>` when writable; `-putBackItem:` reads the record beside the trashed name; `-emptyTrash:`
+removes the items and their records and is not undoable. The Dock contract that would let a drop land on the Trash
+icon is §5.3's, still open.
+
+**COMPRESS IS A ZIP WRITTEN IN THE MANAGER.** zlib's raw deflate with a stored fallback when it would grow the data;
+local headers, a central directory and an EOCD; one archive in the destination. It is not a shell-out and not a second
+format.
+
 ## What W0 found that it did not set out to find
 
 **The server's menu-bar strip needed a level of its own, and now has one.** `output.c` painted the strip before

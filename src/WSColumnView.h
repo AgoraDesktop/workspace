@@ -51,6 +51,7 @@
 
 - (void)reloadData;
 - (nullable WSItem *)selectedItem;
+- (NSArray *)selectedItems;
 - (void)openSelectedItem;
 
 /* **THE TEST'S SEAMS.** The browser is the platform object; the preview's item and text are what "the last column's

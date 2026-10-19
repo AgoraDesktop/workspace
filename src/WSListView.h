@@ -31,6 +31,7 @@
 @class NSMutableDictionary;
 @class NSMutableSet;
 @class NSTableColumn;
+@class WSFileOperations;
 @class WSItem;
 @class WSItemModel;
 @class WSListView;
@@ -52,6 +53,7 @@
 	WSItemSortKey _sortKey;
 	BOOL _sortAscending;
 	BOOL _restoringExpansion;
+	WSFileOperations *_fileOperations;	/* RETAINED: the rename manager */
 }
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
@@ -60,11 +62,13 @@
 
 - (nullable id <WSListViewDelegate>)listDelegate;
 - (void)setListDelegate:(nullable id <WSListViewDelegate>)delegate;
+- (void)setFileOperations:(nullable WSFileOperations *)operations;
 
 - (WSItemSortKey)sortKey;
 - (void)setSortKey:(WSItemSortKey)key ascending:(BOOL)ascending;
 
 - (nullable WSItem *)selectedItem;
+- (NSArray *)selectedItems;
 - (BOOL)beginEditingSelectedName;
 - (void)openSelectedItem;
 

@@ -181,6 +181,20 @@ int main(void)
 	/* THE PATH BAR AND THE MODEL ARE THE SAME FOLDER, after every navigation above. */
 	check([[[[first cg_pathControl] URL] path] isEqual:subOne], "the path bar followed every navigation");
 
+	/* W6: THE FILE MENU'S NEW FOLDER GOES THROUGH THE MANAGER, AND UNDO TAKES IT BACK. */
+	{
+		NSMenuItem *newFolderItem = [[NSMenuItem alloc] initWithTitle:@"New Folder"
+								     action:@selector(newFolder:) keyEquivalent:@""];
+		NSInteger before = [first itemCount];
+
+		check([first validateMenuItem:newFolderItem], "New Folder is enabled");
+		[first newFolder:nil];
+		check([first itemCount] == before + 1, "New Folder adds the folder to the model");
+		[first undo:nil];
+		check([first itemCount] == before, "and Undo removes it again");
+		[newFolderItem release];
+	}
+
 	/* A WINDOW IS A SHELL, SO IT RESIZES. The strips keep their order: path bar at the top, status at the bottom,
 	 * the split view between them, and the icon view inside its scroll view. */
 	[[[first window] contentView] setFrameSize:NSMakeSize(700.0, 400.0)];

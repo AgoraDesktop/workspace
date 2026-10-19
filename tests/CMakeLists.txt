@@ -10,6 +10,7 @@ find_program(PYTHON3 python3 REQUIRED)
 # THE OFFSCREEN SUITES need no compositor. Most need Foundation alone; the file window needs the AppKit too, and the
 # icon service because its sidebar and grid draw real icons.
 find_package(Foundation CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
 find_package(libobjc CONFIG REQUIRED)
 
 add_executable(desktop_layout desktop_layout.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m")
@@ -89,6 +90,9 @@ find_package(AgoraIconServices CONFIG REQUIRED)
 find_package(AgoraLaunchServices CONFIG REQUIRED)
 
 add_executable(file_window file_window.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
@@ -99,13 +103,15 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(file_window PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(file_window PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
     Foundation::Foundation
+    ZLIB::ZLIB
     objc)
 add_test(NAME workspace-file-window COMMAND file_window)
 set_tests_properties(workspace-file-window PROPERTIES ENVIRONMENT
@@ -163,3 +169,23 @@ target_link_libraries(column_view PRIVATE
 add_test(NAME workspace-column-view COMMAND column_view)
 set_tests_properties(workspace-column-view PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
+
+# **THE TRASH, WITHOUT A DISPLAY.** Recycle, unique names, Put Back, a directory, and an empty — over an explicit
+# root that keeps the probe out of the real home directory.
+add_executable(trash trash.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+target_include_directories(trash PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(trash PRIVATE Foundation::Foundation objc)
+add_test(NAME workspace-trash COMMAND trash)
+set_tests_properties(workspace-trash PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
+
+# **W6'S FILE OPERATIONS.** New Folder, Duplicate, Rename, Move/Copy (including across /dev/shm), Trash, Put Back,
+# Empty and Compress, each followed by its Undo. Offscreen; zlib writes the ZIP.
+add_executable(file_ops file_ops.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+target_include_directories(file_ops PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(file_ops PRIVATE Foundation::Foundation ZLIB::ZLIB objc)
+add_test(NAME workspace-file-ops COMMAND file_ops)
+set_tests_properties(workspace-file-ops PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")

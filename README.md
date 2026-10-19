@@ -9,13 +9,14 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0, W1, W1b, W2, W3, W4 AND W5 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE
+**W0, W1, W1b, W2, W3, W4, W5 AND W6 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE
 WINDOW shell all work. The window is assembled from the platform's parts — a toolbar, an `NSOutlineView` sidebar in
 an `NSSplitView`, an `NSPathControl`, a status bar and an `NSSegmentedControl` — and every strip reads the SAME
 `WSItemModel`. The **Icon** mode is W3's `WSIconView` (keyboard, type-select, rename, drag and drop, spring-loading);
 the **List** mode is W4's `WSListView` (Name, Date Modified, Size, Kind, disclosure, sorting, rename); and the
 **Column** mode is W5's `WSColumnView` — an `NSBrowser` whose selection opens the next column, with a fixed preview
-panel showing the selected item.
+panel showing the selected item. Under the views is W6's `WSFileOperations`: New Folder, Duplicate, Rename,
+Move/Copy, Move to Trash, Put Back, Empty Trash and Compress, with Undo, a progress window and a conflict panel.
 
 **The desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
 launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
@@ -42,7 +43,7 @@ the whole screen, `[NSScreen frame]` and not `visibleFrame`, because the Dock an
 
 ### What is measured, not assumed
 
-`ctest` runs **ten tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
+`ctest` runs **twelve tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
 against **Agora's own window server**, headless: it runs the **bundle's** executable (the bundle path is part of what
 W0 proves), places a **normal** window over the desktop with the server's own test client, and reads the server's
 screenshot. **9 checks, 0 fail**:
@@ -52,11 +53,12 @@ screenshot. **9 checks, 0 fail**:
 - an **icon** is drawn where its sidecar says it goes;
 - a **normal window created *after* the desktop is composited *over* it** — which can only be the level.
 
-The other nine are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
+The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**38 checks**); the icon view's `workspace-icon-view` (**51 checks**); the list view's
-`workspace-list-view` (**30 checks**); and the column view's `workspace-column-view` (**21 checks**). The
-file-window, icon-view, list-view and column-view suites are the W2–W5 proofs below.
+(**45 checks**); the icon view's `workspace-icon-view` (**51 checks**); the list view's
+`workspace-list-view` (**30 checks**); the column view's `workspace-column-view` (**21 checks**); and W6's
+`workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**). The file-window through file-ops suites
+are the W2–W6 proofs below.
 
 ### W1: the desktop's icons
 
@@ -236,6 +238,32 @@ children, selecting A Child loads its one child, selecting a leaf adds no column
 size, date), an empty folder opens no column but previews, the delegate's open door, a reload with a new child, and
 the browser's width beside the preview. Run it live with `--column-view`.
 
+### W6: the file operations, undo and the Trash
+
+**THE MANAGER OWNS THE OPERATION.** `WSFileOperations` implements New Folder, Duplicate, Rename, Move/Copy To,
+Move to Trash, Put Back, Empty Trash and Compress. Every reversible operation registers its inverse with the
+window's `NSUndoManager`, so Edit → Undo/Redo work through the same manager a text field uses, and the inline rename
+in both the icon and list views goes through `WSFileOperations` rather than moving the file itself.
+
+**CONFLICT AND PROGRESS ARE HANDLERS.** A destination that exists is put to a conflict handler that answers Skip,
+Replace, Keep Both or the default; a probe supplies the answer directly, and the File window supplies
+`WSConflictSheet` — a modal Replace/Skip/Keep Both/Cancel panel, not a sheet because this tier has no
+`NSPanel`/`NSAlert`. The progress handler is called once per top-level item and feeds `WSProgressWindow`'s
+`NSProgressIndicator`; operations of one item stay quiet.
+
+**THE TRASH IS A DIRECTORY AND A RECORD.** `WSTrash` recycles into `~/.Trash` (or a per-volume `.Trash-<uid>` when
+one can be made; an explicit root is what the probe uses), uniquifies a name already there, and writes a Put Back
+plist under `.putback/` with the original path. `-putBackItem:` moves it home and removes the record; `-emptyTrash:`
+removes the items and the records. Empty is deliberately NOT undoable.
+
+**COMPRESS IS A ZIP WRITTEN HERE.** The archive is built with zlib's raw deflate (or stored when deflate would grow
+it), local headers and a central directory, one file in the destination directory; Undo removes it. No external
+archiver is run, which is why the test can read the local header and find the entry name in the bytes.
+
+`tests/file_ops.m` is the proof: New Folder, Duplicate, Rename, Move, Copy (including `/dev/shm`), conflict Skip and
+Keep Both, progress counts, Trash/Undo/Put Back, Empty and Compress with Undo after each. `tests/trash.m` is the
+Trash's own: recycle, unique names, Put Back, a directory and an empty.
+
 ### The strip that needed a level of its own — now fixed, and measured
 
 `window-server/src/output.c` drew its menu-bar strip **before** the windows and said so: *"until the strip has
@@ -262,28 +290,31 @@ src/
   WSItemSort.m             directories-first, natural-name, date, size and Kind ordering
   WSListView.m             W4's list: columns, disclosure, sorting, rename
   WSColumnView.m           W5's columns: the NSBrowser and the preview panel
+  WSFileOperations.m       W6's operations, conflict/progress handlers, undo and ZIP
+  WSTrash.m                recycle, Put Back records, empty and the per-volume rule
+  WSProgressWindow.m       the progress window the operations feed
+  WSConflictSheet.m        the Replace/Skip/Keep Both/Cancel question (a modal panel)
   WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions and the icon size
   WSPlaces.m               the sidebar's PLACES and DEVICES, and the desktop path
 Info.plist.in              the bundle's Info.plist
-tests/                     the pixel suite (run-desktop.sh + check.py) and nine offscreen suites
+tests/                     the pixel suite (run-desktop.sh + check.py) and eleven offscreen suites
 ```
 
 ## What is deliberately not here yet
 
-The plan's later stages: file operations and the Trash (W6), the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
+The plan's later stages: the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
 (W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon
 Services and the change stream — is already built (`../libagora-launchservices`, `../libagora-iconservices`,
 `../libagora-watch`).
 
-**What W5 does not do yet, named:** the preview is a fixed panel at the right rather than a column inside the
-browser, and it shows metadata rather than Quick Look content (W9); the column view has no drag/drop or inline
-rename; the list has no drag and drop and no icons in its rows; the icon view's alias is a symbolic link until
-`WSAlias` (W6), file operations live in the views rather than `WSFileOperations` (W6), a conflict is refused rather
-than asked about, there is no rubber band, and a spring-loaded window is opened but the in-flight drag is not moved
-into it; the desktop is still not LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand rather than
-from a stream callback); a document's icon is its TYPE's generic and not its own content
-(`AGIconCreateWithURL` already prefers an application's declared icon); and the sidecar holds the icon size and the
-positions, not yet grid spacing or label placement.
+**What W6 does not do yet, named:** there is no Trash WINDOW and no Dock contract, so `WSTrash` is exercised
+through its API and the Dock's Trash icon remains W7/§5.3; the conflict question is a MODAL PANEL rather than a sheet
+(this tier has no `NSPanel`/`NSAlert`); the progress window has no Cancel; Compress writes a ZIP without ZIP64; and a
+multi-item move that fails halfway can leave the items it already moved (the conflict sheet is per destination, not
+a rollback). The preview is still a fixed panel rather than a browser column (W9 for its content); the icon view's
+alias is a symbolic link until `WSAlias`; the list has no drag/drop or row icons; the desktop is not
+LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand); a document's icon is its TYPE's generic; and
+the sidecar does not yet hold grid spacing or label placement.
 
 ## Build and run
 

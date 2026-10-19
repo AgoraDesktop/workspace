@@ -15,6 +15,7 @@
  */
 #import "WSIconView.h"
 
+#import "WSFileOperations.h"
 #import "WSIconLayout.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
@@ -128,6 +129,7 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 	[self cancelSpring];
 	[_renameField release];
 	[_model release];
+	[_fileOperations release];
 	[_positions release];
 	[_icons release];
 	[_selection release];
@@ -172,6 +174,12 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 - (id <WSIconViewDelegate>)delegate { return _delegate; }
 - (void)setDelegate:(id <WSIconViewDelegate>)delegate { _delegate = delegate; }
+- (void)setFileOperations:(WSFileOperations *)operations
+{
+	[operations retain];
+	[_fileOperations release];
+	_fileOperations = operations;
+}
 
 - (NSInteger)itemCount
 {
@@ -191,6 +199,17 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 	[copy addIndexes:_selection];
 	return [copy autorelease];
+}
+
+- (NSArray *)selectedItems
+{
+	NSMutableArray *items = [[NSMutableArray alloc] init];
+	NSUInteger index;
+
+	for (index = [_selection firstIndex]; index != NSNotFound; index = [_selection indexGreaterThanIndex:index]) {
+		[items addObject:[[_model items] objectAtIndex:index]];
+	}
+	return [items autorelease];
 }
 
 - (void)selectIndex:(NSInteger)index
@@ -1090,7 +1109,9 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 		[self setNeedsDisplay:YES];
 		return NO;
 	}
-	if ([manager moveItemAtPath:oldPath toPath:newPath error:NULL]) {
+	if ((_fileOperations != nil)
+	    ? ([_fileOperations renamePath:oldPath toName:name error:NULL] != nil)
+	    : [manager moveItemAtPath:oldPath toPath:newPath error:NULL]) {
 		NSUInteger i;
 
 		[_model reload];

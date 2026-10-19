@@ -38,6 +38,7 @@
 @class NSTextField;
 @class NSTimer;
 @class WSItem;
+@class WSFileOperations;
 @class WSItemModel;
 
 /* A spring-loaded folder asks the application for a window; the path is under this key. */
@@ -85,6 +86,7 @@ extern NSString *WSIconViewFolderPathKey;
 	BOOL _renaming;
 
 	NSView *_observedClip;			/* NOT RETAINED: the scroll view's clip view */
+	WSFileOperations *_fileOperations;	/* RETAINED: the manager the rename goes through */
 }
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
@@ -93,10 +95,12 @@ extern NSString *WSIconViewFolderPathKey;
 
 - (nullable id <WSIconViewDelegate>)delegate;
 - (void)setDelegate:(nullable id <WSIconViewDelegate>)delegate;
+- (void)setFileOperations:(nullable WSFileOperations *)operations;
 
 - (NSInteger)itemCount;
 - (NSInteger)selectedIndex;
 - (NSIndexSet *)selectedIndexes;
+- (NSArray *)selectedItems;
 - (void)selectIndex:(NSInteger)index;
 - (void)selectIndexes:(NSIndexSet *)indexes;
 

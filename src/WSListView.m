@@ -6,6 +6,7 @@
  */
 #import "WSListView.h"
 
+#import "WSFileOperations.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 
@@ -174,6 +175,7 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 {
 	[[NSNotificationCenter defaultCenter] removeObserver:self];
 	[_model release];
+	[_fileOperations release];
 	[_childModels release];
 	[_sortedCache release];
 	[_kindCache release];
@@ -201,6 +203,12 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 
 - (id <WSListViewDelegate>)listDelegate { return _listDelegate; }
 - (void)setListDelegate:(id <WSListViewDelegate>)delegate { _listDelegate = delegate; }
+- (void)setFileOperations:(WSFileOperations *)operations
+{
+	[operations retain];
+	[_fileOperations release];
+	_fileOperations = operations;
+}
 
 - (WSItemSortKey)sortKey { return _sortKey; }
 
@@ -372,7 +380,9 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		return NO;
 	}
 	parent = [self modelForParentOfItem:item];
-	if ([manager moveItemAtPath:[item path] toPath:newPath error:NULL]) {
+	if ((_fileOperations != nil)
+	    ? ([_fileOperations renamePath:[item path] toName:name error:NULL] != nil)
+	    : [manager moveItemAtPath:[item path] toPath:newPath error:NULL]) {
 		[parent reload];
 		[_childModels removeAllObjects];
 		[_sortedCache removeAllObjects];
@@ -576,6 +586,22 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	}
 	[self editColumn:0 row:row withEvent:nil select:YES];
 	return YES;
+}
+
+- (NSArray *)selectedItems
+{
+	NSIndexSet *rows = [self selectedRowIndexes];
+	NSMutableArray *items = [[NSMutableArray alloc] init];
+	NSUInteger row;
+
+	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
+		WSItem *item = (WSItem *)[self itemAtRow:(NSInteger)row];
+
+		if (item != nil) {
+			[items addObject:item];
+		}
+	}
+	return [items autorelease];
 }
 
 - (void)openSelectedItem

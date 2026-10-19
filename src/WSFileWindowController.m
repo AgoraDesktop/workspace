@@ -19,12 +19,16 @@
 #import "WSFileWindowController.h"
 
 #import "WSColumnView.h"
+#import "WSConflictSheet.h"
+#import "WSFileOperations.h"
 #import "WSIconView.h"
 #import "WSListView.h"
 #import "WSHistory.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
 #import "WSPlaces.h"
+#import "WSProgressWindow.h"
+#import "WSTrash.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColor.h>
@@ -48,6 +52,7 @@
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSURL.h>
+#import <Foundation/NSUndoManager.h>
 #import <Foundation/NSValue.h>
 
 #import <LaunchServices/LSOpen.h>
@@ -171,6 +176,19 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	_history = [[WSHistory alloc] initWithURL:[NSURL fileURLWithPath:_directory]];
 	_placeSections = [[WSPlaces sections] retain];
 	_viewMode = 0;
+	_undoManager = [[NSUndoManager alloc] init];
+	_trash = [[WSTrash alloc] init];
+	_fileOperations = [[WSFileOperations alloc] initWithUndoManager:_undoManager trash:_trash];
+	{
+		__block WSFileWindowController *weakSelf = self;
+
+		[_fileOperations setProgressHandler:^(NSUInteger completed, NSUInteger total, NSString *path) {
+			[weakSelf progress:completed total:total path:path];
+		}];
+		[_fileOperations setConflictHandler:^WSFileConflictResolution(NSString *destination) {
+			return [WSConflictSheet askWithDestination:destination parentWindow:[weakSelf window]];
+		}];
+	}
 
 	content = [[WSFileContentView alloc] initWithFrame:[[window contentView] frame]];
 	[window setContentView:content];
@@ -192,6 +210,10 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	[_model release];
 	[_history release];
 	[_placeSections release];
+	[_progressWindow release];
+	[_fileOperations release];
+	[_trash release];
+	[_undoManager release];
 	[super dealloc];
 }
 
@@ -259,6 +281,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 								     900.0 - WS_SIDEBAR_WIDTH, 500.0)
 						    model:_model];
 	[_iconView setDelegate:(id <WSIconViewDelegate>)self];
+	[_iconView setFileOperations:_fileOperations];
 	[_contentScroll setDocumentView:_iconView];
 
 	[_split addSubview:_sidebarScroll];
@@ -487,6 +510,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 			_listView = [[WSListView alloc] initWithFrame:[[_contentScroll contentView] bounds]
 							       model:_model];
 			[_listView setListDelegate:(id <WSListViewDelegate>)self];
+			[_listView setFileOperations:_fileOperations];
 		} else {
 			[_listView setModel:_model];
 		}
@@ -754,6 +778,91 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	}
 }
 
+/* ---- THE FILE OPERATIONS --------------------------------------------------------------------- */
+
+- (NSArray *)selectedItems
+{
+	if (_viewMode == 0) return [_iconView selectedItems];
+	if (_viewMode == 1) return (_listView != nil) ? [_listView selectedItems] : [NSArray array];
+	return (_columnView != nil) ? [_columnView selectedItems] : [NSArray array];
+}
+
+- (NSArray *)selectedPaths
+{
+	NSArray *items = [self selectedItems];
+	NSMutableArray *paths = [[NSMutableArray alloc] init];
+	NSUInteger i;
+
+	for (i = 0; i < [items count]; i++) {
+		[paths addObject:[[items objectAtIndex:i] path]];
+	}
+	return [paths autorelease];
+}
+
+- (void)progress:(NSUInteger)completed total:(NSUInteger)total path:(NSString *)path
+{
+	if (total <= 1) {
+		return;
+	}
+	if (_progressWindow == nil) {
+		_progressWindow = [[WSProgressWindow alloc] init];
+	}
+	[_progressWindow setCompleted:completed total:total path:path];
+	[_progressWindow show];
+}
+
+- (void)finishOperation
+{
+	[_progressWindow hide];
+	[self refresh];
+}
+
+- (void)newFolder:(id)sender
+{
+	(void)sender;
+	(void)[_fileOperations createFolderInDirectory:_directory name:nil error:NULL];
+	[self finishOperation];
+}
+
+- (void)duplicate:(id)sender
+{
+	(void)sender;
+	(void)[_fileOperations duplicatePaths:[self selectedPaths] inDirectory:_directory error:NULL];
+	[self finishOperation];
+}
+
+- (void)compress:(id)sender
+{
+	(void)sender;
+	(void)[_fileOperations compressPaths:[self selectedPaths] inDirectory:_directory error:NULL];
+	[self finishOperation];
+}
+
+- (void)moveToTrash:(id)sender
+{
+	(void)sender;
+	(void)[_fileOperations movePathsToTrash:[self selectedPaths] error:NULL];
+	[self finishOperation];
+}
+
+- (void)undo:(id)sender
+{
+	(void)sender;
+	if ([_undoManager canUndo]) {
+		[_undoManager undo];
+		[self finishOperation];
+	}
+}
+
+- (void)redo:(id)sender
+{
+	(void)sender;
+	if ([_undoManager canRedo]) {
+		[_undoManager redo];
+		[self finishOperation];
+	}
+}
+
 /* ---- THE WINDOW AND THE MENUS --------------------------------------------------------------- */
 
 - (void)windowDidResize:(NSNotification *)notification
@@ -793,6 +902,19 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	if (action == @selector(goHome:) || action == @selector(goToDesktop:)
 	    || action == @selector(goToApplications:) || action == @selector(goToComputer:)) {
 		return YES;
+	}
+	if (action == @selector(newFolder:)) {
+		return YES;
+	}
+	if (action == @selector(duplicate:) || action == @selector(compress:)
+	    || action == @selector(moveToTrash:)) {
+		return [[self selectedItems] count] > 0;
+	}
+	if (action == @selector(undo:)) {
+		return [_undoManager canUndo];
+	}
+	if (action == @selector(redo:)) {
+		return [_undoManager canRedo];
 	}
 	return YES;
 }

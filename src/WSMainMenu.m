@@ -126,6 +126,8 @@ static NSMenu *WSFileMenu(id target)
 	WSRow(menu, @"Close Window", @selector(performClose:), nil, @"w", NSCommandKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Get Info", @selector(getInfo:), nil, @"i", NSCommandKeyMask);
+	WSRow(menu, @"Duplicate", @selector(duplicate:), nil, @"d", NSCommandKeyMask);
+	WSRow(menu, @"Compress", @selector(compress:), nil, nil, 0);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Move to Trash", @selector(moveToTrash:), nil, @"\u232b", NSCommandKeyMask);
 	return menu;

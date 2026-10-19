@@ -28,6 +28,7 @@ endif()
 find_package(AgoraApp CONFIG REQUIRED)
 find_package(AgoraIconServices CONFIG REQUIRED)
 find_package(AgoraLaunchServices CONFIG REQUIRED)
+find_package(ZLIB REQUIRED)
 
 add_executable(Workspace
     src/main.m
@@ -37,6 +38,8 @@ add_executable(Workspace
     src/WSDesktopView.m
     src/WSIconView.m
     src/WSColumnView.m
+    src/WSConflictSheet.m
+    src/WSFileOperations.m
     src/WSFileWindowController.m
     src/WSHistory.m
     src/WSIconLayout.m
@@ -48,6 +51,8 @@ add_executable(Workspace
     src/WSListView.m
     src/WSMetadataStore.m
     src/WSPlaces.m
+    src/WSTrash.m
+    src/WSProgressWindow.m
     src/WSPreferencesWindow.m)
 
 # **THE CHROME'S THEME, AS THE APPKIT'S OWN DEMONSTRATION DOES IT.** The library resolves a theme only when
@@ -64,7 +69,8 @@ target_include_directories(Workspace PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(Workspace PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
-    AgoraLaunchServices::LaunchServices)
+    AgoraLaunchServices::LaunchServices
+    ZLIB::ZLIB)
 
 # ---------------------------------------------------------------------------
 # The bundle: Workspace.app/Contents/{Info.plist, MacOS/Workspace}
