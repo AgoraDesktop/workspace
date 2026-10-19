@@ -37,19 +37,48 @@ const NSInteger WSIconPadding = 8;
 	return (rows >= 1) ? rows : 1;
 }
 
-+ (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize
++ (NSInteger)columnsInBounds:(NSRect)bounds iconSize:(NSInteger)iconSize order:(WSIconOrder)order
 {
 	NSSize cell = [self cellSizeForIconSize:iconSize];
-	NSInteger rows = [self rowsPerColumnInBounds:bounds iconSize:iconSize];
-	NSInteger column = index / rows;
-	NSInteger row = index % rows;
+	CGFloat usable = bounds.size.width - 2.0 * (CGFloat)WSIconGridMargin;
+	NSInteger columns = (NSInteger)floor(usable / cell.width);
 
-	/* **TOP-TO-BOTTOM, RIGHT-TO-LEFT, AND THE ORIGIN IS THE TOP-LEFT OF THE USABLE AREA.** The first column is at
-	 * the area's RIGHT edge and each column after it is one cell further LEFT; the first ROW is the AREA'S TOP,
-	 * not an inset — the caller says where the area starts. */
-	return NSMakePoint(bounds.origin.x + bounds.size.width - (CGFloat)WSIconGridMargin -
-				   (CGFloat)(column + 1) * cell.width,
-			   bounds.origin.y + (CGFloat)row * cell.height);
+	(void)order;
+	return (columns >= 1) ? columns : 1;
+}
+
++ (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize
+			  order:(WSIconOrder)order
+{
+	NSSize cell = [self cellSizeForIconSize:iconSize];
+
+	if (order == WSIconOrderLeftToRightRows) {
+		NSInteger columns = [self columnsInBounds:bounds iconSize:iconSize order:order];
+		NSInteger column = index % columns;
+		NSInteger row = index / columns;
+
+		return NSMakePoint(bounds.origin.x + (CGFloat)WSIconGridMargin +
+				   (CGFloat)column * cell.width,
+				   bounds.origin.y + (CGFloat)row * cell.height);
+	}
+	{
+		NSInteger rows = [self rowsPerColumnInBounds:bounds iconSize:iconSize];
+		NSInteger column = index / rows;
+		NSInteger row = index % rows;
+
+		/* **TOP-TO-BOTTOM, RIGHT-TO-LEFT, AND THE ORIGIN IS THE TOP-LEFT OF THE USABLE AREA.** The first column is
+		 * at the area's RIGHT edge and each column after it is one cell further LEFT; the first ROW is the AREA'S
+		 * TOP, not an inset — the caller says where the area starts. */
+		return NSMakePoint(bounds.origin.x + bounds.size.width - (CGFloat)WSIconGridMargin -
+					   (CGFloat)(column + 1) * cell.width,
+				   bounds.origin.y + (CGFloat)row * cell.height);
+	}
+}
+
++ (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize
+{
+	return [self gridPositionForIndex:index inBounds:bounds iconSize:iconSize
+				    order:WSIconOrderRightToLeftColumns];
 }
 
 + (NSPoint)snapPosition:(NSPoint)desired

@@ -153,7 +153,6 @@ static NSMenu *WSViewMenu(void)
 	WSRow(menu, @"as Icons", @selector(cg_useIconView:), nil, @"1", NSCommandKeyMask);
 	WSRow(menu, @"as List", @selector(cg_useListView:), nil, @"2", NSCommandKeyMask);
 	WSRow(menu, @"as Columns", @selector(cg_useColumnView:), nil, @"3", NSCommandKeyMask);
-	WSRow(menu, @"as Cover Flow", @selector(cg_useCoverFlowView:), nil, @"4", NSCommandKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Show Toolbar", @selector(toggleToolbarShown:), nil, @"t", NSCommandKeyMask | NSAlternateKeyMask);
 	WSRow(menu, @"Customize Toolbar…", @selector(runToolbarCustomizationPalette:), nil, nil, 0);

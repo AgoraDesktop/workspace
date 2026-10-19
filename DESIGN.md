@@ -98,7 +98,7 @@ the Edit menu's five chain-routed rows come out enabled because the base `NSResp
 ## W2 — the file window shell
 
 **ONE MODEL, FOUR STRIPS.** `WSFileWindowController` owns the folder's `WSItemModel` and its `WSHistory`; the
-title, the `NSPathControl`, the status bar and `WSFileIconView` are four renderings of that one model. A navigation
+title, the `NSPathControl`, the status bar and `WSIconView` are four renderings of that one model. A navigation
 replaces it once and every strip follows, which is the property `tests/file_window.m` measures. The window is not
 a view: it is the shell the later views (W3–W5) will be swapped into.
 
@@ -111,10 +111,10 @@ DEVICES (Computer) — and owns the desktop-path rule (`AGORA_DESKTOP`, else `~/
 sidebar and a second window cannot disagree. The sidebar is an `NSOutlineView` in an `NSSplitView`, with the
 source-list highlight.
 
-**ONLY ICON IS ENABLED, AND THE OTHER THREE SEGMENTS ARE DISABLED.** The four-way switcher is the platform's
-`NSSegmentedControl` in a toolbar item; List, Columns and Cover Flow belong to W4 and W5, so their segments and
-their menu rows answer NO rather than showing an empty mode. W2's Icon mode is a simple left-to-right grid; W3
-replaces it with the icon view (rename, keyboard, type-select, drag/drop, spring-loading).
+**ONLY ICON IS ENABLED, AND THE OTHER TWO SEGMENTS ARE DISABLED.** The three-way switcher is the platform's
+`NSSegmentedControl` in a toolbar item; List and Columns belong to W4 and W5, so their segments and their menu
+rows answer NO rather than showing an empty mode. W2's simple icon grid is W3's icon view now (rename, keyboard,
+type-select, drag/drop, spring-loading).
 
 **THE CONTENT VIEW KEEPS COCOA'S y-UP DIRECTION.** The strips want a top-down layout, but this tier's live drawing
 path enters a flipped ROOT view without mirroring it, so a flipped content view put its top strip at the bottom
@@ -125,6 +125,41 @@ and the split view between, in the ordinary coordinate system; the finding is re
 folder double-click posts `WSDesktopViewOpenFolderNotification` and the application opens a controller at that
 path. The window is the key window when it is front, and its `-nextResponder` is the controller — which is how the
 View and Go menu rows (no target) reach the window that has a model.
+
+## W3 — the icon view
+
+**THE SHARED ENGINE HAS TWO ORDERS.** `WSIconLayout` already owned the cell size, the margins, the hit test and the
+arrange arithmetic. W3 adds `WSIconOrderLeftToRightRows` for the file window and keeps
+`WSIconOrderRightToLeftColumns` for the desktop; the view chooses the order, the engine stays the only copy of the
+geometry. The file window's first cell is (16,16), the second (96,16), and the fifth wraps to (16,104) — measured in
+`tests/icon_view.m`.
+
+**THE ICON VIEW OWNS ITS SELECTION AND ITS KEYBOARD.** A click selects; Shift extends from an anchor; Command
+toggles; Command-A selects all. The arrows move by one item or one row of the grid's columns, Home/End go to the
+ends, and the selected icon wears a focus ring while the view is first responder. TYPE-SELECT accumulates a prefix
+for one second and searches from the selection, wrapping; `d` then `do` is `delta.txt` then `Documents`, not two
+restarts.
+
+**RENAME IS A FIELD OVER THE LABEL.** Return opens an `NSTextField` where the label is, with the base name selected
+and the extension left alone. Commit performs one `NSFileManager` move, reloads the model and selects the renamed
+item; cancel, empty names, slashes, `.`/`..` and collisions are refused. The field ends through
+`NSTextMovementCancel`/the field's action, so a click-away commits and Escape cancels.
+
+**DRAG AND DROP IS THE TIER'S SESSION, NOT A PRIVATE LOOP.** The view is the source (paths on `NSDragPboard` as
+`NSFilenamesPboardType`, one dragging item per icon) and every `WSIconView` is a destination. The destination is the
+folder icon under the pointer or the window's own folder, and the policy is a function of the two volumes and the
+modifiers: Move within a volume, Copy across, Option Copy, Command across Move, Command-Option Link. Every
+destination is preflighted before anything moves, so a conflict refuses the whole drop instead of leaving a partial
+one; a successful drop reloads both models. A real cross-window session is part of the probe.
+
+**THE ALIAS IS THE ONE DEVIATION.** The Mac's alias is a bookmark record (`WORKSPACE-PLAN.md` §5.2), and `WSAlias`
+is W6's. The Link operation therefore makes a symbolic link today; the header and `PROVENANCE.md` say so rather than
+calling a symlink a Mac alias.
+
+**SPRING-LOADING IS A NOTIFICATION.** A 0.6-second hover over a folder icon posts
+`WSIconViewRequestFolderWindowNotification`; the application opens the folder's window, the same request the desktop
+makes for a folder double-click. Moving the in-flight drag into that window is not implemented, and the icon view has
+no rubber band; both are named in the README.
 
 ## What W0 found that it did not set out to find
 

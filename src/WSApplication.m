@@ -10,6 +10,7 @@
 #import "WSDesktopView.h"
 #import "WSDesktopWindow.h"
 #import "WSFileWindowController.h"
+#import "WSIconView.h"
 #import "WSPlaces.h"
 #import "WSMainMenu.h"
 #import "WSPreferencesWindow.h"
@@ -74,6 +75,7 @@
 @end
 
 @interface WSApplication ()
+- (void)iconViewRequestFolderWindow:(NSNotification *)notification;
 - (void)openFileWindowAtDirectory:(NSString *)directory;
 - (void)desktopOpenFolder:(NSNotification *)notification;
 - (void)fileWindowWillClose:(NSNotification *)notification;
@@ -120,6 +122,12 @@
 	[[NSNotificationCenter defaultCenter] addObserver:self
 		selector:@selector(desktopOpenFolder:)
 		name:WSDesktopViewOpenFolderNotification object:nil];
+
+	/* **A SPRING-LOADED FOLDER IS THE SAME REQUEST.** Hovering a folder icon long enough is the icon view's way of
+	 * asking for the folder's window; the application is still the only object that makes one. */
+	[[NSNotificationCenter defaultCenter] addObserver:self
+		selector:@selector(iconViewRequestFolderWindow:)
+		name:WSIconViewRequestFolderWindowNotification object:nil];
 
 	/* **AND THE ABOUT PANEL, WHEN THE TEST'S DOOR ASKED FOR IT.** Opening it from here is the same window, the
 	 * same chrome and the same activation a menu action would cause — which is the point: a probe cannot click. */
@@ -209,6 +217,15 @@
 - (void)desktopOpenFolder:(NSNotification *)notification
 {
 	NSString *path = [[notification userInfo] objectForKey:WSDesktopViewPathKey];
+
+	if (path != nil) {
+		[self openFileWindowAtDirectory:path];
+	}
+}
+
+- (void)iconViewRequestFolderWindow:(NSNotification *)notification
+{
+	NSString *path = [[notification userInfo] objectForKey:WSIconViewFolderPathKey];
 
 	if (path != nil) {
 		[self openFileWindowAtDirectory:path];

@@ -23,6 +23,15 @@ typedef enum {
 	WSArrangeByName = 2	/* the grid, sorted by name */
 } WSArrangeMode;
 
+/* **THE TWO ORDERS THE SAME GRID IS READ IN.** The desktop fills COLUMNS downward and moves RIGHT TO LEFT, which
+ * is the Mac's desktop order. A file window's icon view fills ROWS left to right, which is what a person reads. The
+ * cell size, the margins, the hit test and the arrange arithmetic are the same; only the index-to-cell walk differs,
+ * and keeping both here is what makes W3 "the desktop's layout engine reused" true rather than a second copy. */
+typedef enum {
+	WSIconOrderRightToLeftColumns = 0,
+	WSIconOrderLeftToRightRows = 1
+} WSIconOrder;
+
 extern const NSInteger WSIconDefaultSize;
 extern const NSInteger WSIconGridMargin;
 extern const NSInteger WSIconLabelHeight;
@@ -37,8 +46,14 @@ extern const NSInteger WSIconPadding;
  * grid rather than a division by zero. */
 + (NSInteger)rowsPerColumnInBounds:(NSRect)bounds iconSize:(NSInteger)iconSize;
 
-/* The grid cell for the nth item: **TOP-TO-BOTTOM, RIGHT-TO-LEFT.** A column fills downward, then the next
- * column is one cell to the LEFT — macOS's own desktop order, not a left-to-right reading order. */
+/* How many cells fit across the area — the column count an icon view's arrow keys move by. */
++ (NSInteger)columnsInBounds:(NSRect)bounds iconSize:(NSInteger)iconSize order:(WSIconOrder)order;
+
+/* The grid cell for the nth item in a chosen order. The default is the desktop's **TOP-TO-BOTTOM, RIGHT-TO-LEFT**:
+ * a column fills downward, then the next column is one cell to the LEFT. The file window asks for
+ * `WSIconOrderLeftToRightRows`, which fills a row and then the next row DOWN. */
++ (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize
+			  order:(WSIconOrder)order;
 + (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize;
 
 /* The free grid cell nearest `desired` — what a drop snaps to. `occupied` is an NSArray of NSValue NSPoints;

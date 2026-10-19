@@ -117,7 +117,7 @@ the trace above, rather than a photograph.
 
 ## W2 — the file window, and a drawing finding
 
-**`WSFileWindowController`, `WSFileIconView`, `WSHistory`, `WSItemIcons` and `WSPlaces` are this repository's own
+**`WSFileWindowController`, `WSIconView`, `WSHistory`, `WSItemIcons` and `WSPlaces` are this repository's own
 code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToolbarItem`, `NSSplitView`, `NSOutlineView`,
 `NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
 separate so each can be measured without the others.
@@ -133,6 +133,37 @@ rather than fixed by making the shell's layout depend on an accident.
 **AND THE CONTENT VIEW'S STRIPS ARE THE SHELL'S, NOT A VIEW'S.** `-resizeSubviewsWithOldSize:` lays out the path bar
 (24 points), the status bar (22) and the split view between them; `tests/file_window.m` checks those frames after a
 700×400 resize, so the window is a shell that can be resized rather than one that only looks right at birth.
+
+## W3 — the icon view, the drag session and the alias gap
+
+**`WSIconView` IS THIS REPOSITORY'S OWN CODE**, built over the AppKit's `NSDraggingSession`, `NSTextField` and the
+`WSItemModel`/`WSIconLayout` pair. Four decisions are worth recording here because they are not visible from the
+class list:
+
+- **THE ORDER IS AN ENGINE PARAMETER, NOT A SECOND ENGINE.** `WSIconLayout` gained
+  `WSIconOrderLeftToRightRows`; the desktop keeps right-to-left columns and the file window reads rows. The cell
+  size, margin, hit test and arrange arithmetic stayed in one place, which is what "the shared engine is shared"
+  means in the test.
+- **THE RENAME IS ONE MOVE, NOT A COPY.** `-commitRenaming` validates the name (empty, `/`, `.`/`..`, existing
+  destination) and calls `NSFileManager -moveItemAtPath:toPath:error:`, then reloads the model and selects the new
+  name. The extension is left unselected when the rename begins; a directory's whole name is selected.
+- **THE DRAG IS THE TIER'S SESSION.** The view puts selected paths on `NSDragPboard` as `NSFilenamesPboardType`,
+  starts a session with one item per icon, and is a registered destination for the same type. The operation is
+  `Move` within a volume, `Copy` across, `Option` Copy, `Command` across Move and `Command-Option` Link; the
+  destination is a folder icon or the window's folder; all destinations are preflighted before anything moves.
+- **A LINK IS A SYMBOLIC LINK UNTIL `WSAlias`.** The plan's alias is a bookmark record and that class is W6's, so
+  the Link operation is `symlink(2)` today. This is stated in `WSIconView.h`, `DESIGN.md` and the README rather than
+  presenting a symlink as a Mac alias.
+
+**SPRING-LOADING ASKS, AND THE APPLICATION OPENS.** A 0.6-second hover posts
+`WSIconViewRequestFolderWindowNotification`; `WSApplication` observes it and opens a file window at the folder — the
+same path a desktop folder double-click uses. The view never makes a window, and the in-flight drag is not yet
+transferred into the spring-loaded one.
+
+`tests/icon_view.m` measures the order and document height, every keyboard movement, Shift/Command selection, the
+prefix type-select, a successful rename, a cancel and three refusals, the source pasteboard and a live session, the
+five drop-policy answers, Move/Copy/Link on `/tmp` and `/dev/shm`, a refused conflict, a drop on a folder icon, the
+spring notification, and a real drag from one window's icon view into another's.
 
 ## Known gaps, recorded rather than left to be found
 

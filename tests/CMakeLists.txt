@@ -90,7 +90,7 @@ find_package(AgoraLaunchServices CONFIG REQUIRED)
 
 add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
@@ -106,3 +106,20 @@ target_link_libraries(file_window PRIVATE
 add_test(NAME workspace-file-window COMMAND file_window)
 set_tests_properties(workspace-file-window PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
+
+# **W3'S ICON VIEW.** The grid order, the keyboard and type-select, the inline rename, the drag pasteboard and the
+# drop policies — with a second root on /dev/shm so "across a volume" is measured rather than asserted.
+add_executable(icon_view icon_view.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m")
+target_include_directories(icon_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(icon_view PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-icon-view COMMAND icon_view)
+set_tests_properties(workspace-icon-view PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")

@@ -6,7 +6,7 @@
  *
  * THE WINDOW IS FOUR STRIPS AND ONE TREE, and every one of them reads the same model:
  *
- *   toolbar       Back, Forward and the four-way view switcher (only Icon enabled)
+ *   toolbar       Back, Forward and the three-way view switcher (only Icon enabled)
  *   path bar      the current folder, one component per path element
  *   sidebar       PLACES and DEVICES, in an NSOutlineView inside an NSSplitView
  *   content       the icon grid (W2's; W3's icon view replaces it)
@@ -18,7 +18,7 @@
  */
 #import "WSFileWindowController.h"
 
-#import "WSFileIconView.h"
+#import "WSIconView.h"
 #import "WSHistory.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
@@ -252,10 +252,10 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	[_contentScroll setHasVerticalScroller:YES];
 	[_contentScroll setBorderType:NSNoBorder];
 	[_contentScroll setDrawsBackground:YES];
-	_iconView = [[WSFileIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0,
+	_iconView = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0,
 								     900.0 - WS_SIDEBAR_WIDTH, 500.0)
 						    model:_model];
-	[_iconView setDelegate:(id <WSFileIconViewDelegate>)self];
+	[_iconView setDelegate:(id <WSIconViewDelegate>)self];
 	[_contentScroll setDocumentView:_iconView];
 
 	[_split addSubview:_sidebarScroll];
@@ -453,7 +453,6 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 
 - (void)cg_useListView:(id)sender { (void)sender; }
 - (void)cg_useColumnView:(id)sender { (void)sender; }
-- (void)cg_useCoverFlowView:(id)sender { (void)sender; }
 
 - (void)viewSwitcherChanged:(id)sender
 {
@@ -477,7 +476,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	}
 }
 
-- (void)fileIconView:(WSFileIconView *)view openItem:(WSItem *)item
+- (void)iconView:(WSIconView *)view openItem:(WSItem *)item
 {
 	(void)view;
 	if ([item isDirectory]) {
@@ -491,6 +490,14 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		LSOpenCFURLRef(url, NULL);
 		CFRelease(url);
 	}
+}
+
+/* A RENAME OR A DROP CHANGED THE MODEL: the count may be the same, but the status bar and the grid are the model's
+ * and this is the moment to re-read them. */
+- (void)iconViewDidChangeModel:(WSIconView *)view
+{
+	(void)view;
+	[self refresh];
 }
 
 /* ---- THE TOOLBAR ---------------------------------------------------------------------------- */
@@ -522,11 +529,11 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	}
 	if ([identifier isEqualToString:WSViewSwitcherItemIdentifier]) {
 		NSInteger i;
-		NSArray *labels = [NSArray arrayWithObjects:@"Icon", @"List", @"Column", @"Cover Flow", nil];
+		NSArray *labels = [NSArray arrayWithObjects:@"Icon", @"List", @"Column", nil];
 
 		_viewSwitcher = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 24.0)];
-		[_viewSwitcher setSegmentCount:4];
-		for (i = 0; i < 4; i++) {
+		[_viewSwitcher setSegmentCount:3];
+		for (i = 0; i < 3; i++) {
 			[_viewSwitcher setLabel:[labels objectAtIndex:(NSUInteger)i] forSegment:i];
 			[_viewSwitcher setWidth:70.0 forSegment:i];
 			[_viewSwitcher setEnabled:(i == 0) forSegment:i];
@@ -666,8 +673,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	if (action == @selector(cg_useIconView:)) {
 		return YES;
 	}
-	if (action == @selector(cg_useListView:) || action == @selector(cg_useColumnView:)
-	    || action == @selector(cg_useCoverFlowView:)) {
+	if (action == @selector(cg_useListView:) || action == @selector(cg_useColumnView:)) {
 		return NO;
 	}
 	if (action == @selector(goToEnclosingFolder:)) {
@@ -685,7 +691,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 - (NSOutlineView *)cg_sidebarOutline { return _sidebar; }
 - (NSPathControl *)cg_pathControl { return _pathBar; }
 - (NSTextField *)cg_statusField { return _status; }
-- (WSFileIconView *)cg_iconView { return _iconView; }
+- (WSIconView *)cg_iconView { return _iconView; }
 - (NSSegmentedControl *)cg_viewSwitcher { return _viewSwitcher; }
 - (NSSplitView *)cg_splitView { return _split; }
 

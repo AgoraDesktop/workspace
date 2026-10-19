@@ -5,7 +5,7 @@
  * SPDX-License-Identifier: MIT
  *
  * THE LOAD-BEARING CLASS (WORKSPACE-PLAN.md §6): the desktop, and later the icon, list and column views, are
- * all renderings of THIS — a directory, its items, and a change stream. Four views over four enumerations is
+ * all renderings of THIS — a directory, its items, and a change stream. Three views over three enumerations is
  * the classic way a file-manager clone becomes four subtly different file managers, and one model is what prevents
  * it.
  *

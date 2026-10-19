@@ -35,7 +35,7 @@ add_executable(Workspace
     src/WSApplication.m
     src/WSDesktopWindow.m
     src/WSDesktopView.m
-    src/WSFileIconView.m
+    src/WSIconView.m
     src/WSFileWindowController.m
     src/WSHistory.m
     src/WSIconLayout.m

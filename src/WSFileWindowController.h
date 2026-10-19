@@ -5,9 +5,9 @@
  * SPDX-License-Identifier: MIT
  *
  * **W2 IS THE SHELL, NOT THE VIEWS.** One folder, one `WSItemModel`, and the chrome a person navigates with: a
- * toolbar, a sidebar of places, a path bar, a status bar and the four-way view switcher. The Icon mode is the one
- * that works; List, Columns and Cover Flow are the stages after this one, and their segments are disabled rather
- * than pretending. W3 replaces the shell's simple icon grid with the icon view proper.
+ * toolbar, a sidebar of places, a path bar, a status bar and the three-way view switcher. The Icon mode is the one
+ * that works; List and Columns are the stages after this one, and their segments are disabled rather
+ * than pretending. The Icon mode's content is `WSIconView` — W3's grid, keyboard, rename and drag.
  *
  * **THE WINDOW IS A SHELL OVER THE MODEL.** The title, the status bar, the path bar and the icon view are all
  * renderings of the same `WSItemModel`; navigating replaces that model and tells every one of them, rather than
@@ -31,7 +31,7 @@
 @class NSSegmentedControl;
 @class NSSplitView;
 @class NSTextField;
-@class WSFileIconView;
+@class WSIconView;
 @class WSHistory;
 @class WSItemModel;
 
@@ -47,7 +47,7 @@
 	NSSplitView *_split;			/* RETAINED by the content view */
 	NSOutlineView *_sidebar;		/* RETAINED by its scroll view */
 	NSScrollView *_sidebarScroll;		/* RETAINED by the split view */
-	WSFileIconView *_iconView;		/* RETAINED by its scroll view */
+	WSIconView *_iconView;		/* RETAINED by its scroll view */
 	NSScrollView *_contentScroll;		/* RETAINED by the split view */
 	NSTextField *_status;			/* RETAINED by the content view */
 	NSToolbar *_toolbar;			/* RETAINED by the window */
@@ -74,12 +74,11 @@
 - (void)goToApplications:(nullable id)sender;
 - (void)goToComputer:(nullable id)sender;
 
-/* THE VIEW SWITCHER'S ACTIONS. Icon is the one this stage implements; the other three answer NO from
+/* THE VIEW SWITCHER'S ACTIONS. Icon is the one this stage implements; List and Columns answer NO from
  * `-validateMenuItem:` and their segments are disabled. */
 - (void)cg_useIconView:(nullable id)sender;
 - (void)cg_useListView:(nullable id)sender;
 - (void)cg_useColumnView:(nullable id)sender;
-- (void)cg_useCoverFlowView:(nullable id)sender;
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 
@@ -88,7 +87,7 @@
 - (nullable NSOutlineView *)cg_sidebarOutline;
 - (nullable NSPathControl *)cg_pathControl;
 - (nullable NSTextField *)cg_statusField;
-- (nullable WSFileIconView *)cg_iconView;
+- (nullable WSIconView *)cg_iconView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
 - (nullable NSSplitView *)cg_splitView;
 

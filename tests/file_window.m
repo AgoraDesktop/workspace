@@ -9,7 +9,7 @@
  * Back/Forward is the only thing that decides which folder is shown; and a second controller is a second folder
  * with its own model and its own cursor. Offscreen: no compositor, no click, no menu tracking.
  */
-#import "WSFileIconView.h"
+#import "WSIconView.h"
 #import "WSFileWindowController.h"
 #import "WSItemModel.h"
 #import "WSPlaces.h"
@@ -109,13 +109,12 @@ int main(void)
 	      "the title is the folder's own name");
 	check([first cg_iconView] != nil, "the icon view exists");
 	check([[first cg_iconView] itemCount] == 4, "the icon view shows the model's items");
-	check([[first cg_viewSwitcher] segmentCount] == 4, "the switcher has four segments");
+	check([[first cg_viewSwitcher] segmentCount] == 3, "the switcher has three segments");
 	check([[first cg_viewSwitcher] selectedSegment] == 0, "with Icon selected");
 	check([[first cg_viewSwitcher] isEnabledForSegment:0]
 	      && ![[first cg_viewSwitcher] isEnabledForSegment:1]
-	      && ![[first cg_viewSwitcher] isEnabledForSegment:2]
-	      && ![[first cg_viewSwitcher] isEnabledForSegment:3],
-	      "and only Icon is enabled: List, Column and Cover Flow are later stages");
+	      && ![[first cg_viewSwitcher] isEnabledForSegment:2],
+	      "and only Icon is enabled: List and Column are later stages");
 	check([[[first window] toolbar] items] != nil && [[[[first window] toolbar] items] count] >= 4,
 	      "the toolbar has its items");
 	check(![first canGoBack] && ![first canGoForward], "a new window has nowhere to go back or forward to");
@@ -137,7 +136,7 @@ int main(void)
 	/* **A DOUBLE-CLICK ON A FOLDER IS A NAVIGATION.** The first icon is at the grid's first cell; the event is
 	 * converted through the view so the scroll view's own placement cannot change the answer. */
 	{
-		WSFileIconView *icons = [first cg_iconView];
+		WSIconView *icons = [first cg_iconView];
 		NSPoint inWindow = [icons convertPoint:NSMakePoint(30.0, 30.0) toView:nil];
 		NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown location:inWindow
 					       modifierFlags:0 timestamp:0.0 windowNumber:0 context:nil

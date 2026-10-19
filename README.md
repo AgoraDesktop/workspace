@@ -9,11 +9,11 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0, W1, W1b AND W2 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE WINDOW
+**W0, W1, W1b, W2 AND W3 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE WINDOW
 shell all work. The window is assembled from the platform's parts — a toolbar, an `NSOutlineView` sidebar in an
 `NSSplitView`, an `NSPathControl`, a status bar and an `NSSegmentedControl` — and every strip reads the SAME
 `WSItemModel`. The Icon mode is W2's simple grid; W3 replaces it with the icon view proper, and List, Columns and
-Cover Flow are W4's and W5's (their switcher segments are disabled).
+List and Columns are W4's and W5's (their switcher segments are disabled).
 
 **The desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
 launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
@@ -40,7 +40,7 @@ the whole screen, `[NSScreen frame]` and not `visibleFrame`, because the Dock an
 
 ### What is measured, not assumed
 
-`ctest` runs **seven tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
+`ctest` runs **eight tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
 against **Agora's own window server**, headless: it runs the **bundle's** executable (the bundle path is part of what
 W0 proves), places a **normal** window over the desktop with the server's own test client, and reads the server's
 screenshot. **9 checks, 0 fail**:
@@ -50,9 +50,10 @@ screenshot. **9 checks, 0 fail**:
 - an **icon** is drawn where its sidecar says it goes;
 - a **normal window created *after* the desktop is composited *over* it** — which can only be the level.
 
-The other six are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
-`workspace-go-menu` and — the shell's own — `workspace-history` (**15 checks**) and `workspace-file-window`
-(**38 checks**). The last one is the W2 proof below.
+The other seven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
+`workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
+(**38 checks**); and the icon view's `workspace-icon-view` (**51 checks**). The file-window and icon-view suites are
+the W2 and W3 proofs below.
 
 ### W1: the desktop's icons
 
@@ -97,7 +98,7 @@ active application and one where an ordinary window is in front of it, where its
 
 **ONE FOLDER, ONE MODEL, FOUR STRIPS.** `WSFileWindowController` opens a folder, owns its `WSItemModel` and its
 `WSHistory`, and gives the model to every part of the window: the title is the folder's name, the `NSPathControl` is
-its URL, the status bar says the model's own count, and `WSFileIconView` draws the model's items. A navigation
+its URL, the status bar says the model's own count, and `WSIconView` draws the model's items. A navigation
 replaces the model and tells all four; none of them has a directory of its own.
 
 **THE CHROME IS THE PLATFORM'S.** The toolbar is an `NSToolbar` with Back, Forward and a custom `NSSegmentedControl`
@@ -111,11 +112,10 @@ bordered-free `NSTextField` reading "N items".
 current location is a no-op, and an arrow at the end of the stack does nothing. The controller only asks
 `-canGoBack`/`-canGoForward` for the toolbar and the menu walk.
 
-**ONLY ICON IS ENABLED.** The switcher has four segments because the Finder's does; List, Columns and Cover Flow are
-the stages after this one, so their segments are disabled and their menu rows answer NO from
-`-validateMenuItem:`. W2's Icon mode is a simple left-to-right grid (`WSFileIconView`) with selection and
-double-click open; it is NOT W3's icon view — rename, keyboard navigation, type-select, drag and drop and
-spring-loaded folders are W3's.
+**ONLY ICON IS ENABLED.** The switcher has three segments; List and Columns are the stages after this one, so
+their segments are disabled and their menu rows answer NO from `-validateMenuItem:`. W2's Icon mode is the
+left-to-right grid now extended by W3 (`WSIconView`): selection, keyboard navigation, type-select, inline rename,
+drag and drop and spring-loaded folders are the icon view's own.
 
 **A SECOND WINDOW IS A SECOND MODEL.** File > New Workspace Window creates another controller on the desktop
 folder; a folder double-clicked on the desktop posts `WSDesktopViewOpenFolderNotification`, and `WSApplication`
@@ -129,10 +129,49 @@ path bar at the top edge, status bar at the bottom, split view between. `tests/f
 after a resize, and the finding is recorded in `PROVENANCE.md`.
 
 `tests/file_window.m` is the proof: a temporary tree of folders, a file and a hidden file; the model's count and the
-status bar's; the path bar's URL; the sidebar's two sections and four places; the switcher's four segments and their
+status bar's; the path bar's URL; the sidebar's two sections and four places; the switcher's three segments and their
 enablement; the toolbar's items; Back disabled at the first location; a double-click that navigates and updates
 every strip; Back/Forward and a new navigation's truncation; the resize's strip geometry; and a second controller
 with its own model and history.
+
+### W3: the icon view
+
+**`WSIconView` IS THE FILE WINDOW'S ICON MODE, AND IT IS THE DESKTOP'S ENGINE IN THE WINDOW'S ORDER.** `WSItemModel`
+still supplies the items and `WSIconLayout` still supplies the cell, the margins and the hit test; the new
+`WSIconOrderLeftToRightRows` fills a row and then the next row down, while the desktop keeps its right-to-left
+columns. `tests/icon_view.m` checks the order arithmetically: the first cell at (16,16), the second at (96,16), the
+fifth at (16,104), and a two-row document 192 points tall.
+
+**SELECTION IS THE KEYBOARD'S AND THE POINTER'S.** A click selects; Shift extends from an anchor; Command toggles;
+Command-A selects all. Left/Right move by one item, Up/Down by one row of the grid's columns, Home/End go to the
+ends, and the selected icon wears a focus ring while the view is first responder. TYPE-SELECT accumulates a prefix
+for one second (`d`, then `do`), starting after the selection and wrapping, and a new key after the timeout starts a
+new prefix.
+
+**INLINE RENAME IS A FIELD OVER THE LABEL.** Return (or `-beginRenamingSelectedItem`) puts an editable field where
+the label is, with the current name and — for a file — the base name selected and the extension left alone. Commit
+moves the item through `NSFileManager`, reloads the model and follows the renamed item; cancel, an empty name, a
+slash, `.`/`..` or an existing name are all refused. A rename that succeeds tells the controller, so the status bar
+and the grid re-read the same model.
+
+**DRAG AND DROP IS THE TIER'S SESSION, BETWEEN WINDOWS.** A press past four points puts the selected paths on
+`NSDragPboard` as `NSFilenamesPboardType` and begins an `NSDraggingSession` with one item per selected icon. Every
+`WSIconView` registers for the filenames type: the destination is the folder icon under the pointer or the window's
+own folder, and the operation is chosen from the volumes and the modifier keys — same volume Move, across volumes
+Copy, Option Copy, Command across Move, Command-Option Link. A drop preflights every destination and refuses a
+conflict rather than replacing a file; on success both the destination and the source view reload. The test drives a
+real session from one window's icon view into another's and checks the file moved and both models updated.
+
+**A LINK IS A SYMBOLIC LINK UNTIL `WSAlias` EXISTS.** The Mac's alias is the bookmark record of
+`WORKSPACE-PLAN.md` §5.2, which is `WSAlias`'s (W6); the Link operation here is `symlink(2)` and the header says so.
+A hovered folder for 0.6 s posts `WSIconViewRequestFolderWindowNotification`, and the application opens the folder's
+window — the same request a desktop folder double-click makes. W3 does not yet move the in-flight drag into that
+window automatically, and there is no rubber-band selection in the icon view; both are named rather than implied.
+
+`tests/icon_view.m` is the proof: order and document height; every keyboard movement and Shift/Command selection;
+the prefix type-select; a rename that moves the file, a cancel and three refusals; the source's pasteboard and
+session; the five policy answers; Move, Copy and Link performed on two volumes; a conflict refused; a drop on a
+folder icon; the spring notification; and a real cross-window session.
 
 ### The strip that needed a level of its own — now fixed, and measured
 
@@ -151,7 +190,7 @@ src/
   WSDesktopWindow.m        the borderless window at kCGDesktopIconWindowLevel, the size of the screen
   WSDesktopView.m          the desktop's icons — selection, rubber band, drag, double-click open
   WSFileWindowController.m the file window: toolbar, sidebar, path bar, status bar and view switcher
-  WSFileIconView.m         W2's icon grid over one model (W3 replaces it)
+  WSIconView.m             the icon view: grid, keyboard, type-select, rename, drag and drop, spring-loading
   WSHistory.m              Back/Forward: the stack, the cursor and the truncation
   WSIconLayout.m           the grid, the snap, the arrange order and the hit test — pure geometry
   WSItemIcons.m            Icon Services' CGImage as an NSImage
@@ -164,16 +203,17 @@ tests/                     the pixel suite (run-desktop.sh + check.py) and six o
 
 ## What is deliberately not here yet
 
-The plan's later stages: the icon view proper and drag/drop within it (W3), the list and column views (W4/W5),
+The plan's later stages: the list and column views (W4/W5),
 file operations and the Trash (W6), the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
 (W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon
 Services and the change stream — is already built (`../libagora-launchservices`, `../libagora-iconservices`,
 `../libagora-watch`).
 
-**What W2 does not do yet, named:** the Icon mode is the shell's simple grid, without inline rename, keyboard
-navigation, type-select, drag and drop or spring-loaded folders (W3); List, Columns and Cover Flow are disabled
-(W4/W5); the desktop is still not LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand rather than
-from a stream callback); a document's icon is its TYPE's generic and not its own content
+**What W3 does not do yet, named:** an alias is a symbolic link until `WSAlias` (W6); file operations live in the
+icon view rather than `WSFileOperations` (W6), and a conflict is refused rather than asked about; the icon view has
+no rubber band, and a spring-loaded window is opened but the in-flight drag is not moved into it; List and Columns
+are disabled (W4/W5); the desktop is still not LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand
+rather than from a stream callback); a document's icon is its TYPE's generic and not its own content
 (`AGIconCreateWithURL` already prefers an application's declared icon); and the sidecar holds the icon size and the
 positions, not yet grid spacing or label placement.
 
