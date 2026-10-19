@@ -9,11 +9,12 @@ directory (`../README.md`). Workspace is an **application**: it consumes the App
 
 ## Status
 
-**W0, W1, W1b, W2 AND W3 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE WINDOW
-shell all work. The window is assembled from the platform's parts — a toolbar, an `NSOutlineView` sidebar in an
-`NSSplitView`, an `NSPathControl`, a status bar and an `NSSegmentedControl` — and every strip reads the SAME
-`WSItemModel`. The Icon mode is W2's simple grid; W3 replaces it with the icon view proper, and List, Columns and
-List and Columns are W4's and W5's (their switcher segments are disabled).
+**W0, W1, W1b, W2, W3 AND W4 ARE DONE.** The desktop (two levels), its icons, the application menu and the FILE
+WINDOW shell all work. The window is assembled from the platform's parts — a toolbar, an `NSOutlineView` sidebar in
+an `NSSplitView`, an `NSPathControl`, a status bar and an `NSSegmentedControl` — and every strip reads the SAME
+`WSItemModel`. The **Icon** mode is W3's `WSIconView` (keyboard, type-select, rename, drag and drop, spring-loading);
+the **List** mode is W4's `WSListView` (Name, Date Modified, Size, Kind, disclosure, sorting, rename). **Column** is
+W5's, and its segment is disabled.
 
 **The desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
 launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
@@ -26,11 +27,11 @@ workspace: file window for /home/kyle/Desktop
 workspace: desktop window at level -2147483627, frame 1280x720 at (0,0)
 ```
 
-Three arguments, all TEST DOORS and named as ones: `--seconds N` ends the ordinary run loop after N seconds (a
+Four arguments, all TEST DOORS and named as ones: `--seconds N` ends the ordinary run loop after N seconds (a
 desktop is a thing that stays, and the suite needs it to be able to leave); `--show-about` opens the About panel as
-part of starting up; and `--file-window` opens a file window on the desktop folder. The last two are otherwise
-reached by menu actions, and a synthetic click reaches a compositor's motion path and not its button path on some
-hosts.
+part of starting up; `--file-window` opens a file window on the desktop folder; and `--list-view` does the same with
+W4's List mode chosen. The last three are otherwise reached by menu actions, and a synthetic click reaches a
+compositor's motion path and not its button path on some hosts.
 
 `-2147483627` is `kCGDesktopIconWindowLevel` — one level above `kCGDesktopWindowLevel` (`-2147483628`, both from
 `libagora-drawing`'s `CGWindowLevel.h`). The level is **below every ordinary window**, which is what makes this the
@@ -40,7 +41,7 @@ the whole screen, `[NSScreen frame]` and not `visibleFrame`, because the Dock an
 
 ### What is measured, not assumed
 
-`ctest` runs **eight tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
+`ctest` runs **nine tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
 against **Agora's own window server**, headless: it runs the **bundle's** executable (the bundle path is part of what
 W0 proves), places a **normal** window over the desktop with the server's own test client, and reads the server's
 screenshot. **9 checks, 0 fail**:
@@ -50,10 +51,11 @@ screenshot. **9 checks, 0 fail**:
 - an **icon** is drawn where its sidecar says it goes;
 - a **normal window created *after* the desktop is composited *over* it** — which can only be the level.
 
-The other seven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
+The other eight are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**38 checks**); and the icon view's `workspace-icon-view` (**51 checks**). The file-window and icon-view suites are
-the W2 and W3 proofs below.
+(**38 checks**); the icon view's `workspace-icon-view` (**51 checks**); and the list view's
+`workspace-list-view` (**30 checks**). The file-window, icon-view and list-view suites are the W2, W3 and W4 proofs
+below.
 
 ### W1: the desktop's icons
 
@@ -112,10 +114,9 @@ bordered-free `NSTextField` reading "N items".
 current location is a no-op, and an arrow at the end of the stack does nothing. The controller only asks
 `-canGoBack`/`-canGoForward` for the toolbar and the menu walk.
 
-**ONLY ICON IS ENABLED.** The switcher has three segments; List and Columns are the stages after this one, so
-their segments are disabled and their menu rows answer NO from `-validateMenuItem:`. W2's Icon mode is the
-left-to-right grid now extended by W3 (`WSIconView`): selection, keyboard navigation, type-select, inline rename,
-drag and drop and spring-loaded folders are the icon view's own.
+**ICON AND LIST ARE ENABLED; COLUMN IS NOT.** The switcher has three segments. W2's Icon mode is W3's `WSIconView`
+(selection, keyboard, type-select, inline rename, drag/drop, spring-loading); W4 adds `WSListView` in the same
+content area, over the same model. Column's segment and menu row answer NO until W5.
 
 **A SECOND WINDOW IS A SECOND MODEL.** File > New Workspace Window creates another controller on the desktop
 folder; a folder double-clicked on the desktop posts `WSDesktopViewOpenFolderNotification`, and `WSApplication`
@@ -173,6 +174,40 @@ the prefix type-select; a rename that moves the file, a cancel and three refusal
 session; the five policy answers; Move, Copy and Link performed on two volumes; a conflict refused; a drop on a
 folder icon; the spring notification; and a real cross-window session.
 
+### W4: the list view
+
+**ONE DIRECTORY'S MODEL BECOMES A TREE BY ASKING FOR CHILD MODELS.** `WSListView` is an `NSOutlineView`; its root
+children are the window's `WSItemModel`, and a folder's children are another `WSItemModel` made on first expansion
+and cached. No parent pointer or recursive walk was added to the model — the same one-model-per-directory rule W2
+proved still holds, and the list is another rendering of it.
+
+**THE COLUMNS ARE THE ITEM'S OWN FACTS.** Name and Kind (Launch Services' `LSCopyKindStringForURL`, with the
+extension as the readable fallback when the answer is an internal `dyn.…` UTI), Date Modified and Size (read lazily
+from the file's attributes), and the disclosure triangle on the Name column. A directory's Size is `--`, and its
+Kind is `Folder`. The header's sort prototypes become `NSSortDescriptor`s; the data source maps the first one to a
+`WSItemSortKey` and reloads.
+
+**DIRECTORIES FIRST, THEN NATURAL ORDER.** `WSItemSort` keeps the two groups fixed — reversing a column never puts
+files above folders — and orders within them by natural name (`file2` before `file10`), modification date, size or
+Kind, with the natural name as the tie-break. `tests/list_view.m` checks the name, size, date and Kind orders
+against a deliberately dated and sized tree.
+
+**EXPANSION IS REMEMBERED BY PATH, NOT BY ITEM IDENTITY.** `NSOutlineView`'s expanded set is identity-based, and a
+reload makes new `WSItem` objects; `WSListView` keeps the expanded PATHS, re-expands the matching new items after a
+reload and restores the selected paths. The test expands a folder, adds a file, reloads, and finds the folder still
+open with its child still a visible row.
+
+**RENAME IS THE TABLE'S FIELD EDITOR.** The Name column is editable; Return starts the session on the selected row
+and the data source's set-object door performs one `NSFileManager` move, reloads the parent model, restores the
+expansion and selects the new name. The test drives the editor, sets a name and ends the session, then checks the
+file and the row. The table's field editor ends through the TABLE data-source door
+(`tableView:setObjectValue:forTableColumn:row:`), not the outline's item door, so `WSListView` implements both and
+routes each to the same rename — a finding recorded in `PROVENANCE.md`.
+
+Run it live with `--list-view` (or choose List in the switcher / View menu). `tests/list_view.m` is the proof: name order with four folders and five files, the three column values, size/date/
+Kind sorting, a folder's expansion across a reload, a rename through the field editor, Return, Right/Left and
+Command-Down.
+
 ### The strip that needed a level of its own — now fixed, and measured
 
 `window-server/src/output.c` drew its menu-bar strip **before** the windows and said so: *"until the strip has
@@ -195,24 +230,26 @@ src/
   WSIconLayout.m           the grid, the snap, the arrange order and the hit test — pure geometry
   WSItemIcons.m            Icon Services' CGImage as an NSImage
   WSItemModel.m            one directory's items, the one model every view reads
+  WSItemKind.m             the Kind column's Launch Services answer, with a readable fallback
+  WSItemSort.m             directories-first, natural-name, date, size and Kind ordering
+  WSListView.m             W4's list: columns, disclosure, sorting, rename
   WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions and the icon size
   WSPlaces.m               the sidebar's PLACES and DEVICES, and the desktop path
 Info.plist.in              the bundle's Info.plist
-tests/                     the pixel suite (run-desktop.sh + check.py) and six offscreen suites
+tests/                     the pixel suite (run-desktop.sh + check.py) and eight offscreen suites
 ```
 
 ## What is deliberately not here yet
 
-The plan's later stages: the list and column views (W4/W5),
-file operations and the Trash (W6), the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
+The plan's later stages: the column view (W5), file operations and the Trash (W6), the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
 (W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon
 Services and the change stream — is already built (`../libagora-launchservices`, `../libagora-iconservices`,
 `../libagora-watch`).
 
-**What W3 does not do yet, named:** an alias is a symbolic link until `WSAlias` (W6); file operations live in the
-icon view rather than `WSFileOperations` (W6), and a conflict is refused rather than asked about; the icon view has
-no rubber band, and a spring-loaded window is opened but the in-flight drag is not moved into it; List and Columns
-are disabled (W4/W5); the desktop is still not LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand
+**What W4 does not do yet, named:** the list has no drag and drop and no icons in its rows; the icon view's alias
+is a symbolic link until `WSAlias` (W6), file operations live in the views rather than `WSFileOperations` (W6), a
+conflict is refused rather than asked about, there is no rubber band, and a spring-loaded window is opened but the
+in-flight drag is not moved into it; Column is disabled (W5); the desktop is still not LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand
 rather than from a stream callback); a document's icon is its TYPE's generic and not its own content
 (`AGIconCreateWithURL` already prefers an application's declared icon); and the sidecar holds the icon size and the
 positions, not yet grid spacing or label placement.

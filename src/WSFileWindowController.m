@@ -9,7 +9,7 @@
  *   toolbar       Back, Forward and the three-way view switcher (only Icon enabled)
  *   path bar      the current folder, one component per path element
  *   sidebar       PLACES and DEVICES, in an NSOutlineView inside an NSSplitView
- *   content       the icon grid (W2's; W3's icon view replaces it)
+ *   content       the icon view, or the list view (Column is W5)
  *   status bar    "N items", from the model's own count
  *
  * **THE RESPONDER CHAIN IS HOW THE MENUS REACH THE WINDOW.** The window's `-nextResponder` is this controller, so
@@ -19,6 +19,7 @@
 #import "WSFileWindowController.h"
 
 #import "WSIconView.h"
+#import "WSListView.h"
 #import "WSHistory.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
@@ -168,6 +169,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	_model = [[WSItemModel alloc] initWithDirectory:_directory];
 	_history = [[WSHistory alloc] initWithURL:[NSURL fileURLWithPath:_directory]];
 	_placeSections = [[WSPlaces sections] retain];
+	_viewMode = 0;
 
 	content = [[WSFileContentView alloc] initWithFrame:[[window contentView] frame]];
 	[window setContentView:content];
@@ -314,6 +316,14 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	NSString *title = [_directory lastPathComponent];
 
 	[_iconView setModel:_model];
+	if (_listView != nil) {
+		if ([_listView model] != _model) {
+			[_listView setModel:_model];
+		} else {
+			[_listView reloadData];
+			[_listView tile];
+		}
+	}
 	[_pathBar setURL:[NSURL fileURLWithPath:_directory]];
 	[_status setStringValue:[NSString stringWithFormat:@"%ld %@", (long)count,
 				  (count == 1) ? @"item" : @"items"]];
@@ -445,22 +455,62 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 
 /* ---- THE VIEW SWITCHER ---------------------------------------------------------------------- */
 
+- (NSInteger)viewMode { return _viewMode; }
+
+- (void)setViewMode:(NSInteger)mode
+{
+	if (mode < 0 || mode > 1 || mode == _viewMode) {
+		if (_viewSwitcher != nil) {
+			[_viewSwitcher setSelectedSegment:mode];
+		}
+		return;
+	}
+	_viewMode = mode;
+	if (_viewSwitcher != nil) {
+		[_viewSwitcher setSelectedSegment:mode];
+	}
+	if (mode == 0) {
+		[_contentScroll setDocumentView:_iconView];
+		[_iconView setModel:_model];
+		[self refreshIconFrame];
+	} else {
+		if (_listView == nil) {
+			_listView = [[WSListView alloc] initWithFrame:[[_contentScroll contentView] bounds]
+							       model:_model];
+			[_listView setListDelegate:(id <WSListViewDelegate>)self];
+		} else {
+			[_listView setModel:_model];
+		}
+		[_contentScroll setDocumentView:_listView];
+		[_listView reloadData];
+		[_listView tile];
+	}
+}
+
 - (void)cg_useIconView:(id)sender
 {
 	(void)sender;
-	[_viewSwitcher setSelectedSegment:0];
+	[self setViewMode:0];
 }
 
-- (void)cg_useListView:(id)sender { (void)sender; }
+- (void)cg_useListView:(id)sender
+{
+	(void)sender;
+	[self setViewMode:1];
+}
+
 - (void)cg_useColumnView:(id)sender { (void)sender; }
 
 - (void)viewSwitcherChanged:(id)sender
 {
+	NSInteger segment = [_viewSwitcher selectedSegment];
+
 	(void)sender;
-	/* ICON IS THE ONLY MODE W2 HAS; the other segments are disabled, so this is the belt as well as the braces. */
-	if ([_viewSwitcher selectedSegment] != 0) {
-		[_viewSwitcher setSelectedSegment:0];
+	if (segment < 0 || segment > 1) {
+		[_viewSwitcher setSelectedSegment:_viewMode];
+		return;
 	}
+	[self setViewMode:segment];
 }
 
 /* ---- THE PATH BAR AND THE ICON VIEW --------------------------------------------------------- */
@@ -479,6 +529,23 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 - (void)iconView:(WSIconView *)view openItem:(WSItem *)item
 {
 	(void)view;
+	[self openItem:item];
+}
+
+- (void)listView:(WSListView *)view openItem:(WSItem *)item
+{
+	(void)view;
+	[self openItem:item];
+}
+
+- (void)listViewDidChangeModel:(WSListView *)view
+{
+	(void)view;
+	[self refresh];
+}
+
+- (void)openItem:(WSItem *)item
+{
 	if ([item isDirectory]) {
 		[self navigateToDirectory:[item path]];
 	} else {
@@ -492,8 +559,8 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	}
 }
 
-/* A RENAME OR A DROP CHANGED THE MODEL: the count may be the same, but the status bar and the grid are the model's
- * and this is the moment to re-read them. */
+/* A RENAME OR A DROP CHANGED THE MODEL: the count may be the same, but the status bar and both views are the
+ * model's, and this is the moment to re-read them. */
 - (void)iconViewDidChangeModel:(WSIconView *)view
 {
 	(void)view;
@@ -536,7 +603,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		for (i = 0; i < 3; i++) {
 			[_viewSwitcher setLabel:[labels objectAtIndex:(NSUInteger)i] forSegment:i];
 			[_viewSwitcher setWidth:70.0 forSegment:i];
-			[_viewSwitcher setEnabled:(i == 0) forSegment:i];
+			[_viewSwitcher setEnabled:(i <= 1) forSegment:i];
 		}
 		[_viewSwitcher setSelectedSegment:0];
 		[_viewSwitcher setTarget:self];
@@ -658,6 +725,9 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 {
 	(void)notification;
 	[self refreshIconFrame];
+	if (_viewMode == 1 && _listView != nil) {
+		[_listView tile];
+	}
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
@@ -673,7 +743,10 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	if (action == @selector(cg_useIconView:)) {
 		return YES;
 	}
-	if (action == @selector(cg_useListView:) || action == @selector(cg_useColumnView:)) {
+	if (action == @selector(cg_useListView:)) {
+		return YES;
+	}
+	if (action == @selector(cg_useColumnView:)) {
 		return NO;
 	}
 	if (action == @selector(goToEnclosingFolder:)) {
@@ -692,6 +765,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 - (NSPathControl *)cg_pathControl { return _pathBar; }
 - (NSTextField *)cg_statusField { return _status; }
 - (WSIconView *)cg_iconView { return _iconView; }
+- (WSListView *)cg_listView { return _listView; }
 - (NSSegmentedControl *)cg_viewSwitcher { return _viewSwitcher; }
 - (NSSplitView *)cg_splitView { return _split; }
 

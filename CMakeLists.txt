@@ -40,8 +40,11 @@ add_executable(Workspace
     src/WSHistory.m
     src/WSIconLayout.m
     src/WSItemIcons.m
+    src/WSItemKind.m
     src/WSItemModel.m
+    src/WSItemSort.m
     src/WSMainMenu.m
+    src/WSListView.m
     src/WSMetadataStore.m
     src/WSPlaces.m
     src/WSPreferencesWindow.m)

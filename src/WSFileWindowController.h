@@ -5,11 +5,11 @@
  * SPDX-License-Identifier: MIT
  *
  * **W2 IS THE SHELL, NOT THE VIEWS.** One folder, one `WSItemModel`, and the chrome a person navigates with: a
- * toolbar, a sidebar of places, a path bar, a status bar and the three-way view switcher. The Icon mode is the one
- * that works; List and Columns are the stages after this one, and their segments are disabled rather
- * than pretending. The Icon mode's content is `WSIconView` — W3's grid, keyboard, rename and drag.
+ * toolbar, a sidebar of places, a path bar, a status bar and the three-way view switcher. The Icon mode is W3's
+ * `WSIconView`; the List mode is W4's `WSListView`; Column is W5's, and its segment is disabled rather than
+ * pretending.
  *
- * **THE WINDOW IS A SHELL OVER THE MODEL.** The title, the status bar, the path bar and the icon view are all
+ * **THE WINDOW IS A SHELL OVER THE MODEL.** The title, the status bar, the path bar and the content view are all
  * renderings of the same `WSItemModel`; navigating replaces that model and tells every one of them, rather than
  * each view owning a directory of its own. That is the property W2 exists to prove.
  *
@@ -32,6 +32,7 @@
 @class NSSplitView;
 @class NSTextField;
 @class WSIconView;
+@class WSListView;
 @class WSHistory;
 @class WSItemModel;
 
@@ -48,7 +49,9 @@
 	NSOutlineView *_sidebar;		/* RETAINED by its scroll view */
 	NSScrollView *_sidebarScroll;		/* RETAINED by the split view */
 	WSIconView *_iconView;		/* RETAINED by its scroll view */
+	WSListView *_listView;		/* RETAINED by the scroll view when List is chosen */
 	NSScrollView *_contentScroll;		/* RETAINED by the split view */
+	NSInteger _viewMode;			/* 0 Icon, 1 List; Column is W5 */
 	NSTextField *_status;			/* RETAINED by the content view */
 	NSToolbar *_toolbar;			/* RETAINED by the window */
 	NSSegmentedControl *_viewSwitcher;	/* RETAINED by its toolbar item */
@@ -74,11 +77,13 @@
 - (void)goToApplications:(nullable id)sender;
 - (void)goToComputer:(nullable id)sender;
 
-/* THE VIEW SWITCHER'S ACTIONS. Icon is the one this stage implements; List and Columns answer NO from
- * `-validateMenuItem:` and their segments are disabled. */
+/* THE VIEW SWITCHER'S ACTIONS. Icon and List are implemented; Column answers NO from `-validateMenuItem:` and
+ * its segment is disabled. */
 - (void)cg_useIconView:(nullable id)sender;
 - (void)cg_useListView:(nullable id)sender;
 - (void)cg_useColumnView:(nullable id)sender;
+- (NSInteger)viewMode;
+- (void)setViewMode:(NSInteger)mode;
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 
@@ -88,6 +93,7 @@
 - (nullable NSPathControl *)cg_pathControl;
 - (nullable NSTextField *)cg_statusField;
 - (nullable WSIconView *)cg_iconView;
+- (nullable WSListView *)cg_listView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
 - (nullable NSSplitView *)cg_splitView;
 

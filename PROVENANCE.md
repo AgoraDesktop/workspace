@@ -117,7 +117,8 @@ the trace above, rather than a photograph.
 
 ## W2 — the file window, and a drawing finding
 
-**`WSFileWindowController`, `WSIconView`, `WSHistory`, `WSItemIcons` and `WSPlaces` are this repository's own
+**`WSFileWindowController`, `WSIconView`, `WSListView`, `WSItemSort`, `WSItemKind`, `WSHistory`, `WSItemIcons` and
+`WSPlaces` are this repository's own
 code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToolbarItem`, `NSSplitView`, `NSOutlineView`,
 `NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
 separate so each can be measured without the others.
@@ -164,6 +165,35 @@ transferred into the spring-loaded one.
 prefix type-select, a successful rename, a cancel and three refusals, the source pasteboard and a live session, the
 five drop-policy answers, Move/Copy/Link on `/tmp` and `/dev/shm`, a refused conflict, a drop on a folder icon, the
 spring notification, and a real drag from one window's icon view into another's.
+
+## W4 — the list view, and the field editor's door
+
+**`WSListView`, `WSItemSort` AND `WSItemKind` ARE THIS REPOSITORY'S OWN CODE.** `WSListView` is an `NSOutlineView`
+whose tree is made of per-directory `WSItemModel`s; `WSItemSort` owns the directories-first/natural-name rules; and
+`WSItemKind` owns the Launch Services answer and its readable fallback. `WSItem` gained lazy modification-date and
+size accessors — read once from `NSFileManager` attributes rather than at every listing.
+
+**THE KIND FALLBACK HIDES AN INTERNAL NAME.** `LSCopyKindStringForURL` answers a human description for a declared
+type ("Plain Text"), but for an extension no Agora bundle declares it can answer the dynamic `dyn.…` UTI. That is
+not a Kind a person should see, so a UTI-shaped answer (a dot and no space) falls back to the extension — "MD" for
+`todo.md` — or "Document". The live W4 scene is where the `dyn.15r7hj1` answer was found.
+
+**THE FINDING: AN OUTLINE'S FIELD EDITOR ENDS THROUGH THE TABLE'S DATA-SOURCE DOOR.**
+`NSTableView -textDidEndEditing:` writes an edited cell through
+`-tableView:setObjectValue:forTableColumn:row:`. `NSOutlineView` does not translate that to its own
+`-outlineView:setObjectValue:forTableColumn:byItem:`, so a cell-based outline's edit reached a data source that
+implements Apple's outline method and did nothing. `WSListView` implements BOTH doors (the table one maps row to
+item and calls the same rename), and the gap is recorded here as an AppKit-side one rather than hidden in the
+view. The probe drives the field editor, so this is measured.
+
+**EXPANSION AND SELECTION ARE PATH-BASED.** A reload clears the child models and the sort cache, re-expands the
+remembered paths (sorted by depth, parents first) against the new item objects, and restores selected paths. The
+expanded set is not persisted to disk; that is W5's outline autosave, if it is wanted.
+
+`tests/list_view.m` measures the name, size, date and Kind orders over a deliberately dated and sized tree; the
+four column values; a folder open across a reload with its child visible; a rename through the field editor; the
+Return/Right/Left/Command-Down keys; and an undeclared `.md` file's kind not being a `dyn.…` UTI. Still absent: list
+drag/drop and row icons (the W4 deliverable is the columns, disclosure, sorting and rename).
 
 ## Known gaps, recorded rather than left to be found
 

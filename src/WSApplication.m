@@ -191,6 +191,11 @@
 	_showsFileWindowOnStart = flag;
 }
 
+- (void)setFileWindowUsesListView:(BOOL)flag
+{
+	_fileWindowListView = flag;
+}
+
 /* **ONE FOLDER, ONE WINDOW, ONE MODEL.** The controller owns its own history and path bar; the application owns
  * the list of them and is the thing a close notification removes one from. */
 - (void)openFileWindowAtDirectory:(NSString *)directory
@@ -203,6 +208,9 @@
 	[_fileWindows addObject:controller];
 	[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(fileWindowWillClose:)
 		name:NSWindowWillCloseNotification object:[controller window]];
+	if (_fileWindowListView) {
+		[controller setViewMode:1];
+	}
 	[controller showWindow:nil];
 	fprintf(stderr, "workspace: file window for %s\n", [directory UTF8String]);
 	[controller release];

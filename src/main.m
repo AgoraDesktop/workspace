@@ -25,6 +25,7 @@ int main(int argc, char **argv)
 	int i;
 	int showAbout = 0;
 	int showFileWindow = 0;
+	int showListView = 0;
 
 	/* **THE CHROME'S THEME, BEFORE THE FIRST WINDOW EXISTS.** `AGChromeTheme` resolves ONCE per process, and asking
 	 * after a window has been made is asking for something already decided — so this comes before anything else.
@@ -45,6 +46,10 @@ int main(int argc, char **argv)
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
 			seconds = atof(argv[++i]);
+		} else if (strcmp(argv[i], "--list-view") == 0) {
+			/* `--file-window` WITH W4'S LIST CHOSEN, for the same reason: a probe cannot click the switcher. */
+			showFileWindow = 1;
+			showListView = 1;
 		} else if (strcmp(argv[i], "--file-window") == 0) {
 			/* A TEST'S DOOR, for the same reason `--show-about` is one: a file window is otherwise reached by a
 			 * menu action, and a probe cannot click. */
@@ -56,7 +61,7 @@ int main(int argc, char **argv)
 			 * reproduces the same window creation, the same chrome and the same activation, on any display. */
 			showAbout = 1;
 		} else {
-			fprintf(stderr, "usage: %s [--seconds N] [--show-about] [--file-window]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--seconds N] [--show-about] [--file-window] [--list-view]\n", argv[0]);
 			return 2;
 		}
 	}
@@ -76,6 +81,7 @@ int main(int argc, char **argv)
 		workspace = [[WSApplication alloc] init];
 		[workspace setShowsAboutOnStart:showAbout];
 		[workspace setShowsFileWindowOnStart:showFileWindow];
+		[workspace setFileWindowUsesListView:showListView];
 		if (![workspace start]) {
 			fprintf(stderr, "workspace: THE DESKTOP WINDOW WAS NOT MADE\n");
 			return 1;

@@ -86,6 +86,7 @@ int main(void)
 	NSOutlineView *outline;
 	NSMenuItem *backItem;
 	NSMenuItem *listItem;
+	NSMenuItem *columnItem;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
 	[application finishLaunching];
@@ -112,9 +113,9 @@ int main(void)
 	check([[first cg_viewSwitcher] segmentCount] == 3, "the switcher has three segments");
 	check([[first cg_viewSwitcher] selectedSegment] == 0, "with Icon selected");
 	check([[first cg_viewSwitcher] isEnabledForSegment:0]
-	      && ![[first cg_viewSwitcher] isEnabledForSegment:1]
+	      && [[first cg_viewSwitcher] isEnabledForSegment:1]
 	      && ![[first cg_viewSwitcher] isEnabledForSegment:2],
-	      "and only Icon is enabled: List and Column are later stages");
+	      "Icon and List are enabled; Column is W5");
 	check([[[first window] toolbar] items] != nil && [[[[first window] toolbar] items] count] >= 4,
 	      "the toolbar has its items");
 	check(![first canGoBack] && ![first canGoForward], "a new window has nowhere to go back or forward to");
@@ -130,8 +131,18 @@ int main(void)
 
 	backItem = [[NSMenuItem alloc] initWithTitle:@"Back" action:@selector(goBack:) keyEquivalent:@""];
 	listItem = [[NSMenuItem alloc] initWithTitle:@"as List" action:@selector(cg_useListView:) keyEquivalent:@""];
+	columnItem = [[NSMenuItem alloc] initWithTitle:@"as Columns" action:@selector(cg_useColumnView:) keyEquivalent:@""];
 	check(![first validateMenuItem:backItem], "Back is disabled at the first location");
-	check(![first validateMenuItem:listItem], "and List is disabled: W2 has only Icon");
+	check([first validateMenuItem:listItem], "List is enabled (W4)");
+	check(![first validateMenuItem:columnItem], "and Columns is disabled until W5");
+
+	/* THE SWITCHER ACTUALLY SWAPS THE CONTENT VIEW, AND THE LIST READS THE SAME MODEL. */
+	[first cg_useListView:nil];
+	check([first viewMode] == 1 && [first cg_listView] != nil
+	      && [[first cg_listView] numberOfRows] == 4,
+	      "choosing List builds the outline and it has the model's four rows");
+	[first cg_useIconView:nil];
+	check([first viewMode] == 0, "and choosing Icon returns to the grid");
 
 	/* **A DOUBLE-CLICK ON A FOLDER IS A NAVIGATION.** The first icon is at the grid's first cell; the event is
 	 * converted through the view so the scroll view's own placement cannot change the answer. */
@@ -191,6 +202,7 @@ int main(void)
 
 	[backItem release];
 	[listItem release];
+	[columnItem release];
 	[second close];
 	[second release];
 	[first close];

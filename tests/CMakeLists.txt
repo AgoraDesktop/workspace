@@ -94,7 +94,10 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m")
 target_include_directories(file_window PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(file_window PRIVATE
@@ -123,3 +126,20 @@ target_link_libraries(icon_view PRIVATE
 add_test(NAME workspace-icon-view COMMAND icon_view)
 set_tests_properties(workspace-icon-view PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
+# **W4'S LIST VIEW.** Columns, directories-first natural order, the expansion across a reload and a rename through
+# the field editor. Needs the AppKit and Launch Services (the Kind column) but no compositor.
+add_executable(list_view list_view.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m")
+target_include_directories(list_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(list_view PRIVATE
+    AgoraApp::App
+    AgoraLaunchServices::LaunchServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-list-view COMMAND list_view)
+set_tests_properties(workspace-list-view PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")

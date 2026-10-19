@@ -111,10 +111,9 @@ DEVICES (Computer) — and owns the desktop-path rule (`AGORA_DESKTOP`, else `~/
 sidebar and a second window cannot disagree. The sidebar is an `NSOutlineView` in an `NSSplitView`, with the
 source-list highlight.
 
-**ONLY ICON IS ENABLED, AND THE OTHER TWO SEGMENTS ARE DISABLED.** The three-way switcher is the platform's
-`NSSegmentedControl` in a toolbar item; List and Columns belong to W4 and W5, so their segments and their menu
-rows answer NO rather than showing an empty mode. W2's simple icon grid is W3's icon view now (rename, keyboard,
-type-select, drag/drop, spring-loading).
+**ICON AND LIST ARE ENABLED; COLUMN IS NOT.** The three-way switcher is the platform's `NSSegmentedControl` in a
+toolbar item; Column belongs to W5, so its segment and menu row answer NO rather than showing an empty mode. W2's
+simple icon grid is W3's icon view now; W4 adds `WSListView` in the same content area, over the same model.
 
 **THE CONTENT VIEW KEEPS COCOA'S y-UP DIRECTION.** The strips want a top-down layout, but this tier's live drawing
 path enters a flipped ROOT view without mirroring it, so a flipped content view put its top strip at the bottom
@@ -160,6 +159,32 @@ calling a symlink a Mac alias.
 `WSIconViewRequestFolderWindowNotification`; the application opens the folder's window, the same request the desktop
 makes for a folder double-click. Moving the in-flight drag into that window is not implemented, and the icon view has
 no rubber band; both are named in the README.
+
+## W4 — the list view
+
+**ONE MODEL PER DIRECTORY, AND CHILDREN ARE CHILD MODELS.** `WSListView` is an `NSOutlineView` whose root is the
+window's `WSItemModel`; expanding a folder makes another `WSItemModel` for that path and caches it. Nothing was
+added to the model's shape — no parent pointer, no recursive walk — so the "one model every view reads" rule still
+means one model per directory.
+
+**THE COLUMNS ARE THE ITEM'S FACTS.** Name, Date Modified, Size and Kind. The first two are the model's; the date
+and size come from `NSFileManager` attributes, read once on first ask. Kind is Launch Services'
+`LSCopyKindStringForURL`; a directory is "Folder", and an internal `dyn.…`/`public.…` answer is replaced by the
+extension (or "Document") rather than shown to a person as if it were a kind.
+
+**SORTING IS `WSItemSort`'S.** Directories first in BOTH directions, then natural name order (`file2` before
+`file10`), date, size or Kind, with the natural name as the tie-break. The header's sort prototypes produce the
+descriptors; the data source maps the first descriptor to the sort key and reloads. `setSortKey:ascending:` is the
+same path for a caller that does not have a header click.
+
+**EXPANSION IS REMEMBERED BY PATH.** `NSOutlineView`'s expanded set is by item identity; a reload makes new
+`WSItem` objects. The view keeps the open paths, re-expands the matching new items after a reload (parents first),
+and restores the selected paths. That is the difference between an outline that survives a model change and one
+that collapses whenever the folder changes.
+
+**RENAME IS THE TABLE'S FIELD EDITOR.** The Name column is editable; Return starts the session. The table ends an
+edit through its own data-source door with a row, not the outline's item door, so `WSListView` implements both and
+routes them to one `NSFileManager` move, a parent-model reload, the expansion restore and the new row's selection.
 
 ## What W0 found that it did not set out to find
 
