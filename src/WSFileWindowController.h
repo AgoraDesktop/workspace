@@ -21,6 +21,7 @@
 #define WORKSPACE_WSFILEWINDOWCONTROLLER_H
 
 #import <AppKit/NSOutlineView.h>
+#import <AppKit/NSSplitView.h>
 #import <AppKit/NSToolbar.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowController.h>
@@ -29,7 +30,6 @@
 @class NSPathControl;
 @class NSScrollView;
 @class NSSegmentedControl;
-@class NSSplitView;
 @class NSTextField;
 @class WSColumnView;
 @class WSFileOperations;
@@ -42,7 +42,8 @@
 @class WSItemModel;
 
 @interface WSFileWindowController : NSWindowController
-    <NSWindowDelegate, NSToolbarDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate>
+    <NSWindowDelegate, NSToolbarDelegate, NSOutlineViewDataSource, NSOutlineViewDelegate,
+     NSSplitViewDelegate>
 {
 	NSString *_directory;			/* COPIED: the folder the model holds */
 	WSItemModel *_model;			/* RETAINED */

@@ -7,10 +7,11 @@
 #import "WSListView.h"
 
 #import "WSFileOperations.h"
+#import "WSItemIcons.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 
-#import <AppKit/NSTableColumn.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSTableHeaderCell.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
@@ -33,6 +34,40 @@ static NSString * const WSListNameColumn = @"name";
 static NSString * const WSListDateColumn = @"date";
 static NSString * const WSListSizeColumn = @"size";
 static NSString * const WSListKindColumn = @"kind";
+
+/* **A NAME CELL THAT CAN SHOW THE ITEM'S ICON, and the shift is in `-drawingRectForBounds:` rather than only
+ * in the drawing.** That one door is what the field editor's frame comes from too (`NSTextFieldCell
+ * -selectWithFrame:…` asks it), so an icon in a list row does not put the rename editor's text under the
+ * picture. The 16-point box and the 20-point advance are the sidebar's own measures (`WSPlaceCell`, in
+ * `WSFileWindowController.m`), kept identical so a place and a file name wear their icons the same way. */
+@interface WSListNameCell : NSTextFieldCell
+@end
+
+@implementation WSListNameCell
+- (NSRect)drawingRectForBounds:(NSRect)rect
+{
+	NSRect room = [super drawingRectForBounds:rect];
+
+	if ([self image] != nil) {
+		room.origin.x += 20.0;
+		room.size.width -= 20.0;
+	}
+	return room;
+}
+
+- (void)drawInteriorWithFrame:(NSRect)cellFrame inView:(NSView *)controlView
+{
+	NSImage *image = [self image];
+
+	if (image != nil) {
+		NSRect box = NSMakeRect(NSMinX(cellFrame) + 2.0,
+					NSMidY(cellFrame) - 8.0, 16.0, 16.0);
+
+		[image drawInRect:box];
+	}
+	[super drawInteriorWithFrame:cellFrame inView:controlView];
+}
+@end
 
 /* ---- the two display strings and the expansion's depth order --------------------------------- */
 
@@ -112,6 +147,15 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 
 	name = [[NSTableColumn alloc] initWithIdentifier:WSListNameColumn];
 	[[name headerCell] setStringValue:@"Name"];
+	{
+		WSListNameCell *cell = [[WSListNameCell alloc] initTextCell:@""];
+
+		[cell setBordered:NO];
+		[cell setBezeled:NO];
+		[cell setDrawsBackground:NO];
+		[name setDataCell:cell];
+		[cell release];
+	}
 	[name setWidth:260.0];
 	[name setMinWidth:120.0];
 	[name setEditable:YES];
@@ -342,6 +386,28 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		return [self kindForItem:entry];
 	}
 	return nil;
+}
+
+/* **THE ROW'S ICON IS THE CELL'S IMAGE, and it is set per row because the table reuses one cell for the
+ * column.** The cell asks Icon Services through `WSItemIcons` — the same lookup the desktop, the sidebar and
+ * the icon view use — at the 16 points a list row has room for. Every other column is cleared, because the
+ * cells are separate but the rule that a data cell's state belongs to THIS row is what keeps a recycled cell
+ * from carrying a folder's picture into the date column. */
+- (void)outlineView:(NSOutlineView *)outlineView willDisplayCell:(id)cell
+     forTableColumn:(NSTableColumn *)tableColumn item:(id)item
+{
+	NSString *identifier = (tableColumn != nil) ? (NSString *)[tableColumn identifier] : nil;
+
+	(void)outlineView;
+	if ([identifier isEqual:WSListNameColumn] && item != nil) {
+		WSItem *entry = (WSItem *)item;
+
+		[cell setImage:[WSItemIcons iconForPath:[entry path]
+							isDirectory:[entry isDirectory]
+							       size:16]];
+	} else {
+		[cell setImage:nil];
+	}
 }
 
 /* ---- RENAME, THROUGH THE TABLE'S FIELD EDITOR ------------------------------------------------ */

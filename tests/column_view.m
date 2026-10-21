@@ -15,11 +15,13 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBrowser.h>
 #import <AppKit/NSBrowserCell.h>
+#import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
 
+#include <math.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -107,7 +109,23 @@ int main(void)
 	[window setContentView:view];
 
 	NSBrowser *browser = [view cg_browser];
-	check(browser != nil && [browser cg_columnCount] == 1, "the browser begins with one column");
+	check(browser != nil && [browser cg_columnCount] == 256 && [browser cg_activeColumnCount] == 1,
+	      "the browser begins with the 256-column pool and the root active");
+	check([browser numberOfRowsInColumn:1] == 0 && [browser numberOfVisibleColumns] >= 2,
+	      "and an empty slot is a visible column beside it");
+	{
+		NSView *document = [browser cg_documentView];
+		NSScrollView *outer = (NSScrollView *)[[document superview] superview];
+
+		check([outer autohidesScrollers] && [[outer horizontalScroller] isHidden],
+		      "and the outer horizontal bar hides when the visible columns fit");
+	}
+	check([browser columnResizingType] == NSBrowserUserColumnResizing,
+	      "and its separators are drag handles");
+	check([[browser cg_scrollViewForColumn:0] hasVerticalScroller],
+	      "and the column carries its own vertical scroller");
+	check([[[browser cg_scrollViewForColumn:0] verticalScroller] isHidden],
+	      "which hides while the column's rows fit");
 	check([browser numberOfRowsInColumn:0] == 3, "the root column has two folders and a file");
 	check([[cellAt(browser, 0, 0) copy] isEqual:@"A Folder"]
 	      && [[cellAt(browser, 1, 0) copy] isEqual:@"B Folder"]
@@ -116,7 +134,7 @@ int main(void)
 
 	/* SELECTING A BRANCH OPENS THE NEXT COLUMN, AND THE PREVIEW FOLLOWS IT. */
 	[browser selectRow:0 inColumn:0];
-	check([browser selectedColumn] == 0 && [browser cg_columnCount] == 2
+	check([browser selectedColumn] == 0 && [browser cg_activeColumnCount] == 2
 	      && [browser numberOfRowsInColumn:1] == 2,
 	      "selecting A Folder loads its two children into column 1");
 	check([[[view cg_previewItem] name] isEqual:@"A Folder"],
@@ -125,12 +143,25 @@ int main(void)
 	      "with a Kind in its text");
 
 	[browser selectRow:0 inColumn:1];
-	check([browser cg_columnCount] == 3 && [browser numberOfRowsInColumn:2] == 1,
+	check([browser cg_activeColumnCount] == 3 && [browser numberOfRowsInColumn:2] == 1,
 	      "selecting A Child loads its one child into column 2");
 	check([[[view cg_previewItem] name] isEqual:@"A Child"], "and the preview follows to A Child");
+	{
+		/* **THE FINAL COLUMN IS THE ONE THE PERSON IS LOOKING AT.** The browser's clip view must be at the document's
+		 * end after a branch opens its child, so the new column is against the right edge rather than past it. */
+		NSView *document = [browser cg_documentView];
+		NSView *clip = [document superview];
+		CGFloat maxX = [document frame].size.width - [clip bounds].size.width;
+
+		if (maxX < 0.0) {
+			maxX = 0.0;
+		}
+		check(fabs([clip bounds].origin.x - maxX) < 0.01,
+		      "navigating into a folder scrolls the columns all the way over");
+	}
 
 	[browser selectRow:0 inColumn:2];
-	check([browser cg_columnCount] == 3, "a leaf adds no column to its right");
+	check([browser cg_activeColumnCount] == 3, "a leaf adds no active column to its right");
 	check([[[view cg_previewItem] name] isEqual:@"leaf.txt"], "and the leaf is the preview's item");
 	check([[view cg_previewText] rangeOfString:@"leaf.txt"].location != NSNotFound
 	      && [[view cg_previewText] rangeOfString:@"7 bytes"].location != NSNotFound,
@@ -138,14 +169,14 @@ int main(void)
 
 	/* A LEAF IN THE ROOT COLUMN HAS NO RIGHT-HAND COLUMN EITHER. */
 	[browser selectRow:2 inColumn:0];
-	check([browser cg_columnCount] == 1 && [browser selectedColumn] == 0,
-	      "selecting the root's file leaves one column");
+	check([browser cg_activeColumnCount] == 1 && [browser selectedColumn] == 0,
+	      "selecting the root's file leaves one active column");
 	check([[[view cg_previewItem] name] isEqual:@"notes.txt"], "and the preview is that file");
 	check([[WSItemKind kindForItem:[view cg_previewItem]] length] > 0, "with a non-empty Kind");
 
 	/* AN EMPTY BRANCH OPENS NO COLUMN, BUT STILL PREVIEWS. */
 	[browser selectRow:1 inColumn:0];
-	check([browser cg_columnCount] == 1, "an empty folder opens no column");
+	check([browser cg_activeColumnCount] == 1, "an empty folder opens no column");
 	check([[[view cg_previewItem] name] isEqual:@"B Folder"], "but it is the preview's item");
 
 	/* THE VIEW'S OWN OPEN DOOR REACHES THE DELEGATE. */
@@ -165,6 +196,17 @@ int main(void)
 	check([[browser superview] isEqual:view] && [browser frame].size.width < 900.0
 	      && [browser frame].size.height == 500.0,
 	      "the browser takes the width beside the preview");
+	{
+		/* **THE BROWSER'S OWN SCROLL VIEW IS THE PART A FRAME SET CAN FORGET.** `-cg_documentView` is inside the
+		 * clip view, which is inside the scroll view; if the browser's `-setFrame:` did not re-tile, the scroll
+		 * view keeps the width it had and a gap opens between the last column and the preview panel. */
+		NSView *document = [browser cg_documentView];
+		NSView *scroll = [[document superview] superview];
+
+		check(scroll != nil
+		      && fabs([scroll frame].size.width - [browser bounds].size.width) < 0.01,
+		      "and the browser's own scroll view follows its frame");
+	}
 
 	[probe release];
 	[window release];

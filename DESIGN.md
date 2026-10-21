@@ -115,10 +115,12 @@ source-list highlight.
 W2's simple icon grid is W3's icon view now; W4 adds `WSListView`; W5 adds `WSColumnView`, an `NSBrowser` with the
 preview panel. Each is a content view over the same per-directory model.
 
-**THE CONTENT VIEW KEEPS COCOA'S y-UP DIRECTION.** The strips want a top-down layout, but this tier's live drawing
-path enters a flipped ROOT view without mirroring it, so a flipped content view put its top strip at the bottom
-(MEASURED in the first live run). The window therefore lays out path bar at the top edge, status bar at the bottom
-and the split view between, in the ordinary coordinate system; the finding is recorded in `PROVENANCE.md`.
+**THE CONTENT VIEW KEEPS COCOA'S y-UP DIRECTION, AND AUTO LAYOUT PLACES THE STRIPS.** The strips want a top-down
+layout, but this tier's live drawing path enters a flipped ROOT view without mirroring it, so a flipped content view
+put its top strip at the bottom (MEASURED in the first live run). The window therefore keeps the ordinary coordinate
+system and pins the path bar to the top, the status bar to the bottom and the split view between them with
+constraints; the split's delegate fixes the sidebar's width so the content pane absorbs a window resize. The
+flipped-root finding is recorded in `PROVENANCE.md`.
 
 **A SECOND WINDOW IS A SECOND MODEL.** File > New Workspace Window is the application's action; the desktop's
 folder double-click posts `WSDesktopViewOpenFolderNotification` and the application opens a controller at that
@@ -217,9 +219,9 @@ removed, a move is moved back, a rename is renamed back, a trash is put back, an
 the same mechanism because the undo itself goes through the manager.
 
 **A CONFLICT IS A HANDLER, A PROGRESS IS A HANDLER.** The destination question is `Skip`, `Replace`, `Keep Both` or
-the default; the File window answers it with `WSConflictSheet` (a modal panel — this tier has no
-`NSPanel`/`NSAlert`), and a probe answers directly. Progress is called once per top-level item and drives
-`WSProgressWindow`, whose bar is the new `NSProgressIndicator`.
+the default; the File window answers it with `WSConflictSheet` (a modal panel built before the tier had
+`NSPanel`/`NSAlert`; both classes are here now and the sheet has not moved), and a probe answers directly. Progress is
+called once per top-level item and drives `WSProgressWindow`, whose bar is the new `NSProgressIndicator`.
 
 **THE TRASH IS A DIRECTORY, A UNIQUE NAME AND A PUT BACK PLIST.** `WSTrash` uses `~/.Trash` for the home volume and
 a per-volume `.Trash-<uid>` when writable; `-putBackItem:` reads the record beside the trashed name; `-emptyTrash:`

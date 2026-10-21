@@ -193,12 +193,20 @@
 
 - (void)setFileWindowUsesListView:(BOOL)flag
 {
-	_fileWindowViewMode = flag ? 1 : 0;
+	/* **A FALSE FLAG MEANS "NOT THIS MODE", NOT "RESET TO ICONS".** `main` calls both setters in a fixed
+	 * order and passes NO for the one it did not ask for, so an unconditional assignment in either one
+	 * erased the other: `--list-view` set 1 here and the column setter's `flag ? 2 : 0` put it back to 0,
+	 * which is why the test's door opened an icon window. MEASURED on the demo's file window. */
+	if (flag) {
+		_fileWindowViewMode = 1;
+	}
 }
 
 - (void)setFileWindowUsesColumnView:(BOOL)flag
 {
-	_fileWindowViewMode = flag ? 2 : 0;
+	if (flag) {
+		_fileWindowViewMode = 2;
+	}
 }
 
 /* **ONE FOLDER, ONE WINDOW, ONE MODEL.** The controller owns its own history and path bar; the application owns

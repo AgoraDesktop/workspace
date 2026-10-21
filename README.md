@@ -55,8 +55,8 @@ screenshot. **9 checks, 0 fail**:
 
 The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**45 checks**); the icon view's `workspace-icon-view` (**51 checks**); the list view's
-`workspace-list-view` (**30 checks**); the column view's `workspace-column-view` (**21 checks**); and W6's
+(**57 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
+`workspace-list-view` (**33 checks**); the column view's `workspace-column-view` (**28 checks**); and W6's
 `workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**). The file-window through file-ops suites
 are the W2–W6 proofs below.
 
@@ -69,6 +69,10 @@ Three objects, and the file **window's** views will be built from the same three
   nearest-free snap a drop lands on, an arrange
   order, and a hit test. It needs no view, which is why it is checked **offscreen**.
 - **`WSMetadataStore`** — the per-folder `.agora` sidecar: icon positions and the icon size.
+
+The icon pixels themselves come from **Icon Services**, whose interim default art is the vendored **Frost**
+theme (MIT, `../libagora-iconservices/themes/Frost`); `WSItemIcons` is the only AppKit-side wrapper around
+that lookup, and `AGORA_ICON_THEME` can point a run at different art.
 
 **Positions are TOP-LEFT SCREEN COORDINATES** (the reference file manager's own convention, and what the store persists); the
 view converts to Cocoa only to draw and to hit-test. The sidecar is **XML**, because that is what this tree's
@@ -126,11 +130,23 @@ folder; a folder double-clicked on the desktop posts `WSDesktopViewOpenFolderNot
 opens it in a file window of its own. Each controller keeps its own folder, history and path bar, and closing one
 removes it from the application's list without touching the desktop or the other windows.
 
-**THE CONTENT VIEW IS NOT FLIPPED, AND THAT IS A MEASURED CHOICE.** The strips want a top-down layout, but this
-tier's live drawing path enters the content view without mirroring a flipped ROOT, so a flipped content view placed
-its top strip at the bottom. The window keeps Cocoa's y-up direction and the three strip frames do the arithmetic:
-path bar at the top edge, status bar at the bottom, split view between. `tests/file_window.m` checks those frames
-after a resize, and the finding is recorded in `PROVENANCE.md`.
+**THE CONTENT VIEW IS NOT FLIPPED, AND THE STRIPS ARE PLACED BY AUTO LAYOUT.** The strips want a top-down layout,
+but this tier's live drawing path enters the content view without mirroring a flipped ROOT, so a flipped content
+view placed its top strip at the bottom. The window keeps Cocoa's y-up direction, and the three strips are now
+constraints on the content view rather than frames computed in a resize hook: the path bar is pinned to the top with
+its 24-point height, the status bar to the bottom with its 22, and the split view fills the band between them and the
+full width. The split view's delegate keeps the sidebar's width and gives the content pane everything else, so a
+window resize moves the boundary rather than scaling both panes. `tests/file_window.m` resizes the window twice,
+checks every strip and the two panes, and follows the icon view into its new clip width; the flipped-root finding is
+recorded in `PROVENANCE.md`.
+
+**THE SIDEBAR'S DIVIDER IS A GUTTER, AND IT IS THE HANDLE.** The split view uses
+`NSSplitViewDividerStylePaneSplitter`, the same eighteen-point, three-ring gutter the browser's columns use, so the
+sidebar can be dragged wider or narrower and the grip says where to put the pointer. Its six rows fit, so the
+sidebar's own vertical bar is autohidden; `tests/file_window.m` checks the style, the thickness and the hidden bar.
+**A VIEW SWAP RESETS THE CONTENT SCROLL'S ORIGIN** — otherwise a scrolled icon grid would hand its offset to the
+column browser and start it partway down or across; the test scrolls the grid, switches Icon → Column, and checks the
+browser's first column is back at the document's origin.
 
 `tests/file_window.m` is the proof: a temporary tree of folders, a file and a hidden file; the model's count and the
 status bar's; the path bar's URL; the sidebar's two sections and four places; the switcher's three segments and their
@@ -146,11 +162,44 @@ still supplies the items and `WSIconLayout` still supplies the cell, the margins
 columns. `tests/icon_view.m` checks the order arithmetically: the first cell at (16,16), the second at (96,16), the
 fifth at (16,104), and a two-row document 192 points tall.
 
+**THE LABEL BELONGS TO THE CELL'S WIDTH, NOT TO THE NAME'S OWN WIDTH.** `WSIconLabelText` cuts a long name in the
+MIDDLE with an ellipsis until it measures inside the cell, and both the icon view and the desktop clip the drawing to
+a band as a second guard. Without it a full directory's long names were wider than their cells and overlapped their
+neighbours — the screenshot that started this change showed rows of text sitting on top of one another. **The CLIP is
+the cell's WIDTH CENTRED ON THE ICON, not the cell**: the cell begins at the icon and carries its padding to the
+right, so a name centred on the cell sat a padded half-cell to the right of the folder it named. Both surfaces had
+that off-centre; both now centre on the icon and clip to the band that follows it.
+
 **SELECTION IS THE KEYBOARD'S AND THE POINTER'S.** A click selects; Shift extends from an anchor; Command toggles;
 Command-A selects all. Left/Right move by one item, Up/Down by one row of the grid's columns, Home/End go to the
 ends, and the selected icon wears a focus ring while the view is first responder. TYPE-SELECT accumulates a prefix
 for one second (`d`, then `do`), starting after the selection and wrapping, and a new key after the timeout starts a
 new prefix.
+
+**THE WASH AND THE FOCUS RING ARE ONE RECTANGLE, AND IT IS NOT THE CELL.** The cell is deliberately asymmetric — it
+starts at the icon and carries its padding to the right and above, so neighbouring hit rectangles share an edge —
+which makes it the wrong shape to paint: filling it put the blue wash a padded half-cell to the right of the folder,
+and the ring went round the bare icon two points out, a different rectangle whose top edge landed on the label's
+first line. `-highlightRectAtIndex:` answers one rectangle instead: the cell's WIDTH centred on the icon, tall enough
+to hold the icon, the label and two points of air on every side, with the same four-point corner for the fill and the
+stroke. The label is centred on the ICON too (it used to be centred on the cell), the selected name keeps BLACK ink
+(a white name on a 35% wash is the ghost the screenshot showed, and the table view reached the same verdict for the
+platform's own light accent), and the rename field opens on that same rectangle so the name does not jump.
+
+**A SELECTION THAT MOVES ONE CELL INVALIDATES ONE CELL.** The view answered every selection change with
+`-setNeedsDisplay:`, which is "all of me": the window drew all nine folders and all nine names and copied the whole
+frame to move a wash one cell right — MEASURED at 20-45 ms a click. `-invalidateSelectionChangeFrom:` takes a snapshot
+of the selection before the change and invalidates the union of what it touched — the cell it left and the cell it
+entered — and `-becomeFirstResponder`/`-resignFirstResponder` invalidate only the selected cell, because the focus ring
+is the only mark that depends on being first responder. `-drawRect:` also skips an item whose highlight does not
+intersect the dirty rectangle, since the name is cut to the cell by MEASURING it first. MEASURED after: 3.6-10.8 ms
+for the two cells. **AND THE DAMAGE REACHES TWO POINTS PAST THE CELL** (`WSIconHighlightSlop`), because the focus
+ring is STROKED on the cell's edge: half the stroke and its antialiasing sit outside the rectangle, so damage that
+ended at the rectangle left a thin outline in every cell the selection had left — the lines a person sees when the
+highlight moves along a row. `tests/icon_view.m` asserts the shape of that invalidation. **AND THE SNAPSHOT IS A `-mutableCopy`
+AND NOT A `-copy`**: this tree's immutable family answers `-copy` with `[self retain]`, so a copy of the live mutable
+set saw every removal the change made and the cell that was left behind was never repainted — MEASURED as a stray wash
+on the old cell.
 
 **INLINE RENAME IS A FIELD OVER THE LABEL.** Return (or `-beginRenamingSelectedItem`) puts an editable field where
 the label is, with the current name and — for a file — the base name selected and the extension left alone. Commit
@@ -207,9 +256,19 @@ file and the row. The table's field editor ends through the TABLE data-source do
 (`tableView:setObjectValue:forTableColumn:row:`), not the outline's item door, so `WSListView` implements both and
 routes each to the same rename — a finding recorded in `PROVENANCE.md`.
 
+**THE NAME COLUMN WEARS THE ITEM'S ICON.** `WSListNameCell` (WSListView.m) is an `NSTextFieldCell` that draws a
+16-point `WSItemIcons` image before its title; `WSListView` sets it per row through the outline's
+`willDisplayCell` door, so the table's reused cell never carries a previous row's picture. The advance lives in
+`-drawingRectForBounds:`, which is also the door the field editor's frame comes from — so a rename's text starts
+after the icon rather than under it.
+
+**AND `--list-view` NOW ACTUALLY OPENS LIST MODE.** `WSApplication`'s two mode setters both assigned
+`_fileWindowViewMode` unconditionally, so `main`'s fixed order — list YES, then column NO — reset the list choice to
+0. A false flag now means "not this mode", not "icons"; the live door and the switcher agree.
+
 Run it live with `--list-view` (or choose List in the switcher / View menu). `tests/list_view.m` is the proof: name order with four folders and five files, the three column values, size/date/
-Kind sorting, a folder's expansion across a reload, a rename through the field editor, Return, Right/Left and
-Command-Down.
+Kind sorting, a folder's expansion across a reload, a rename through the field editor, Return, Right/Left,
+Command-Down, and a 16-point icon on the Name cell.
 
 ### W5: the column view
 
@@ -224,9 +283,21 @@ leaves the browser alone and previews the file. The panel stays put while the br
 which is the shape this stage calls the preview column.
 
 **THE BROWSER IS TABLE-BACKED, AND THAT IS `libagora-app`'S DECISION.** Apple's `NSBrowser` is an `NSMatrix` of
-`NSBrowserCell`s; this tree has no `NSMatrix`, so `NSBrowser` is one `NSScrollView` of side-by-side `NSTableView`s
-with the 10.6 delegate surface (`-browser:numberOfRowsInColumn:`, `-browser:willDisplayCell:atRow:column:`,
-`-selectedColumn`, `-path`, column width and scrolling). The old matrix form is named absent in its header.
+`NSBrowserCell`s; this tree has no `NSMatrix`, so `NSBrowser` is one horizontal `NSScrollView` whose document holds
+one vertical `NSScrollView` per column, each with an `NSTableView`, and the 10.6 delegate surface
+(`-browser:numberOfRowsInColumn:`, `-browser:willDisplayCell:atRow:column:`, `-selectedColumn`, `-path`, column width
+and scrolling). The old matrix form is named absent in its header.
+
+**EACH COLUMN SCROLLS ON ITS OWN, AND EACH HAS ITS OWN WIDTH.** `WSColumnView` puts the browser in
+`NSBrowserUserColumnResizing`; the separator between two columns is `NSSplitView`'s eighteen-point pane-splitter
+gutter, with the same three two-point rings eight points apart, and the browser draws and tracks it as a drag handle,
+and a tall column's vertical scroller moves that column alone. **A SHORT COLUMN'S BAR IS HIDDEN** — the browser's
+column scroll views set `-autohidesScrollers:YES`, so an empty or three-row column takes the whole column with no
+bar and the bar appears only when the rows overflow. **THE BROWSER BUILDS FINDER'S 256-COLUMN POOL**, so the slots
+to the right of the selection are visible empty columns and a column's width survives navigating away; only the
+visible/active slots size the horizontal document. `NSBrowser`'s `-widthOfColumn:`/`-setWidth:ofColumn:`
+are the per-column pair, and the browser re-tiles every column after a width change from the running sum rather than a
+shared step.
 
 **A RELOAD RE-READS THE ROOT AND SELECTS AGAIN.** `-reloadData` clears the child models and column cache, reloads the
 root model and asks the browser for column zero; the test then selects A Folder and finds the new child in column 1.
@@ -247,8 +318,9 @@ in both the icon and list views goes through `WSFileOperations` rather than movi
 
 **CONFLICT AND PROGRESS ARE HANDLERS.** A destination that exists is put to a conflict handler that answers Skip,
 Replace, Keep Both or the default; a probe supplies the answer directly, and the File window supplies
-`WSConflictSheet` — a modal Replace/Skip/Keep Both/Cancel panel, not a sheet because this tier has no
-`NSPanel`/`NSAlert`. The progress handler is called once per top-level item and feeds `WSProgressWindow`'s
+`WSConflictSheet` — a modal Replace/Skip/Keep Both/Cancel panel. It was written before the tier had
+`NSPanel`/`NSAlert` (both are in `libagora-app` now) and has not moved to them, so it is still its own panel rather
+than a sheet. The progress handler is called once per top-level item and feeds `WSProgressWindow`'s
 `NSProgressIndicator`; operations of one item stay quiet.
 
 **THE TRASH IS A DIRECTORY AND A RECORD.** `WSTrash` recycles into `~/.Trash` (or a per-volume `.Trash-<uid>` when
@@ -308,11 +380,11 @@ Services and the change stream — is already built (`../libagora-launchservices
 `../libagora-watch`).
 
 **What W6 does not do yet, named:** there is no Trash WINDOW and no Dock contract, so `WSTrash` is exercised
-through its API and the Dock's Trash icon remains W7/§5.3; the conflict question is a MODAL PANEL rather than a sheet
-(this tier has no `NSPanel`/`NSAlert`); the progress window has no Cancel; Compress writes a ZIP without ZIP64; and a
-multi-item move that fails halfway can leave the items it already moved (the conflict sheet is per destination, not
-a rollback). The preview is still a fixed panel rather than a browser column (W9 for its content); the icon view's
-alias is a symbolic link until `WSAlias`; the list has no drag/drop or row icons; the desktop is not
+through its API and the Dock's Trash icon remains W7/§5.3; the conflict question is a MODAL PANEL rather than a
+sheet, because `WSConflictSheet` was built before the tier had `NSPanel`/`NSAlert` and has not moved to them; the
+progress window has no Cancel; Compress writes a ZIP without ZIP64; and a multi-item move that fails halfway can leave
+the items it already moved (the conflict sheet is per destination, not a rollback). The preview is still a fixed panel rather than a browser column (W9 for its content); the icon view's
+alias is a symbolic link until `WSAlias`; the list has no drag/drop (its rows do carry 16-point icons); the desktop is not
 LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand); a document's icon is its TYPE's generic; and
 the sidecar does not yet hold grid spacing or label placement.
 

@@ -18,6 +18,7 @@
  */
 #import "WSDesktopView.h"
 
+#import "WSIconLabel.h"
 #import "WSIconLayout.h"
 #import "WSItemModel.h"
 #import "WSMetadataStore.h"
@@ -200,8 +201,17 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		NSBitmapImageRep *rep;
 		NSString *label;
 		NSSize labelSize;
+		NSSize cell = [WSIconLayout cellSizeForIconSize:iconSize];
 		NSDictionary *attributes;
 		NSRect labelRect;
+		/* **THE BAND IS THE CELL'S WIDTH CENTRED ON THE ICON, NOT THE CELL.** The cell starts at the icon and carries
+		 * its padding to the right, so a name cut to the cell's width and centred on the cell sat a padded half-cell to
+		 * the right of the folder it named — the same off-centre the icon view had. The band is what the label is
+		 * clipped to, so nothing has to be shaved off the left of a centred name. */
+		NSRect labelBand = [self cocoaRectForPosition:NSMakePoint(
+					  position.x - (cell.width - (CGFloat)iconSize) / 2.0,
+					  position.y + (CGFloat)iconSize)
+					  size:NSMakeSize(cell.width, (CGFloat)WSIconLabelHeight)];
 		NSUInteger s;
 
 		for (s = 0; s < [_selection count]; s++) {
@@ -215,8 +225,9 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		rep = [self iconRepForItemAtIndex:(NSUInteger)i];
 		if (rep != nil) [rep drawInRect:iconRect];
 
-		/* THE LABEL under it, in the desktop's own ink, CENTRED ON THE ICON. **`-drawInRect:withAttributes:` DOES
-		 * NOT HONOUR A PARAGRAPH STYLE'S ALIGNMENT** — MEASURED: this tree's `NSStringDrawing.m` never mentions
+		/* THE LABEL under it, in the desktop's own ink, CENTRED ON THE ICON — and the arithmetic below is the ICON's
+		 * centre, not the cell's, because the cell carries its padding to the right. **`-drawInRect:withAttributes:`
+		 * DOES NOT HONOUR A PARAGRAPH STYLE'S ALIGNMENT** — MEASURED: this tree's `NSStringDrawing.m` never mentions
 		 * alignment at all, which is why `NSCenterTextAlignment` left the text exactly where it was. So the centring
 		 * is GEOMETRIC: measure the string, and hand `-drawInRect:` a rectangle exactly as wide as the text, whose
 		 * LEFT edge is the icon's centre minus half the text's width. */
@@ -224,12 +235,16 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		attributes = [NSDictionary dictionaryWithObjectsAndKeys:
 				[NSColor whiteColor], NSForegroundColorAttributeName,
 				nil];
+		label = WSIconLabelText(label, cell.width - 4.0, attributes);
 		labelSize = [label sizeWithAttributes:attributes];
 		labelRect = [self cocoaRectForPosition:NSMakePoint(
 						position.x + ((CGFloat)iconSize - labelSize.width) / 2.0,
 						position.y + (CGFloat)iconSize)
 					  size:NSMakeSize(labelSize.width, (CGFloat)WSIconLabelHeight)];
+		[NSGraphicsContext saveGraphicsState];
+		[[NSBezierPath bezierPathWithRect:labelBand] addClip];
 		[label drawInRect:labelRect withAttributes:attributes];
+		[NSGraphicsContext restoreGraphicsState];
 	}
 }
 

@@ -160,6 +160,9 @@ static NSString *fn_size_string(WSItem *item)
 		[_browser setMinColumnWidth:120.0];
 		[_browser setMaxVisibleColumns:3];
 		[_browser setSeparatesColumns:YES];
+		/* **EACH SEPARATOR IS A HANDLE, AND EACH COLUMN SCROLLS ITSELF.** The browser implements the per-column
+		 * scroll views; the resizing type is the caller's choice, and this is the caller that wants it. */
+		[_browser setColumnResizingType:NSBrowserUserColumnResizing];
 		[_browser setHasHorizontalScroller:YES];
 		[_browser setTarget:self];
 		[_browser setAction:@selector(browserSelectionChanged:)];

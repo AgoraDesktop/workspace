@@ -8,7 +8,8 @@
  * groups; natural order is a rule about digits (`file2` before `file10`); date, size and Kind are the three column
  * keys. The outline's expansion is checked ACROSS a reload, because that is the property an identity-based expanded
  * set loses: the reload makes new `WSItem` objects and the view has to re-expand by path. Rename uses the table's
- * field editor and one `NSFileManager` move.
+ * field editor and one `NSFileManager` move. **And the Name cell carries the item's icon**, set through the same
+ * `-outlineView:willDisplayCell:…` door the table uses, so a row's picture is checked without a window.
  */
 #import "WSItemKind.h"
 #import "WSItemModel.h"
@@ -16,6 +17,7 @@
 #import "WSListView.h"
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
@@ -364,6 +366,21 @@ int main(void)
 			      "an undeclared extension falls back to a readable kind, not dyn.…");
 		}
 		[odd release];
+	}
+
+	/* 8. THE ROW'S ICON, THROUGH THE SAME `willDisplayCell` DOOR THE TABLE USES. */
+	{
+		NSInteger folderRow = rowForName(list, @"Folder 2");
+		NSInteger fileRow = rowForName(list, @"notes.txt");
+		NSCell *folderCell = [list preparedCellAtColumn:0 row:folderRow];
+		NSCell *fileCell = [list preparedCellAtColumn:0 row:fileRow];
+		NSCell *dateCell = [list preparedCellAtColumn:1 row:fileRow];
+
+		check([folderCell image] != nil && [[folderCell image] size].width == 16.0
+		      && [[folderCell image] size].height == 16.0,
+		      "a folder row's Name cell carries its 16-point icon");
+		check([fileCell image] != nil, "a file row's Name cell carries its type's icon");
+		check([dateCell image] == nil, "and a non-Name cell carries no icon of its own");
 	}
 
 	[probe release];

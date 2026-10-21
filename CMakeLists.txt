@@ -42,6 +42,7 @@ add_executable(Workspace
     src/WSFileOperations.m
     src/WSFileWindowController.m
     src/WSHistory.m
+    src/WSIconLabel.m
     src/WSIconLayout.m
     src/WSItemIcons.m
     src/WSItemKind.m

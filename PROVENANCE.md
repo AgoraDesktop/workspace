@@ -9,6 +9,7 @@ third-party code to licence.
 | the window levels | `libagora-drawing`'s `CGWindowLevel.h` (`kCGDesktopWindowLevel`) |
 | the wallpaper's endpoints | `window-server/ARGENTUM.md`'s own samples — `(108,55,29)` and `(18,14,5)` |
 | the compositor it is a client of | `../window-server`, as `agora_shell` through the AppKit's seam |
+| the icon art | **Frost v0.3.1** (MIT), vendored in `../libagora-iconservices/themes/Frost` and reached through Icon Services |
 | third-party code | **none** |
 | licence | MIT, per file (`LICENSE`) |
 
@@ -39,13 +40,21 @@ Cocoa's bottom-left appears only in the view's drawing and hit-testing, converte
 
 **An icon is an `IconRef` from `libagora-iconservices` (F2), cached per item.** `AGIconCreateWithURL` already
 prefers an application bundle's declared icon and falls back to the type's generic; a document's own icon is a
-later step. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built, and wiring its stream to
-`WSItemModel` is the step after this surface.
+later step. **The art is Frost**: `libagora-iconservices` vendors the MIT theme and the demo points
+`AGORA_ICON_THEME` at the checkout's `themes/Frost`, so the desktop's folders and file types are Frost's even
+before the library is installed. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built, and
+wiring its stream to `WSItemModel` is the step after this surface.
 
 **And the labels are centred GEOMETRICALLY, because the text system does not honour ALIGNMENT.** MEASURED, the
 hard way: `-drawInRect:withAttributes:` never mentions alignment in `libagora-app/NSStringDrawing.m`, so a
 paragraph style's `NSCenterTextAlignment` left the text exactly where it was. The view now measures the string
 with `-sizeWithAttributes:` and hands `-drawInRect:` a rectangle of exactly that width, centred on the icon.
+
+**AND AN ICON IS UP-RIGHT IN BOTH OF WORKSPACE'S COORDINATE SYSTEMS.** The Desktop draws y-up and the file
+window's flipped `WSIconView` draws y-down; `NSImageRep -drawInRect:` used to hand the same rect to
+`CGContextDrawImage` in both, so Frost's folder icons were upright in one and upside-down in the other.
+MEASURED with the vendored theme; fixed in the AppKit with the y-up mirror, and `libagora-app/tests/image_draw.m`
+is the regression. See `../libagora-app/PROVENANCE.md` §24.
 
 ## The desktop is two levels
 
@@ -122,7 +131,13 @@ the trace above, rather than a photograph.
 this repository's own
 code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToolbarItem`, `NSSplitView`, `NSOutlineView`,
 `NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
-separate so each can be measured without the others.
+separate so each can be measured without the others. **The sidebar is resizable, and its divider is a GUTTER:** the
+split view uses `NSSplitViewDividerStylePaneSplitter`, the same eighteen-point, three-ring grip the browser's columns
+use. The sidebar's rows fit, so its vertical bar is autohidden too (`NSScrollView -autohidesScrollers`).
+**A VIEW SWAP RESETS THE CONTENT CLIP'S ORIGIN:** the clip view keeps its bounds origin when its document is replaced,
+so a scrolled icon grid would have handed that offset to the column browser and drawn the browser as if it were
+scrolled to the same place. `WSFileWindowController`'s swap resets it to (0, 0) after setting the new document;
+`tests/file_window.m` scrolls the grid before Column -> Icon -> Column and checks the browser is back at column zero.
 
 **THE FINDING: A FLIPPED ROOT CONTENT VIEW IS PLACED AS IF IT WERE UNFLIPPED IN THE LIVE DRAWING PATH.**
 `NSWindow -cg_drawContentInContext:` calls `[_contentView displayRect:]` directly, while the offscreen walk
@@ -132,9 +147,23 @@ for a flipped view, the DRAW was not. The window keeps an unflipped content view
 Cocoa's y-up space. This is an AppKit-side defect for the next time the view tree is touched; it is recorded here
 rather than fixed by making the shell's layout depend on an accident.
 
-**AND THE CONTENT VIEW'S STRIPS ARE THE SHELL'S, NOT A VIEW'S.** `-resizeSubviewsWithOldSize:` lays out the path bar
-(24 points), the status bar (22) and the split view between them; `tests/file_window.m` checks those frames after a
-700×400 resize, so the window is a shell that can be resized rather than one that only looks right at birth.
+**AND THE CONTENT VIEW'S STRIPS ARE CONSTRAINTS, BECAUSE THE RESIZE HOOK NEVER RAN.** The first shell laid the path
+bar (24 points), the status bar (22) and the split view between them in `-resizeSubviewsWithOldSize:` — and this
+tier's `NSView -setFrame:` does NOT call that hook, while a window resize sets the content view's FRAME. The strips
+kept the geometry they were born with. They are Auto Layout constraints now: the path bar is pinned to the content's
+top with its height, the status bar to the bottom with its, and the split view fills the band and the width. The
+split view's delegate answers `-splitView:shouldAdjustSizeOfSubview:` with YES only for the content pane, so the
+sidebar keeps its width and the content absorbs the resize; `-splitViewDidResizeSubviews:` then refreshes the
+document view inside the scroll view. `tests/file_window.m` resizes the window to 700×400 and then 1000×500, checks
+every strip and both panes, and follows the icon view into its new clip width.
+
+**AND THE ENGINE NEEDED A FIX TO MAKE THAT TRUE.** A control's intrinsic size contributes optional hugging and
+compression constraints, and a leading/trailing pair shares the control's x and width. One required projection per
+sweep left a control pinned to both edges of a 700-point parent at x=76 with an intrinsic width of 10: the trailing
+projection moved the x the leading one had just set, and the optional pull was never fully overridden. The solver
+now projects the required rows to convergence inside each sweep and measures convergence by the NET move across the
+sweep; `tests/auto_layout.m` case 16 is the regression. The outer break is in points (1e-5), which is what stopped an
+ordinary file window from spending its whole 400-sweep budget on a fraction of a point.
 
 ## W3 — the icon view, the drag session and the alias gap
 
@@ -153,6 +182,11 @@ class list:
   starts a session with one item per icon, and is a registered destination for the same type. The operation is
   `Move` within a volume, `Copy` across, `Option` Copy, `Command` across Move and `Command-Option` Link; the
   destination is a folder icon or the window's folder; all destinations are preflighted before anything moves.
+- **THE LABEL IS CUT TO ITS CELL, IN THE MIDDLE.** The first version measured the name and centred that width on
+  the icon, so a long directory name was wider than its cell and its two halves landed in the neighbouring cells.
+  `WSIconLabelText` (`WSIconLabel.h`) binary-searches the longest head/tail pair that fits `cellWidth - 4`, keeping
+  an ellipsis; `WSIconView` and `WSDesktopView` then clip the drawing to the cell. `tests/icon_view.m` pins a short
+  name unchanged, a long name shortened with an ellipsis, and the truncated width inside the cell.
 - **A LINK IS A SYMBOLIC LINK UNTIL `WSAlias`.** The plan's alias is a bookmark record and that class is W6's, so
   the Link operation is `symlink(2)` today. This is stated in `WSIconView.h`, `DESIGN.md` and the README rather than
   presenting a symlink as a Mac alias.
@@ -193,20 +227,53 @@ expanded set is not persisted to disk; that is W5's outline autosave, if it is w
 
 `tests/list_view.m` measures the name, size, date and Kind orders over a deliberately dated and sized tree; the
 four column values; a folder open across a reload with its child visible; a rename through the field editor; the
-Return/Right/Left/Command-Down keys; and an undeclared `.md` file's kind not being a `dyn.…` UTI. Still absent: list
-drag/drop and row icons (the W4 deliverable is the columns, disclosure, sorting and rename).
+Return/Right/Left/Command-Down keys; a 16-point icon on the Name cell and none on the other columns; and an
+undeclared `.md` file's kind not being a `dyn.…` UTI. Still absent: list drag/drop.
+
+**THE NAME CELL'S ICON IS A CELL-CLASS DECISION, AND `--list-view` HAD A SETTER BUG.** `WSListNameCell` draws its
+`NSImage` through `-drawingRectForBounds:` so the field editor inherits the same inset, and `WSListView` fills it
+through `willDisplayCell` rather than making the data source return a compound value. The flag that opens the scene
+was a second finding: both `WSApplication` mode setters assigned the mode unconditionally, so the fixed list-then-column
+call order reset `--list-view` to 0; a false flag now leaves the other mode standing. MEASURED in the demo's
+`--list-view` window.
 
 ## W5 — the column view, and the browser it stands on
 
 **`WSColumnView` IS THIS REPOSITORY'S OWN CODE; `NSBrowser` IS `libagora-app`'S.** The browser is table-backed
-because this tree has no `NSMatrix`: one `NSScrollView` of side-by-side `NSTableView`s, with the 10.6 delegate surface
-and `NSBrowserCell`. The workspace's view owns the child models, the cell contents, the selection-to-next-column
-relationship and the preview.
+because this tree has no `NSMatrix`: one horizontal `NSScrollView` whose document holds one vertical `NSScrollView` per
+column, each with an `NSTableView`, and the 10.6 delegate surface and `NSBrowserCell`. The workspace's view owns the
+child models, the cell contents, the selection-to-next-column relationship and the preview.
+
+**THE COLUMNS SCROLL AND RESIZE INDIVIDUALLY, AND THE VIEW ASKS FOR THE LATTER.** The browser builds Finder's
+256-column pool, so empty slots are visible columns to the right and a column's width survives stepping away from
+it; only the visible slots size the horizontal document. A tall folder's vertical scroller
+moves that column alone; the browser's outer scroll view is horizontal only. A column whose rows fit HIDES its bar
+(`-autohidesScrollers:YES`), so an empty or short column is all content and a bar appears only when it is needed.
+`WSColumnView` sets `NSBrowserUserColumnResizing`, which turns the gap between columns into a drag handle: `NSBrowser`
+draws the same eighteen-point, three-ring gutter the split view's pane splitter uses, tracks the drag,
+consults the delegate's `-browser:shouldSizeColumn:forUserResize:toWidth:`, and re-tiles from the running sum of
+per-column widths. `tests/column_view.m` checks the mode, that each column owns a vertical scroller, and that a
+three-row column hides it; `libagora-app/tests/browser.m` measures the scroll independence and a forty-point
+separator drag.
 
 **THE PREVIEW IS A FIXED RIGHTMOST PANEL, NOT A BROWSER COLUMN.** The plan's "preview column" is satisfied visually
 and functionally: it is the rightmost column of the window, it follows the browser's selection, and it stays put while
 the columns scroll. Putting a Quick Look preview *inside* the browser would need W9's generators and panel; this
 panel shows metadata only, and `README.md` names that boundary.
+
+**NAVIGATING INTO A FOLDER SCROLLS THE COLUMNS ALL THE WAY OVER.** Selecting a branch opens the column to its right;
+the browser's own `-scrollColumnToVisible:` only promised that the SELECTED column was in view, so the new column could
+sit past the right edge. `NSBrowser` now scrolls its clip view to the document's end after any successful selection,
+which puts the newest column against the right edge; `tests/column_view.m` checks the clip view's origin against the
+document's maximum. A leaf truncates the columns to its right, so the selected column is the last one and the same
+rule shows it.
+
+**AND THE BROWSER'S FRAME SET DID NOT RE-TILE ITS OWN SCROLL VIEW.** `WSColumnView` lays the browser beside the
+preview by setting the browser's FRAME; this tier's `NSView -setFrame:` does not call `-resizeSubviewsWithOldSize:`,
+and `NSBrowser` only re-tiled in `-setFrameSize:`. The browser's inner scroll view therefore kept the width it had,
+and widening the window opened a gap between the last column and the preview panel. `NSBrowser -setFrame:` now
+re-tiles on a size change, which is the same rule `NSScrollView` and `NSSplitView` already follow; `tests/browser.m`
+and `tests/column_view.m` both check the scroll view's width after a frame change.
 
 **SELECTING A FOLDER OPENS THE NEXT COLUMN; SELECTING A FILE DOES NOT.** The browser's delegate returns the child
 count for column N+1 from the selected row in column N; a file returns zero, so the browser leaves the columns as they
@@ -241,9 +308,10 @@ drop-on-it contract are §5.3's and W7's; the **operation** is complete and test
 directory and an EOCD, written by `AGZipBuilder` in `WSFileOperations.m`. The probe reads the local signature and the
 entry name from the bytes. ZIP64 is absent, so an archive over 4 GB or 65,535 entries is refused by name.
 
-**NAMED DEVIATIONS.** The conflict question is a MODAL PANEL, not a sheet, because this tier has no
-`NSPanel`/`NSAlert`; the progress window has no Cancel; a multi-item operation that fails halfway can leave the
-items already moved. `README.md` names all three rather than implying a rollback the code does not perform.
+**NAMED DEVIATIONS.** The conflict question is a MODAL PANEL, not a sheet, because `WSConflictSheet` was written
+before the tier had `NSPanel`/`NSAlert` and has not moved to them; the progress window has no Cancel; a multi-item
+operation that fails halfway can leave the items already moved. `README.md` names all three rather than implying a
+rollback the code does not perform.
 
 `tests/file_ops.m` measures New Folder, Duplicate, Rename, Move, Copy across `/dev/shm`, conflict Skip/Keep Both,
 progress counts, Trash/Undo/Put Back, Empty and Compress with Undo; `tests/trash.m` measures recycle, unique names,

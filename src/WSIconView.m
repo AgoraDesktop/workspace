@@ -16,6 +16,7 @@
 #import "WSIconView.h"
 
 #import "WSFileOperations.h"
+#import "WSIconLabel.h"
 #import "WSIconLayout.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
@@ -23,6 +24,7 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSText.h>
@@ -46,6 +48,19 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 
 #define WS_ICON_DRAG_THRESHOLD 4.0
 #define WS_ICON_SPRING_DELAY 0.6
+
+/* THE LABEL BAND'S THREE NUMBERS: the air between the icon and its name, the air between a selection's edge and what
+ * it contains, and the corner a selection's wash and ring are both rounded by. The gap is used by the drawing and by
+ * the rename field, which must land exactly where the label was. */
+static const NSInteger WSIconLabelGap = 2;
+static const NSInteger WSIconHighlightInset = 2;
+static const NSInteger WSIconHighlightRadius = 4;
+/* THE RING IS STROKED ON THE HIGHLIGHT'S EDGE, so it paints half a point OUTSIDE the rectangle and antialiases a
+ * point either side of that. This is how far an invalidation has to reach past the rectangle to catch all of it:
+ * TWO points, because a one-point stroke centred on an edge leaves a pixel either side of it once the rasterizer has
+ * covered the partial ones — MEASURED on a live screen, one point was enough to clear the stroke and left a ghost of
+ * its antialiasing when the selection moved from icon to icon. */
+static const NSInteger WSIconHighlightSlop = 2;
 
 /* ---- the two facts a drop needs about the file system ------------------------------------------ */
 
@@ -143,13 +158,17 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 - (BOOL)becomeFirstResponder
 {
-	[self setNeedsDisplay:YES];
+	/* **BECOMING FIRST RESPONDER CHANGES ONE RING.** The focus ring is drawn round the SELECTED item — it is the
+	 * only mark this view has that depends on being first responder — so the click that focuses the view needs that
+	 * one cell repainted, not the whole grid. This used to invalidate the whole view, which is how a click came to
+	 * dirty 647x514 of a window in which two cells had changed. */
+	[self invalidateItemAtIndex:[self selectedIndex]];
 	return YES;
 }
 
 - (BOOL)resignFirstResponder
 {
-	[self setNeedsDisplay:YES];
+	[self invalidateItemAtIndex:[self selectedIndex]];
 	return YES;
 }
 
@@ -214,6 +233,8 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 - (void)selectIndex:(NSInteger)index
 {
+	NSIndexSet *before = [self snapshotSelection];
+
 	if (index < 0 || index >= [self itemCount]) {
 		index = -1;
 	}
@@ -222,26 +243,30 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		[_selection addIndex:(NSUInteger)index];
 	}
 	_anchorIndex = index;
-	[self setNeedsDisplay:YES];
+	[self invalidateSelectionChangeFrom:before];
 }
 
 - (void)selectIndexes:(NSIndexSet *)indexes
 {
+	NSIndexSet *before = [self snapshotSelection];
+
 	[_selection removeAllIndexes];
 	if (indexes != nil) {
 		[_selection addIndexes:indexes];
 	}
 	_anchorIndex = [self selectedIndex];
-	[self setNeedsDisplay:YES];
+	[self invalidateSelectionChangeFrom:before];
 }
 
 - (void)selectAll:(id)sender
 {
+	NSIndexSet *before = [self snapshotSelection];
+
 	(void)sender;
 	[_selection removeAllIndexes];
 	[_selection addIndexesInRange:NSMakeRange(0, (NSUInteger)[self itemCount])];
 	_anchorIndex = ([self itemCount] > 0) ? 0 : -1;
-	[self setNeedsDisplay:YES];
+	[self invalidateSelectionChangeFrom:before];
 }
 
 - (NSSize)cellSize
@@ -352,6 +377,84 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 	return NSMakeRect(position.x, position.y, (CGFloat)_iconSize, (CGFloat)_iconSize);
 }
 
+/* **WHAT A SELECTION LOOKS LIKE: ONE RECTANGLE, AND THE RING IS ITS OUTLINE.** The CELL is asymmetric on purpose
+ * (it starts at the icon and carries its padding to the right and above, so neighbouring hit rectangles share an edge
+ * and never overlap), which makes it the wrong shape to PAINT: filling it put the wash a padded half-cell to the right
+ * of the folder it belonged to. And the focus ring was drawn round the bare ICON, two points out — a different
+ * rectangle from the wash, so the two disagreed, and its top edge landed exactly on the label's first line, cutting
+ * the name in half.
+ *
+ * So the highlight is its own rectangle: the cell's WIDTH, centred on the icon, and tall enough to hold the icon, the
+ * label and `WSIconHighlightInset` points of air on every side. The fill and the ring both take it, which is what
+ * makes the colour and the outline the same shape. */
+- (NSRect)highlightRectAtIndex:(NSInteger)index
+{
+	NSRect iconRect = [self iconRectAtIndex:index];
+	NSSize cell = [self cellSize];
+	CGFloat side = (cell.width - iconRect.size.width) / 2.0;
+
+	return NSMakeRect(iconRect.origin.x - side,
+			  iconRect.origin.y - (CGFloat)WSIconHighlightInset,
+			  cell.width,
+			  iconRect.size.height + (CGFloat)WSIconLabelGap + (CGFloat)WSIconLabelHeight +
+			  2.0 * (CGFloat)WSIconHighlightInset);
+}
+
+/* **THE SELECTION BEFORE A CHANGE, AS A SNAPSHOT, BECAUSE `-copy` IS NOT ONE.** This tree's immutable family
+ * answers `-copy` with `[self retain]` — right for an NSIndexSet, and a trap for a MUTABLE one: `[[_selection copy]
+ * autorelease]` hands back the live set, so a caller that removes an index from `_selection` has also removed it
+ * from its "before", and the cell it left is never repainted. MEASURED as a selection wash left behind on the old
+ * cell. `-mutableCopy` builds a real second set, which is what a snapshot is. */
+- (NSIndexSet *)snapshotSelection
+{
+	NSMutableIndexSet *snapshot = [[_selection mutableCopy] autorelease];
+
+	return snapshot;
+}
+
+/* **A SELECTION THAT MOVED TWO CELLS REPAINTS TWO CELLS.** The view used to answer every change with
+ * `-setNeedsDisplay:`, which invalidates the WHOLE view — so a click, a Shift-extension and every arrow key told
+ * the window that all of it was stale, the window drew the whole tree again and copied the whole frame. MEASURED in
+ * a live session: 20-45 ms of drawing and 2-3 MB across the socket to move a wash from one folder to the next.
+ *
+ * So an index is invalidated by its own highlight rectangle — the same rectangle the wash and the ring are drawn in,
+ * which is what makes it the right unit — and a selection change asks for the union of what it touched: everything
+ * selected BEFORE the change and everything selected after it. `before` is the caller's snapshot, taken before it
+ * mutates `_selection`; a set that grew or shrank has both halves in the union, and an index in both is simply
+ * asked for twice (a union of rectangles, which `-setNeedsDisplayInRect:` takes). */
+- (void)invalidateItemAtIndex:(NSInteger)index
+{
+	if (index >= 0 && index < [self itemCount]) {
+		/* **AND THE RECTANGLE IS EXPANDED BY THE RING, WHICH IS DRAWN ON ITS EDGE.** The wash is INSIDE the
+		 * highlight rectangle; the focus ring is STROKED ON it, so half of the stroke — and the antialiasing
+		 * either side of it — lives OUTSIDE. Invalidating the rectangle exactly left that half-point behind:
+		 * MEASURED on a live screen, moving the selection from icon to icon left a thin outline in every cell it
+		 * had left, and the lines only went when a full frame repainted the window. `WSIconHighlightSlop` is the
+		 * ring's half-width rounded up to a whole point, so the pixels the ring touches are in the damage. */
+		[self setNeedsDisplayInRect:NSInsetRect([self highlightRectAtIndex:index],
+						-(CGFloat)WSIconHighlightSlop,
+						-(CGFloat)WSIconHighlightSlop)];
+	}
+}
+
+- (void)invalidateSelectionChangeFrom:(NSIndexSet *)before
+{
+	NSMutableIndexSet *changed = [[NSMutableIndexSet alloc] init];
+	NSUInteger index;
+
+	if (before != nil) {
+		[changed addIndexes:before];
+	}
+	[changed addIndexes:_selection];
+	for (index = [changed firstIndex]; index != NSNotFound; index = [changed indexGreaterThanIndex:index]) {
+		[self invalidateItemAtIndex:(NSInteger)index];
+	}
+	[changed release];
+}
+
+/* The view's own name for that rectangle, for the probe: the fill and the focus ring are the same rect. */
+- (NSRect)cg_highlightRectAtIndex:(NSInteger)index { return [self highlightRectAtIndex:index]; }
+
 - (NSRect)cellRectAtIndex:(NSInteger)index
 {
 	NSPoint position = [[_positions objectAtIndex:(NSUInteger)index] pointValue];
@@ -404,38 +507,65 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 	BOOL focused = ([[self window] firstResponder] == self);
 	NSInteger i;
 
-	(void)dirtyRect;
 	[[NSColor whiteColor] setFill];
 	[[NSBezierPath bezierPathWithRect:[self bounds]] fill];
 
 	for (i = 0; i < count; i++) {
 		WSItem *item = [items objectAtIndex:(NSUInteger)i];
-		NSPoint position = [[_positions objectAtIndex:(NSUInteger)i] pointValue];
 		NSRect iconRect = [self iconRectAtIndex:i];
 		NSImage *icon = [self iconForIndex:i];
 		BOOL selected = [_selection containsIndex:(NSUInteger)i];
 		NSDictionary *attributes;
 		NSSize labelSize;
 		NSRect labelRect;
+		NSRect cellRect = [self cellRectAtIndex:i];
+		NSRect highlightRect = [self highlightRectAtIndex:i];
+		NSString *label;
 
+		/* **AND AN ITEM THE DIRTY RECTANGLE DOES NOT TOUCH IS NOT DRAWN AT ALL.** The clip already stops its pixels,
+		 * but a name is CUT TO THE CELL BY MEASURING IT (`WSIconLabelText`) before anything is drawn, and a measure is
+		 * a layout and a glyph run — so the clock was spent whether or not a pixel was painted. The highlight is the
+		 * unit because it holds everything this loop draws for the item: the wash, the icon and the label. */
+		if (!NSIsEmptyRect(dirtyRect) && !NSIntersectsRect(dirtyRect, highlightRect)) {
+			continue;
+		}
 		if (selected) {
 			[[NSColor colorWithCalibratedRed:0.30 green:0.50 blue:0.90 alpha:0.35] setFill];
-			[[NSBezierPath bezierPathWithRect:[self cellRectAtIndex:i]] fill];
+			[[NSBezierPath bezierPathWithRoundedRect:highlightRect
+							 xRadius:(CGFloat)WSIconHighlightRadius
+							 yRadius:(CGFloat)WSIconHighlightRadius] fill];
 		}
 		if (icon != nil) {
 			[icon drawInRect:iconRect];
 		}
-		attributes = [NSDictionary dictionaryWithObjectsAndKeys:
-			selected ? [NSColor whiteColor] : [NSColor blackColor], NSForegroundColorAttributeName, nil];
-		labelSize = [[item name] sizeWithAttributes:attributes];
-		labelRect = NSMakeRect(position.x + ((CGFloat)_iconSize - labelSize.width) / 2.0,
-				       position.y + (CGFloat)_iconSize + 2.0,
+		/* **THE SELECTED NAME STAYS IN BLACK INK ON THE WASH.** A selected name used to be drawn in white on a 35%
+		 * blue wash over white — a wash is not a plate, and the result was the ghost the screenshot showed. The
+		 * table view reached the same verdict for the platform's own light accent ("white on it is a wash,
+		 * MEASURED"), and one rule for selected ink across the tier is worth more than one gesture's brightness. */
+		attributes = [NSDictionary dictionaryWithObjectsAndKeys:[NSColor blackColor],
+							  NSForegroundColorAttributeName, nil];
+		/* **THE LABEL IS THE CELL'S, NOT THE NAME'S, AND IT IS CENTRED ON THE ICON.** A directory's name can be longer
+		 * than the cell, and drawing its measured width centred on the icon spilled half of it into each neighbour.
+		 * The label is cut in the middle to the cell's width and clipped to the highlight as a second guard — and it
+		 * is centred on the ICON, not on the cell, because the cell's left edge is the icon's and the label used to
+		 * sit a padded half-cell to the right of the folder it named. */
+		label = WSIconLabelText([item name], cellRect.size.width - 4.0, attributes);
+		labelSize = [label sizeWithAttributes:attributes];
+		labelRect = NSMakeRect(NSMidX(iconRect) - labelSize.width / 2.0,
+				       NSMaxY(iconRect) + (CGFloat)WSIconLabelGap,
 				       labelSize.width, (CGFloat)WSIconLabelHeight);
-		[[item name] drawInRect:labelRect withAttributes:attributes];
+		[NSGraphicsContext saveGraphicsState];
+		[[NSBezierPath bezierPathWithRect:highlightRect] addClip];
+		[label drawInRect:labelRect withAttributes:attributes];
+		[NSGraphicsContext restoreGraphicsState];
 
+		/* **THE RING IS THE HIGHLIGHT'S OUTLINE, DRAWN LAST SO IT IS NEVER PAINTED OVER** — and because the
+		 * highlight encloses the label rather than stopping at the icon, it no longer strikes through the name. */
 		if (focused && i == [self selectedIndex]) {
 			[[NSColor darkGrayColor] setStroke];
-			[[NSBezierPath bezierPathWithRect:NSInsetRect(iconRect, -2.0, -2.0)] stroke];
+			[[NSBezierPath bezierPathWithRoundedRect:highlightRect
+							 xRadius:(CGFloat)WSIconHighlightRadius
+							 yRadius:(CGFloat)WSIconHighlightRadius] stroke];
 		}
 	}
 
@@ -454,13 +584,14 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 - (void)extendSelectionToIndex:(NSInteger)index
 {
+	NSIndexSet *before = [self snapshotSelection];
 	NSInteger anchor = (_anchorIndex >= 0) ? _anchorIndex : index;
 	NSInteger lo = (anchor < index) ? anchor : index;
 	NSInteger hi = (anchor < index) ? index : anchor;
 
 	[_selection removeAllIndexes];
 	[_selection addIndexesInRange:NSMakeRange((NSUInteger)lo, (NSUInteger)(hi - lo + 1))];
-	[self setNeedsDisplay:YES];
+	[self invalidateSelectionChangeFrom:before];
 }
 
 - (void)moveSelectionBy:(NSInteger)delta extend:(BOOL)extend
@@ -652,13 +783,15 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		}
 		[self extendSelectionToIndex:index];
 	} else if (command) {
+		NSIndexSet *before = [self snapshotSelection];
+
 		if ([_selection containsIndex:(NSUInteger)index]) {
 			[_selection removeIndex:(NSUInteger)index];
 		} else {
 			[_selection addIndex:(NSUInteger)index];
 		}
 		_anchorIndex = index;
-		[self setNeedsDisplay:YES];
+		[self invalidateSelectionChangeFrom:before];
 	} else if (![_selection containsIndex:(NSUInteger)index]) {
 		[self selectIndex:index];
 	} else {
@@ -1001,7 +1134,7 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 {
 	NSInteger index = [self selectedIndex];
 	WSItem *item;
-	NSRect cell;
+	NSRect highlight;
 	NSTextField *field;
 	NSRect frame;
 
@@ -1012,9 +1145,12 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 		return NO;
 	}
 	item = [[_model items] objectAtIndex:(NSUInteger)index];
-	cell = [self cellRectAtIndex:index];
-	frame = NSMakeRect(cell.origin.x, cell.origin.y + (CGFloat)_iconSize + 1.0,
-			   cell.size.width, (CGFloat)WSIconLabelHeight + 4.0);
+	/* **THE FIELD LANDS WHERE THE LABEL WAS** — centred on the icon, inside the highlight's width, not on the cell's
+	 * off-centre rectangle; otherwise the name jumped a padded half-cell sideways the moment Return was pressed. */
+	highlight = [self highlightRectAtIndex:index];
+	frame = NSMakeRect(highlight.origin.x + 2.0,
+			   NSMaxY([self iconRectAtIndex:index]) + (CGFloat)WSIconLabelGap - 2.0,
+			   highlight.size.width - 4.0, (CGFloat)WSIconLabelHeight + 4.0);
 	field = [[NSTextField alloc] initWithFrame:frame];
 	[field setStringValue:[item name]];
 	[field setEditable:YES];

@@ -10,6 +10,7 @@
  * Link) and the file operation each policy performs. Offscreen, with a temporary tree on `/tmp` and a second on
  * `/dev/shm` so "across a volume" is a fact rather than a claim.
  */
+#import "WSIconLabel.h"
 #import "WSIconLayout.h"
 #import "WSIconView.h"
 #import "WSItemModel.h"
@@ -18,6 +19,7 @@
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSPasteboard.h>
+#import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSText.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSWindow.h>
@@ -82,6 +84,11 @@ static NSInteger indexNamed(WSIconView *view, NSString *name)
 	}
 	return -1;
 }
+
+/* THE UNION OF THE VIEW'S INVALIDATED RECTANGLES: the window's private seam, declared here as the other probes do. */
+@interface NSView (AGIconDamageProbe)
+- (NSRect)cg_dirtyUnion;
+@end
 
 @interface NSApplication (APPKITIconProbe)
 - (void)cg_addWindow:(NSWindow *)window;
@@ -240,6 +247,20 @@ int main(void)
 	probe = [[AGIconProbe alloc] init];
 	[view setDelegate:probe];
 
+	/* 0. THE LABEL IS CUT TO THE CELL, NOT TO ITS OWN MEASURED WIDTH. */
+	{
+		NSDictionary *attributes = [NSDictionary dictionary];
+		NSString *shortName = WSIconLabelText(@"notes.txt", 76.0, attributes);
+		NSString *longName = WSIconLabelText(@"64 Ultimax Banked Cartridge Template", 76.0, attributes);
+
+		check([shortName isEqual:@"notes.txt"], "a short name is unchanged");
+		check([longName length] < [@"64 Ultimax Banked Cartridge Template" length]
+		      && [longName rangeOfString:@"…"].location != NSNotFound,
+		      "a long name is cut in the middle with an ellipsis");
+		check([longName sizeWithAttributes:attributes].width <= 76.01,
+		      "and the cut label fits the cell it is drawn in");
+	}
+
 	/* 1. THE GRID IS THE DESKTOP'S ENGINE IN THE FILE WINDOW'S ORDER. */
 	check(near([[[view cg_positions] objectAtIndex:0] pointValue].x, 16.0)
 	      && near([[[view cg_positions] objectAtIndex:0] pointValue].y, 16.0),
@@ -251,6 +272,52 @@ int main(void)
 	      && near([[[view cg_positions] objectAtIndex:4] pointValue].y, 104.0),
 	      "and the fifth wraps to the next ROW at the left edge");
 	check(near([view contentHeightForWidth:400.0], 192.0), "two rows make a 192-point document");
+
+	/* 1b. **ONE RECTANGLE WEARS BOTH THE WASH AND THE RING, CENTRED ON THE ICON AND CLEAR OF THE NAME.** The wash used
+	 * to be the cell's — which carries its padding to the right and above, so it sat off-centre on the folder — while the
+	 * ring was the bare icon's, two points out, with its top edge on the label's first line. The names below are the
+	 * arithmetic that made the screenshot wrong. */
+	{
+		NSRect icon = NSMakeRect([[[view cg_positions] objectAtIndex:0] pointValue].x,
+					  [[[view cg_positions] objectAtIndex:0] pointValue].y, 64.0, 64.0);
+		NSRect highlight = [view cg_highlightRectAtIndex:0];
+		CGFloat labelTop = NSMaxY(icon) + 2.0 + 16.0;	/* the icon, the gap, the label height */
+
+		check(near(NSMidX(highlight), NSMidX(icon)),
+		      "the selection's rectangle is centred on the icon, not on the cell's padding");
+		check(near(highlight.size.width, 80.0),
+		      "it is one cell wide, so neighbours never share a wash");
+		check(NSMinY(highlight) < NSMinY(icon) && NSMaxY(highlight) > labelTop,
+		      "and it encloses the icon and the whole label band");
+	}
+
+	/* 1c. **A SELECTION THAT MOVES ONE CELL REPAINTS ONE CELL.** The view used to answer a click with
+	 * `-setNeedsDisplay:`, which is "all of me": the window then drew every folder and every name and copied the whole
+	 * frame to move a wash from one cell to the next — MEASURED at 20-45 ms a click against 3-7 ms for the cells. So
+	 * what is asserted here is the SHAPE of the invalidation: the cell that was selected, the cell that now is, and
+	 * nothing else in the grid. */
+	[view setNeedsDisplay:NO];
+	[view selectIndex:0];
+	{
+		NSRect first = [view cg_highlightRectAtIndex:0];
+		NSRect second = [view cg_highlightRectAtIndex:1];
+		NSRect elsewhere = [view cg_highlightRectAtIndex:[view itemCount] - 1];
+
+		check([view needsDisplayInRect:first], "selecting a cell invalidates that cell");
+		/* **AND THE RING IS ON THE CELL'S EDGE, SO ITS STROKE IS OUTSIDE THE CELL.** A one-point stroke centred on
+		 * the highlight's edge paints half a point beyond it and antialiases a point either side; an invalidation
+		 * that stopped at the rectangle left a thin outline behind in the cell the selection had left. */
+		check(NSEqualRects([view cg_dirtyUnion], NSInsetRect(first, -2.0, -2.0)),
+		      "and the damage reaches two points past it, which is what erases the ring stroked on the edge");
+		check(![view needsDisplayInRect:elsewhere],
+		      "and not the rest of the grid, which is what makes a click a two-cell paint");
+
+		[view setNeedsDisplay:NO];
+		[view selectIndex:1];
+		check([view needsDisplayInRect:first] && [view needsDisplayInRect:second],
+		      "moving the selection invalidates the cell it left AND the cell it entered");
+		check(![view needsDisplayInRect:elsewhere], "and still nothing else");
+	}
 
 	/* 2. THE KEYBOARD MOVES THE SELECTION IN THE GRID. */
 	[view selectIndex:0];

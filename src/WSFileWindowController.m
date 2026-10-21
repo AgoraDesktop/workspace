@@ -33,6 +33,8 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSLayoutAnchor.h>
+#import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPathComponentCell.h>
@@ -100,50 +102,40 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 }
 @end
 
+
+/* **A NEW DOCUMENT ENTERS AT ITS ORIGIN.** The clip view keeps its bounds origin when the document changes, so a
+ * scrolled icon grid would hand that offset to the column browser (or the list) and the new view would draw as if it
+ * were scrolled to the same place. Resetting is the one line that makes a view swap show the new view's beginning. */
+static void fn_resetContentScroll(NSScrollView *scroll)
+{
+	NSClipView *clip = (NSClipView *)[scroll contentView];
+	NSPoint origin = NSZeroPoint;
+
+	if (clip == nil) {
+		return;
+	}
+	[clip scrollToPoint:origin];
+	[scroll reflectScrolledClipView:clip];
+}
+
 /* ============================================================================================ *
- * THE CONTENT VIEW — three strips in COCOA'S OWN y-UP system: the path bar at the top edge,     *
- * the status bar at the bottom, the split view between. A flipped root content view is the one  *
- * arrangement this tier's live drawing path does not place correctly, so the window keeps the    *
- * ordinary direction and the strips do the arithmetic.                                           *
+ * THE CONTENT VIEW — THREE STRIPS PLACED BY CONSTRAINTS.                                        *
+ *                                                                                                *
+ * **THE STRIPS USED TO BE FRAMES THE CONTENT VIEW COMPUTED ITSELF, AND A WINDOW RESIZE DID NOT   *
+ * MOVE THEM.** The arithmetic lived in `-resizeSubviewsWithOldSize:`, and this tier's           *
+ * `NSView -setFrame:` does NOT call that hook — a window resize sets the content view's FRAME.   *
+ * The three strips therefore kept the geometry they were born with. Auto Layout is the door      *
+ * that runs on a frame set (`-setFrame:` requests a pass), so the layout is constraints and      *
+ * there is no resize hook left to forget.                                                       *
+ *                                                                                                *
+ * The content view itself is UNMANAGED: it is the root, `NSWindow` sets its frame, and it is    *
+ * the ancestor that owns the constraints. The path bar, the split view and the status bar are    *
+ * the managed views.                                                                            *
  * ============================================================================================ */
 
-@interface WSFileContentView : NSView
-{
-	NSView *_pathBar;	/* NOT RETAINED: the content view owns its subviews */
-	NSView *_split;		/* NOT RETAINED */
-	NSView *_status;	/* NOT RETAINED */
-}
-- (void)setPathBar:(NSView *)pathBar splitView:(NSView *)split statusBar:(NSView *)status;
-@end
-
-@implementation WSFileContentView
-
-- (void)setPathBar:(NSView *)pathBar splitView:(NSView *)split statusBar:(NSView *)status
-{
-	_pathBar = pathBar;
-	_split = split;
-	_status = status;
-	[self layoutStrips];
-}
-
-- (void)layoutStrips
-{
-	NSRect bounds = [self bounds];
-	CGFloat width = bounds.size.width;
-	CGFloat height = bounds.size.height;
-
-	[_pathBar setFrame:NSMakeRect(0.0, height - WS_PATH_BAR_HEIGHT, width, WS_PATH_BAR_HEIGHT)];
-	[_split setFrame:NSMakeRect(0.0, WS_STATUS_BAR_HEIGHT, width,
-				    height - WS_PATH_BAR_HEIGHT - WS_STATUS_BAR_HEIGHT)];
-	[_status setFrame:NSMakeRect(0.0, 0.0, width, WS_STATUS_BAR_HEIGHT)];
-}
-
-- (void)resizeSubviewsWithOldSize:(NSSize)oldSize
-{
-	(void)oldSize;
-	[self layoutStrips];
-}
-
+@interface WSFileWindowController (WSFileWindowLayout)
+- (void)installStripConstraints;
+- (void)refreshContentSizes;
 @end
 
 /* ============================================================================================ *
@@ -155,7 +147,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 - (instancetype)initWithDirectory:(NSString *)directory
 {
 	NSWindow *window;
-	WSFileContentView *content;
+	NSView *content;
 
 	window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 900.0, 560.0)
 					     styleMask:(NSTitledWindowMask | NSClosableWindowMask |
@@ -190,14 +182,14 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		}];
 	}
 
-	content = [[WSFileContentView alloc] initWithFrame:[[window contentView] frame]];
+	content = [[NSView alloc] initWithFrame:NSZeroRect];
 	[window setContentView:content];
+	[content release];
 
 	[self buildPathBar];
 	[self buildContentAndSidebar];
 	[self buildStatusBar];
-	[content setPathBar:_pathBar splitView:_split statusBar:_status];
-	[content release];
+	[self installStripConstraints];
 
 	[self buildToolbar];
 	[self refresh];
@@ -235,10 +227,13 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	_split = [[NSSplitView alloc] initWithFrame:NSMakeRect(0.0, WS_PATH_BAR_HEIGHT, 900.0,
 							     560.0 - WS_PATH_BAR_HEIGHT - WS_STATUS_BAR_HEIGHT)];
 	[_split setVertical:YES];
-	[_split setDividerStyle:NSSplitViewDividerStyleThin];
+	/* **THE SIDEBAR'S DIVIDER IS THE SPLIT VIEW'S GUTTER**, the same eighteen-point pane splitter the browser's
+	 * columns use: a person can drag it, and the three rings say so. */
+	[_split setDividerStyle:NSSplitViewDividerStylePaneSplitter];
 
 	_sidebarScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WS_SIDEBAR_WIDTH, 500.0)];
 	[_sidebarScroll setHasVerticalScroller:YES];
+	[_sidebarScroll setAutohidesScrollers:YES];
 	[_sidebarScroll setBorderType:NSNoBorder];
 	[_sidebarScroll setDrawsBackground:YES];
 	_sidebar = [[NSOutlineView alloc] initWithFrame:[[_sidebarScroll contentView] bounds]];
@@ -284,6 +279,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	[_iconView setFileOperations:_fileOperations];
 	[_contentScroll setDocumentView:_iconView];
 
+	[_split setDelegate:self];
 	[_split addSubview:_sidebarScroll];
 	[_split addSubview:_contentScroll];
 	[_split adjustSubviews];
@@ -304,6 +300,55 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	[_status setTextColor:[NSColor darkGrayColor]];
 	[_status setStringValue:@""];
 	[[[self window] contentView] addSubview:_status];
+}
+
+/* ---- THE CONTENT VIEW'S CONSTRAINTS --------------------------------------------------------- */
+
+/* **THREE CONSTRAINTS PER STRIP, AND THE SPLIT VIEW IS THE ONE THAT FLEXES.** The path bar is pinned to the top
+ * with its height, the status bar to the bottom with its height, and the split view fills the band between them and
+ * the full width. The window's content view is the common ancestor, so every constraint is owned by it; the strips
+ * stop translating their autoresizing masks, because a frame written by the window would otherwise be a second,
+ * contradictory equation. */
+- (void)installStripConstraints
+{
+	NSView *content = [[self window] contentView];
+
+	[_pathBar setTranslatesAutoresizingMaskIntoConstraints:NO];
+	[_split setTranslatesAutoresizingMaskIntoConstraints:NO];
+	[_status setTranslatesAutoresizingMaskIntoConstraints:NO];
+
+	[NSLayoutConstraint activateConstraints:[NSArray arrayWithObjects:
+		[[_pathBar leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
+		[[_pathBar trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
+		[[_pathBar topAnchor] constraintEqualToAnchor:[content topAnchor]],
+		[[_pathBar heightAnchor] constraintEqualToConstant:WS_PATH_BAR_HEIGHT],
+
+		[[_split leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
+		[[_split trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
+		[[_split topAnchor] constraintEqualToAnchor:[_pathBar bottomAnchor]],
+		[[_split bottomAnchor] constraintEqualToAnchor:[_status topAnchor]],
+
+		[[_status leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
+		[[_status trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
+		[[_status bottomAnchor] constraintEqualToAnchor:[content bottomAnchor]],
+		[[_status heightAnchor] constraintEqualToConstant:WS_STATUS_BAR_HEIGHT],
+		nil]];
+}
+
+/* **THE DOCUMENT VIEW'S SIZE IS STILL THE SHELL'S, BECAUSE A SCROLL VIEW'S DOCUMENT IS NOT A STRIP.** The split
+ * view resized the content pane; the icon grid, the list and the browser inside it each answer a different
+ * question about how much room they need, so the delegate hook below asks after every pane resize and this does
+ * the arithmetic once. It runs AFTER the split view has written the pane frames — `-adjustSubviews` posts its
+ * notification at the end — which is why it reads the new clip bounds rather than the old ones. */
+- (void)refreshContentSizes
+{
+	[self refreshIconFrame];
+	if (_viewMode == 1 && _listView != nil) {
+		[_listView tile];
+	}
+	if (_viewMode == 2 && _columnView != nil) {
+		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
+	}
 }
 
 - (void)buildToolbar
@@ -503,6 +548,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 	}
 	if (mode == 0) {
 		[_contentScroll setDocumentView:_iconView];
+		fn_resetContentScroll(_contentScroll);
 		[_iconView setModel:_model];
 		[self refreshIconFrame];
 	} else if (mode == 1) {
@@ -515,6 +561,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 			[_listView setModel:_model];
 		}
 		[_contentScroll setDocumentView:_listView];
+		fn_resetContentScroll(_contentScroll);
 		[_listView reloadData];
 		[_listView tile];
 	} else {
@@ -526,6 +573,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 			[_columnView setModel:_model];
 		}
 		[_contentScroll setDocumentView:_columnView];
+		fn_resetContentScroll(_contentScroll);
 		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
 	}
 }
@@ -639,6 +687,10 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		item = [[[NSToolbarItem alloc] initWithItemIdentifier:identifier] autorelease];
 		[item setLabel:@"Back"];
 		[item setPaletteLabel:@"Back"];
+		/* **THE ARROW IS THE PLATFORM'S, NOT THIS APPLICATION'S.** `NSImageNameGoLeftTemplate` is a TEMPLATE, so
+		 * the toolbar draws it in its own ink — dimmed with the label when there is nowhere to go back to — which
+		 * is the whole reason the glyph is a stencil and not a picture of a grey arrow. */
+		[item setImage:[NSImage imageNamed:NSImageNameGoLeftTemplate]];
 		[item setTarget:self];
 		[item setAction:@selector(goBack:)];
 		[item setEnabled:[self canGoBack]];
@@ -648,6 +700,7 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 		item = [[[NSToolbarItem alloc] initWithItemIdentifier:identifier] autorelease];
 		[item setLabel:@"Forward"];
 		[item setPaletteLabel:@"Forward"];
+		[item setImage:[NSImage imageNamed:NSImageNameGoRightTemplate]];
 		[item setTarget:self];
 		[item setAction:@selector(goForward:)];
 		[item setEnabled:[self canGoForward]];
@@ -865,16 +918,28 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
 
 /* ---- THE WINDOW AND THE MENUS --------------------------------------------------------------- */
 
-- (void)windowDidResize:(NSNotification *)notification
+/* **THE SIDEBAR KEEPS ITS WIDTH, AND THE CONTENT ABSORBS THE WINDOW'S RESIZE.** Without this delegate answer the
+ * split view scales BOTH panes by the same fraction, so a wider window widens the places list as well as the files.
+ * The divider is still free to move the boundary: this only decides which pane grows when the SPLIT VIEW does. */
+- (BOOL)splitView:(NSSplitView *)splitView shouldAdjustSizeOfSubview:(NSView *)view
+{
+	(void)splitView;
+	return (view == _contentScroll);
+}
+
+/* THE PANES HAVE MOVED — a window resize, a divider drag, or the initial `-adjustSubviews`. The documents inside
+ * the content pane follow the new clip bounds here, after the split view has finished writing the pane frames. */
+- (void)splitViewDidResizeSubviews:(NSNotification *)notification
 {
 	(void)notification;
-	[self refreshIconFrame];
-	if (_viewMode == 1 && _listView != nil) {
-		[_listView tile];
+	/* **A DIVIDER DRAG IS FRAMES, NOT DOCUMENT LAYOUT.** The split view sets the panes' frames on every motion, and
+	 * the documents do not need to be re-tiled until the drag ends; re-laying the browser out for every motion made
+	 * the sidebar gutter crawl while the browser's own gutter was smooth. The split view posts one final
+	 * did-resize after it clears its dragging flag, and that is the pass that reaches here. */
+	if ([_split cg_isDraggingDivider]) {
+		return;
 	}
-	if (_viewMode == 2 && _columnView != nil) {
-		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
-	}
+	[self refreshContentSizes];
 }
 
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem

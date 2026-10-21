@@ -16,11 +16,14 @@
 #import "WSPlaces.h"
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBrowser.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSOutlineView.h>
 #import <AppKit/NSPathControl.h>
+#import <AppKit/NSScroller.h>
+#import <AppKit/NSScrollView.h>
 #import <AppKit/NSSegmentedControl.h>
 #import <AppKit/NSSplitView.h>
 #import <AppKit/NSTextField.h>
@@ -122,7 +125,16 @@ int main(void)
 	check(![first canGoBack] && ![first canGoForward], "a new window has nowhere to go back or forward to");
 
 	outline = [first cg_sidebarOutline];
+	check([first cg_splitView].dividerStyle == NSSplitViewDividerStylePaneSplitter
+	      && [[first cg_splitView] dividerThickness] == 18.0,
+	      "the sidebar's divider is the split view's eighteen-point gutter");
 	check([outline numberOfRows] == 6, "the sidebar expands two sections and their four places");
+	{
+		NSScrollView *sidebarScroll = [outline enclosingScrollView];
+
+		check([sidebarScroll autohidesScrollers] && [[sidebarScroll verticalScroller] isHidden],
+		      "and its six rows fit, so the sidebar's bar is hidden");
+	}
 	check([first outlineView:outline numberOfChildrenOfItem:nil] == 2, "the sidebar has two sections");
 	check([placeTitleAt(first, 0, 0) isEqual:@"Desktop"]
 	      && [placeTitleAt(first, 0, 1) isEqual:@"Home"]
@@ -148,6 +160,39 @@ int main(void)
 	      "choosing Column builds the browser over the same four items");
 	[first cg_useIconView:nil];
 	check([first viewMode] == 0, "and choosing Icon returns to the grid");
+
+	/* **AND COLUMN -> ICON -> COLUMN REBUILDS THE SAME GEOMETRY.** The browser's 256-slot pool and its per-column
+	 * scroll views are reused across the swap; the columns must come back at their own origins, not stacked or
+	 * left at a stale clip offset. */
+	/* THE ICON GRID IS SCROLLED BEFORE THE SWAP: the clip view must not hand that offset to the browser. */
+	{
+		NSScrollView *content = [[first cg_iconView] enclosingScrollView];
+		NSClipView *clip = (NSClipView *)[content contentView];
+
+		[clip scrollToPoint:NSMakePoint(0.0, 50.0)];
+		[content reflectScrolledClipView:clip];
+	}
+	[first cg_useColumnView:nil];
+	{
+		NSBrowser *browser = [[first cg_columnView] cg_browser];
+		NSScrollView *firstColumn = [browser cg_scrollViewForColumn:0];
+		NSScrollView *secondColumn = [browser cg_scrollViewForColumn:1];
+		NSView *document = [browser cg_documentView];
+		CGFloat expectedSecond = [browser widthOfColumn:0] + 18.0;
+
+		check([browser cg_columnCount] == 256 && [browser cg_activeColumnCount] == 1
+		      && [browser numberOfRowsInColumn:0] == 4,
+		      "column comes back with its pool and the model's four rows");
+		check(firstColumn != nil && [firstColumn frame].origin.x == 0.0
+		      && [firstColumn frame].size.width == [browser widthOfColumn:0],
+		      "the first column is at the document's origin and its own width");
+		check(secondColumn != nil && [secondColumn frame].origin.x == expectedSecond,
+		      "the empty column after it starts at the gutter, not on top of the root");
+		check(document != nil && [document superview] != nil
+		      && [[document superview] bounds].origin.x == 0.0,
+		      "and the browser's clip view is back at the first column");
+	}
+	[first cg_useIconView:nil];
 
 	/* **A DOUBLE-CLICK ON A FOLDER IS A NAVIGATION.** The first icon is at the grid's first cell; the event is
 	 * converted through the view so the scroll view's own placement cannot change the answer. */
@@ -195,19 +240,50 @@ int main(void)
 		[newFolderItem release];
 	}
 
-	/* A WINDOW IS A SHELL, SO IT RESIZES. The strips keep their order: path bar at the top, status at the bottom,
-	 * the split view between them, and the icon view inside its scroll view. */
-	[[[first window] contentView] setFrameSize:NSMakeSize(700.0, 400.0)];
-	check(near([[first cg_pathControl] frame].origin.y, 376.0)
-	      && near([[first cg_pathControl] frame].size.height, 24.0),
-	      "the path bar is the content's top strip");
-	check(near([[first cg_statusField] frame].origin.y, 0.0)
-	      && near([[first cg_statusField] frame].size.height, 22.0),
-	      "the status bar is its bottom strip");
-	check(near([[first cg_splitView] frame].origin.y, 22.0)
-	      && near([[first cg_splitView] frame].size.height, 354.0),
-	      "and the split view fills what is between");
-	check([[first cg_iconView] frame].size.width > 0.0, "the icon view keeps a width after the resize");
+	/* A WINDOW IS A SHELL, SO IT RESIZES. The three strips are placed by Auto Layout, not by a resize hook:
+	 * path bar at the top, status at the bottom, the split view between them, and the split's delegate keeps the
+	 * sidebar's width while the content pane takes the rest. The icon view inside the scroll view follows the
+	 * clip view's new width. */
+	{
+		NSView *sidebarPane = [[[first cg_splitView] subviews] objectAtIndex:0];
+		NSView *contentPane = [[[first cg_splitView] subviews] objectAtIndex:1];
+		CGFloat sidebarWidth = [sidebarPane frame].size.width;
+		CGFloat contentWidthAt900 = [contentPane frame].size.width;
+		CGFloat contentWidthAt700;
+
+		check(![[first cg_pathControl] translatesAutoresizingMaskIntoConstraints]
+		      && ![[first cg_splitView] translatesAutoresizingMaskIntoConstraints]
+		      && ![[first cg_statusField] translatesAutoresizingMaskIntoConstraints],
+		      "the three strips are placed by constraints, not by their masks");
+
+		[[first window] setContentSize:NSMakeSize(700.0, 400.0)];
+		check(near([[first cg_pathControl] frame].origin.y, 376.0)
+		      && near([[first cg_pathControl] frame].size.height, 24.0),
+		      "the path bar is the content's top strip");
+		check(near([[first cg_statusField] frame].origin.y, 0.0)
+		      && near([[first cg_statusField] frame].size.height, 22.0),
+		      "the status bar is its bottom strip");
+		check(near([[first cg_splitView] frame].origin.y, 22.0)
+		      && near([[first cg_splitView] frame].size.height, 354.0),
+		      "and the split view fills what is between");
+		check(near([sidebarPane frame].size.width, sidebarWidth),
+		      "the sidebar keeps its width when the window shrinks");
+		contentWidthAt700 = [contentPane frame].size.width;
+		check(contentWidthAt700 < contentWidthAt900, "while the content pane gives up the width");
+		check(near([[first cg_iconView] frame].size.width,
+			   [[[first cg_iconView] superview] frame].size.width),
+		      "the icon view follows the clip view's width");
+
+		[[first window] setContentSize:NSMakeSize(1000.0, 500.0)];
+		check(near([[first cg_pathControl] frame].origin.y, 476.0)
+		      && near([[first cg_splitView] frame].origin.y, 22.0)
+		      && near([[first cg_splitView] frame].size.height, 454.0),
+		      "a second, larger resize places the strips again");
+		check(near([sidebarPane frame].size.width, sidebarWidth),
+		      "the sidebar is still the width it was");
+		check([contentPane frame].size.width > contentWidthAt700,
+		      "and the content pane takes the added width");
+	}
 
 	/* A SECOND WINDOW IS A SECOND MODEL AND A SECOND HISTORY. */
 	check(makeFile([subTwo stringByAppendingPathComponent:@"d.txt"]), "the second folder has a file");

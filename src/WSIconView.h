@@ -123,6 +123,7 @@ extern NSString *WSIconViewFolderPathKey;
  * `-cg_beginDragWithEvent:` starts the same session a press-and-drag does, so a probe can read the pasteboard and the
  * session it made. */
 - (NSArray *)cg_positions;
+- (NSRect)cg_highlightRectAtIndex:(NSInteger)index;
 - (nullable NSTextField *)cg_renameField;
 - (NSDragOperation)cg_proposedOperationForSameVolume:(BOOL)sameVolume modifiers:(NSUInteger)modifiers;
 - (BOOL)cg_performDropOfPaths:(NSArray *)paths intoDirectory:(NSString *)directory
