@@ -5,14 +5,25 @@
   and `libagora-launchservices` read: the identifier a window's `set_app_id` is grouped by, and the name the
   Dock and the menu bar would show. The document types Workspace ITSELF opens (a folder, a volume) are a later
   stage's; W0 declares only that it is an application.
+
+  **THE IDENTIFIER IS THE PROJECT'S CONVENTION** (`README.md`, Conventions): `io.github.agoradesktop.NAME`.
+  Lower case because it is reverse-DNS and Apple's own are (com.apple.finder); the product's spelling lives in
+  CFBundleName, which is what a person reads. It was `org.agora.Workspace`, which named an organisation this
+  project has no claim on.
 -->
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>org.agora.Workspace</string>
+	<string>io.github.agoradesktop.workspace</string>
 	<key>CFBundleName</key>
 	<string>Workspace</string>
 	<key>CFBundleExecutable</key>
+	<string>Workspace</string>
+	<!-- **THE ICON, WHICH IS THE HOME FOLDER'S.** Read by Icon Services from `Contents/Resources/Workspace.icns`;
+	     the art is the vendored Frost theme's `user-home`, packed into an `.icns` so the bundle has ONE icon at
+	     every size rather than one PNG that every caller scales. Derived, not a dependency: the recipe is in
+	     PROVENANCE.md. -->
+	<key>CFBundleIconFile</key>
 	<string>Workspace</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>

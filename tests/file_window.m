@@ -114,6 +114,12 @@ int main(void)
 	      "the title is the folder's own name");
 	check([first cg_iconView] != nil, "the icon view exists");
 	check([[first cg_iconView] itemCount] == 4, "the icon view shows the model's items");
+	{
+		NSScrollView *content = [[first cg_iconView] enclosingScrollView];
+
+		check([content autohidesScrollers] && [[content verticalScroller] isHidden],
+		      "and the four icons fit, so the content pane's bar is hidden");
+	}
 	check([[first cg_viewSwitcher] segmentCount] == 3, "the switcher has three segments");
 	check([[first cg_viewSwitcher] selectedSegment] == 0, "with Icon selected");
 	check([[first cg_viewSwitcher] isEnabledForSegment:0]
@@ -154,6 +160,9 @@ int main(void)
 	check([first viewMode] == 1 && [first cg_listView] != nil
 	      && [[first cg_listView] numberOfRows] == 4,
 	      "choosing List builds the outline and it has the model's four rows");
+	check([[[first cg_listView] enclosingScrollView] autohidesScrollers]
+	       && [[[[first cg_listView] enclosingScrollView] verticalScroller] isHidden],
+	      "and its four rows fit, so the shared content bar stays hidden in list mode too");
 	[first cg_useColumnView:nil];
 	check([first viewMode] == 2 && [first cg_columnView] != nil
 	      && [[[first cg_columnView] cg_browser] numberOfRowsInColumn:0] == 4,

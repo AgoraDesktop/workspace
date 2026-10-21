@@ -18,13 +18,18 @@ the **List** mode is W4's `WSListView` (Name, Date Modified, Size, Kind, disclos
 panel showing the selected item. Under the views is W6's `WSFileOperations`: New Folder, Duplicate, Rename,
 Move/Copy, Move to Trash, Put Back, Empty Trash and Compress, with Undo, a progress window and a conflict panel.
 
+**AND THE MENU BAR CARRIES THE TIME.** `WSMenuBarClock` is an `NSStatusItem` — the strip's third surface, and the only
+one an application may put something in — so the clock is drawn by Workspace and PACKED BY THE SERVER against the
+screen's right edge, behind a view whose width moves with the digits. It is a status item and not a window: it stays
+on the strip when another application is in front.
+
 **The desktop is TWO LEVELS: Workspace owns the ICON layer, not the wallpaper.** It
 launches from its bundle, opens one borderless window at `kCGDesktopIconWindowLevel` — **TRANSPARENT** — and
 draws only the items of a directory. The WALLPAPER is a separate window at `kCGDesktopWindowLevel`, and it is the
 **Dock's** to draw.
 
 ```
-$ .../Workspace.app/Contents/MacOS/Workspace --seconds 3 --file-window
+$ .../Workspace.app/Contents/<platform>/<arch>/Workspace --seconds 3 --file-window
 workspace: file window for /home/kyle/Desktop
 workspace: desktop window at level -2147483627, frame 1280x720 at (0,0)
 ```
@@ -55,7 +60,7 @@ screenshot. **9 checks, 0 fail**:
 
 The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**57 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
+(**59 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
 `workspace-list-view` (**33 checks**); the column view's `workspace-column-view` (**28 checks**); and W6's
 `workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**). The file-window through file-ops suites
 are the W2–W6 proofs below.
@@ -103,6 +108,29 @@ a command whose feature is not written, and it is MEASURED rather than asserted:
 and checks the outcome, and the desktop suite reads the ink off the strip in two scenes — one where Workspace is the
 active application and one where an ordinary window is in front of it, where its menus are correctly absent.
 
+### The menu bar's status area: the clock
+
+**`WSMenuBarClock` IS THE STRIP'S THIRD SURFACE, AND THE ONLY ONE THE APPLICATION PLACES — BY SAYING HOW WIDE IT IS.**
+The server owns the strip and the System menu's square; the application's menus are a window of the application's own,
+as wide as its titles; and the time is an `NSStatusItem`, which has a LENGTH and NO POSITION. The width is the whole of
+what an application is allowed to say, because it does not know what else is in the bar and therefore cannot know where
+its own item goes — so the server packs it against the screen's right edge and the application draws into it.
+
+The view fills the bar's own face (`+[NSWindow cg_menuBarColor]`, the same door the bar window and a dropdown's panel
+use, so there is no seam), centres the locale's short time in its own padding, and is re-measured whenever the string
+changes: `9:05` becoming `10:05` is one digit wider, and the view, the item's window and the server are all told — the
+item would otherwise be a box whose contents had grown past its edge.
+
+**IT REFRESHES WITHOUT A TIMER, AND THAT IS A FINDING RATHER THAN A STYLE.** `NSTimer` is inert under
+`-[NSApplication run]`: the loop never enters `NSRunLoop`, so the clock reads the time once per frame from
+`NSApplicationDidUpdateNotification` — the AppKit's "change what is shown between passes" — and formats a string only
+when the minute moved. See [`PROVENANCE.md`](PROVENANCE.md) for the measurement.
+
+**IT STAYS ON THE STRIP WHEN WORKSPACE IS NOT ACTIVE**, because it is a status item and not a window: the desktop
+suite asserts the clock's ink in the scene where another application is in front and Workspace's menus are correctly
+absent. Clicking it does nothing — `-[NSStatusItem popUpStatusItemMenu:]` is a named refusal in this tree, so there is
+no menu to offer.
+
 ### W2: the file window shell
 
 **ONE FOLDER, ONE MODEL, FOUR STRIPS.** `WSFileWindowController` opens a folder, owns its `WSItemModel` and its
@@ -144,6 +172,9 @@ recorded in `PROVENANCE.md`.
 `NSSplitViewDividerStylePaneSplitter`, the same eighteen-point, three-ring gutter the browser's columns use, so the
 sidebar can be dragged wider or narrower and the grip says where to put the pointer. Its six rows fit, so the
 sidebar's own vertical bar is autohidden; `tests/file_window.m` checks the style, the thickness and the hidden bar.
+**EVERY SCROLL VIEW THE SHELL CREATES SETS `-autohidesScrollers:YES`** — the sidebar, the shared content pane
+(icon, list and column modes), and the tests' own scroll views — so a document that already fits never wears a
+bar. The file-window suite checks the icon grid and the list in the content pane.
 **A VIEW SWAP RESETS THE CONTENT SCROLL'S ORIGIN** — otherwise a scrolled icon grid would hand its offset to the
 column browser and start it partway down or across; the test scrolls the grid, switches Icon → Column, and checks the
 browser's first column is back at the document's origin.
@@ -350,6 +381,8 @@ desktop, and the desktop's first icon row begins a menu-bar's height plus ten po
 src/
   main.m                   the entry point: NSApplication, the controller, the loop
   WSApplication.m          the controller that owns the desktop and the file windows
+  WSMainMenu.m             the menu bar's contents: the application menu and the six beside it
+  WSMenuBarClock.m         the clock: an NSStatusItem, its view, and the width the server packs
   WSDesktopWindow.m        the borderless window at kCGDesktopIconWindowLevel, the size of the screen
   WSDesktopView.m          the desktop's icons — selection, rubber band, drag, double-click open
   WSFileWindowController.m the file window: toolbar, sidebar, path bar, status bar and view switcher
@@ -369,10 +402,16 @@ src/
   WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions and the icon size
   WSPlaces.m               the sidebar's PLACES and DEVICES, and the desktop path
 Info.plist.in              the bundle's Info.plist
-tests/                     the pixel suite (run-desktop.sh + check.py) and eleven offscreen suites
+Resources/Workspace.icns   the bundle's icon: Frost's Home folder art, packed at five sizes (PROVENANCE.md)
+tests/                     the pixel suite (run-desktop.sh + check.py) and twelve offscreen suites
 ```
 
 ## What is deliberately not here yet
+
+**The Dock draws Workspace from `Resources/Workspace.icns`**, which is the Frost theme's **Home folder** — chosen
+rather than inherited, because Workspace is the desktop and the door to the user's files. It is derived art, packed
+with the recipe in [`PROVENANCE.md`](PROVENANCE.md); the bundle declares it with `CFBundleIconFile`, so the icon is
+read the way the Mac reads one and the Dock needs no special case for its own file manager.
 
 The plan's later stages: the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
 (W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon

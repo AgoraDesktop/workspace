@@ -179,6 +179,7 @@ int main(void)
 					     styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:NO];
 	scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 700.0, 400.0)];
 	[scroll setHasVerticalScroller:YES];
+	[scroll setAutohidesScrollers:YES];
 	[scroll setDocumentView:list];
 	[window setContentView:scroll];
 	[list reloadData];

@@ -13,6 +13,7 @@
 #import "WSIconView.h"
 #import "WSPlaces.h"
 #import "WSMainMenu.h"
+#import "WSMenuBarClock.h"
 #import "WSPreferencesWindow.h"
 
 #import <AppKit/NSApplication.h>
@@ -117,6 +118,16 @@
 	 * the two rows the AppKit refuses — About and Preferences. */
 	[WSMainMenu installWithTarget:self];
 
+	/* **AND THE STRIP'S OTHER OCCUPANT: THE CLOCK.** A status item is made AFTER the bar, because it is packed against
+	 * the same strip the bar's titles are drawn in and both are placed by the same output. It is Workspace's and not
+	 * the window server's — on the reference system the whole bar is the system's, so its clock is too; here the bar
+	 * is the server's and what sits in it is the application's, which is the arrangement the protocol's
+	 * `set_status_item` states. A clock that fails is a desktop without a clock, not a desktop that does not start. */
+	_clock = [[WSMenuBarClock alloc] init];
+	if (![_clock start]) {
+		fprintf(stderr, "workspace: THE CLOCK DID NOT GET INTO THE MENU BAR\n");
+	}
+
 	/* **A FOLDER FROM THE DESKTOP IS A WINDOW REQUEST.** The desktop view posts; this object is the only one that
 	 * knows what a file window is. */
 	[[NSNotificationCenter defaultCenter] addObserver:self
@@ -181,6 +192,9 @@
 	}
 	[_preferences release];
 	_preferences = nil;
+	[_clock stop];
+	[_clock release];
+	_clock = nil;
 	[_desktop close];
 	[_desktop release];
 	_desktop = nil;

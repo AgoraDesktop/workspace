@@ -124,6 +124,55 @@ pointer a focus on a MOTION, and a probe that teleports to its target races that
 the AppKit's menu suites — `appkit-menu-headless`, `appkit-menu-activation` and `appkit-popup-menu` all pass — plus
 the trace above, rather than a photograph.
 
+## The menu bar's clock — a status item, and what it measured
+
+**`WSMenuBarClock` is the first thing in this tree that drives `NSStatusBar`/`NSStatusItem` end to end from an
+application**, and the reason to build it was the door rather than the time: a status item is the one piece of an
+application that has a LENGTH and NO POSITION, so the strip is packed by the server and drawn by the client, and that
+arrangement had only ever been exercised by `libagora-app`'s probe — which makes an item and puts a coloured mark in
+it, where no measurement said the mark reached the glass. A clock is the smallest thing that is both useful and a
+real user of the door: a view, a width that CHANGES, and a value that has to be refreshed while nothing happens.
+
+**WHAT THE DESKTOP SUITE NOW MEASURES**, in the scene where Workspace is the active application: the time's ink in
+the strip's right end, its last inked column within twenty points of the screen's edge (so the SERVER packed it and
+the application did not place it), a gap of the bar's own face between the menus and the clock, and the bar's face
+again in the item's last two columns (so the item is a piece of the bar rather than a box on it). MEASURED on a
+1280-point output: the item is 62 points wide at x = 1218..1279 with `7:13 a.m.` inked at 1223..1272. In the OTHER
+scene — an ordinary window in front, Workspace not active — the clock is STILL there while the menus are not, which
+is the difference between a status item and a window and is asserted rather than assumed.
+
+**1. `-setContentView:` RESIZES THE VIEW, SO THE WIDTH HAS TO BE MEASURED AFTER THE VIEW IS INSTALLED.**
+`NSVariableStatusItemLength` is resolved by asking the view how wide it is, which is why the view is measured and
+resized BEFORE the item is made — and that measurement is then thrown away: `-[NSWindow setContentView:]` lays the
+content view out at the window's own content rectangle, which for an item made with no view yet is the SQUARE the
+sentinel fell back to. MEASURED, in that order: the item came out 24 points wide — the bar's thickness — with the
+time drawn straight through the right edge of the screen, which reads like the server packing an item wrongly and was
+this ordering. The door that states the width (`-cg_resizeToWidth:`) is therefore called again after `-setView:`, and
+it moves three things together: the view (what a later sentinel resolution measures), the item's WINDOW (it owns the
+backing store the compositor blits, and a window narrower than its item clips the new digit) and then the server
+(`-setLength:`).
+
+**2. `NSTimer` IS INERT UNDER `-[NSApplication run]`, SO THE CLOCK RIDES THE LOOP'S OWN PASSES.** The loop blocks on
+the compositor's connection (`-nextEventMatchingMask:` → `AGWindowWaitForEvent`) and never enters `NSRunLoop`, so a
+scheduled timer is valid, scheduled and never fired — a clock written the ordinary Cocoa way would have kept showing
+the minute it started in. What the loop does do is announce `NSApplicationDidUpdateNotification` once per frame, which
+is the AppKit's own "a place to change what is shown between passes", so the clock reads the time once per pass and
+formats a string only when the minute moved. MEASURED over a 75-second run: the item read `7:13 a.m.` at the start
+and `7:16 a.m.` in the screenshot written at the end, across 4196 loop passes. **The AppKit gap is recorded here
+rather than fixed there**: an application that wants a timer, a `-performSelector:withObject:afterDelay:` or a
+run-loop source of any kind has no clock in this tier, and the fix belongs to the loop.
+
+**3. THE CLOCK IS THE APPLICATION'S, AND IT IS NOT A WINDOW.** Every other surface Workspace owns appears and
+disappears with the application's activation — the menu bar's titles are ordered in and out by
+`-activate`/`-deactivate`. The clock does not: it is `NSStatusItem`'s own window at `NSStatusWindowLevel`, ordered
+front when its view is set, and the compositor places it for as long as the process is alive. That is the right
+answer for a clock (a clock that came and went with the front window would be a window) and it is a DIVERGENCE from
+the reference system, whose clock belongs to the window server and is therefore there when no application is.
+
+**4. NO MENU, BECAUSE THE DOOR IS A NAMED REFUSAL.** `-[NSStatusItem popUpStatusItemMenu:]` needs the menu tracking
+session that `NSMenu -popUpContextMenu:` also needs and that this tier does not have, so clicking the clock does
+nothing at all — which is stated in the header rather than papered over with a menu that could not be tracked.
+
 ## W2 — the file window, and a drawing finding
 
 **`WSFileWindowController`, `WSIconView`, `WSListView`, `WSColumnView`, `WSFileOperations`, `WSTrash`,
@@ -133,7 +182,9 @@ code.** The window is assembled from the AppKit's classes — `NSToolbar`/`NSToo
 `NSPathControl`, `NSSegmentedControl`, `NSTextField` and `NSWindowController` — and the model/history/places are
 separate so each can be measured without the others. **The sidebar is resizable, and its divider is a GUTTER:** the
 split view uses `NSSplitViewDividerStylePaneSplitter`, the same eighteen-point, three-ring grip the browser's columns
-use. The sidebar's rows fit, so its vertical bar is autohidden too (`NSScrollView -autohidesScrollers`).
+use. The sidebar's rows fit, so its vertical bar is autohidden too (`NSScrollView -autohidesScrollers`), and the
+content pane's bar follows the same rule: a grid whose rows fit wears no bar, which `tests/file_window.m` checks.
+Every scroll view the shell creates is set to autohide.
 **A VIEW SWAP RESETS THE CONTENT CLIP'S ORIGIN:** the clip view keeps its bounds origin when its document is replaced,
 so a scrolled icon grid would have handed that offset to the column browser and drawn the browser as if it were
 scrolled to the same place. `WSFileWindowController`'s swap resets it to (0, 0) after setting the new document;
@@ -330,3 +381,36 @@ application, and its icon is the application's.
 
 Every file is MIT. There is no third-party code in this component, so there is no per-file licence split to
 record.
+
+## The bundle icon (`Resources/Workspace.icns`)
+
+**DERIVED FROM THE VENDORED FROST THEME, NOT A NEW WORK OF ART.** The Dock draws an application's icon from its
+bundle (`CFBundleIconFile` → `Contents/Resources/Workspace.icns`), and Workspace's is the **Home folder** —
+the project's choice rather than Frost's, because Workspace is the desktop and the file manager's door to the
+user's files.
+
+| | |
+|---|---|
+| Source art | `libagora-iconservices/themes/Frost/<size>/places/user-home.png` (Frost v0.3.1, MIT — see `libagora-iconservices/themes/PROVENANCE.md`) |
+| Sizes packed | 16pt@2x (`ic11`), 32pt@2x (`ic12`), 128 (`ic07`), 256 (`ic08`), 512 (`ic09`) |
+| Container | an `.icns` whose entries are the theme's PNG bytes, written by the recipe below; no re-encoding, so the art is byte-identical to the theme's |
+| Licence | MIT, travelling with Frost's art |
+
+The recipe is the whole of it — no tool, no encoder:
+
+```sh
+python3 - <<'PY'
+import struct
+base = "libagora-iconservices/themes/Frost"
+entries = [("ic11", f"{base}/16x16@2x/places/user-home.png"),
+           ("ic12", f"{base}/32x32@2x/places/user-home.png"),
+           ("ic07", f"{base}/128x128/places/user-home.png"),
+           ("ic08", f"{base}/256x256/places/user-home.png"),
+           ("ic09", f"{base}/256x256@2x/places/user-home.png")]
+body = b"".join(t.encode() + struct.pack(">I", (d := open(p, "rb").read()).__len__() + 8) + d for t, p in entries)
+open("workspace/Resources/Workspace.icns", "wb").write(b"icns" + struct.pack(">I", len(body) + 8) + body)
+PY
+```
+
+`libagora-iconservices`' `.icns` reader takes the PNG-bearing entries and reads each image's own size, so the type
+codes are the container's convention and the art is the theme's.

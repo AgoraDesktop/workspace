@@ -41,6 +41,16 @@ add_test(NAME workspace-main-menu COMMAND main_menu)
 set_tests_properties(workspace-main-menu PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")
 
+# **THE MENU BAR'S CLOCK, WITHOUT A COMPOSITOR.** A status item is placed by the server, so the ITEM is the desktop
+# suite's to measure; what is measurable here is everything the application owns — the width arithmetic, the ink inside
+# the item's padding, the locale's answer, and the fact that a process with no bar has no item but still has a clock.
+add_executable(menu_bar_clock menu_bar_clock.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMenuBarClock.m")
+target_include_directories(menu_bar_clock PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(menu_bar_clock PRIVATE AgoraApp::App Foundation::Foundation objc)
+add_test(NAME workspace-menu-bar-clock COMMAND menu_bar_clock)
+set_tests_properties(workspace-menu-bar-clock PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")
+
 
 # **THE GO MENU, LAID OUT AND DRAWN.** It is the one menu with a key equivalent that is not a character (⌘↑, the
 # UP ARROW function key in the Private Use Area), and drawing a dropdown MEASURES that string and inks its glyph —
@@ -64,7 +74,7 @@ set(AGORA_WINDOW_SERVER_TEST_CLIENT
 
 add_test(NAME workspace-desktop
     COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-desktop.sh"
-            "$<TARGET_FILE_DIR:Workspace>/Workspace.app/Contents/MacOS/Workspace"
+            "${WORKSPACE_BUNDLE_EXECUTABLE}"
             "${AGORA_WINDOW_SERVER_BINARY}"
             "${AGORA_WINDOW_SERVER_TEST_CLIENT}"
             "${PYTHON3}"

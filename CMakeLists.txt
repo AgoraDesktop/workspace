@@ -49,6 +49,7 @@ add_executable(Workspace
     src/WSItemModel.m
     src/WSItemSort.m
     src/WSMainMenu.m
+    src/WSMenuBarClock.m
     src/WSListView.m
     src/WSMetadataStore.m
     src/WSPlaces.m
@@ -74,14 +75,65 @@ target_link_libraries(Workspace PRIVATE
     ZLIB::ZLIB)
 
 # ---------------------------------------------------------------------------
-# The bundle: Workspace.app/Contents/{Info.plist, MacOS/Workspace}
+# The bundle: Workspace.app/Contents/{Info.plist, <platform>/<arch>/Workspace}
 # ---------------------------------------------------------------------------
+# **THE DIRECTORY NAMES ARE libagora-core'S VOCABULARY, NOT CMAKE'S.** The resolver
+# (`_CFBundleCopyPlatformDirectoryNames` / `_CFBundleCopyArchitectureDirectoryNames`) spells the platform
+# `Linux`, `FreeBSD`, `NetBSD`, `OpenBSD`, `DragonFly` or `MacOS`, and the architecture `amd64`, `arm64`,
+# `riscv64`, `i386` or `ppc64`. A build that laid down CMake's `x86_64` — or a directory per uname's
+# `Darwin` — would produce a bundle this tree cannot launch, and it would say so only at run time.
+#
+# THE ARCHITECTURE IS A DIRECTORY, NOT A FILE-NAME SUFFIX, because the kernel reports the executable's
+# basename as the process name (`comm`, 15 characters on Linux) and `-[NSProcessInfo processName]` titles
+# the application menu: `Workspace-aarch64` would be shown as `Workspace-aarch6`.
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(_bundle_platform "MacOS")
+elseif(CMAKE_SYSTEM_NAME MATCHES "^(Linux|FreeBSD|NetBSD|OpenBSD|DragonFly)$")
+    set(_bundle_platform "${CMAKE_SYSTEM_NAME}")
+else()
+    message(FATAL_ERROR
+        "Workspace: no bundle platform directory is named for ${CMAKE_SYSTEM_NAME}. Add the name to "
+        "_CFBundleCopyPrimaryPlatformDirectoryName() in libagora-core first, so the resolver and the build "
+        "cannot disagree.")
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+    set(_bundle_arch "amd64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+    set(_bundle_arch "arm64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^riscv64$")
+    set(_bundle_arch "riscv64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i[3-6]86|x86)$")
+    set(_bundle_arch "i386")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(ppc64|ppc64le|powerpc64)$")
+    set(_bundle_arch "ppc64")
+else()
+    message(FATAL_ERROR
+        "Workspace: no bundle architecture directory is named for ${CMAKE_SYSTEM_PROCESSOR}. Add the name "
+        "to _CFBundleCopyArchitectureDirectoryNames() in libagora-core first.")
+endif()
+
 set(_bundle "${CMAKE_BINARY_DIR}/Workspace.app")
+set(WORKSPACE_BUNDLE_EXECUTABLE
+    "${_bundle}/Contents/${_bundle_platform}/${_bundle_arch}/Workspace")
+
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in" "${_bundle}/Contents/Info.plist" @ONLY)
 add_custom_command(TARGET Workspace POST_BUILD
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bundle}/Contents/MacOS"
+    # A build tree made before the platform axis still carries `Contents/MacOS/Workspace`, which the resolver
+    # would find (as the universal slot) and run INSTEAD of this build's executable. Remove it.
+    COMMAND "${CMAKE_COMMAND}" -E remove -f "${_bundle}/Contents/MacOS/Workspace"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+            "${_bundle}/Contents/${_bundle_platform}/${_bundle_arch}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:Workspace>"
-            "${_bundle}/Contents/MacOS/Workspace"
+            "${WORKSPACE_BUNDLE_EXECUTABLE}"
+    # **AND THE BUNDLE'S ICON, WHERE `CFBundleIconFile` SAYS IT IS.** `Contents/Resources/Workspace.icns` is Home
+    # folder art from the vendored Frost theme, packed at five sizes; Icon Services reads it for the Dock's tile and
+    # for anything else that shows the application.
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bundle}/Contents/Resources"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Workspace.icns"
+            "${_bundle}/Contents/Resources/Workspace.icns"
     VERBATIM)
 
 enable_testing()

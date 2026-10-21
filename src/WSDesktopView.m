@@ -41,6 +41,7 @@
 #import <LaunchServices/LSOpen.h>
 #import <IconServices/IconServices.h>
 
+#include <math.h>
 #include <stdlib.h>
 
 NSString *WSDesktopViewOpenFolderNotification = @"WSDesktopViewOpenFolderNotification";
@@ -237,10 +238,17 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 				nil];
 		label = WSIconLabelText(label, cell.width - 4.0, attributes);
 		labelSize = [label sizeWithAttributes:attributes];
-		labelRect = [self cocoaRectForPosition:NSMakePoint(
-						position.x + ((CGFloat)iconSize - labelSize.width) / 2.0,
-						position.y + (CGFloat)iconSize)
-					  size:NSMakeSize(labelSize.width, (CGFloat)WSIconLabelHeight)];
+		/* **THE RECT IS ROUNDED UP, BECAUSE A RECT EXACTLY AS WIDE AS THE ADVANCE CLIPS THE LAST GLYPH** — the same
+		 * fractional clipping the clock and the AppKit cells round. The label is still cut to the cell's width, so a
+		 * point of rounding cannot spill into the neighbour. */
+		{
+			CGFloat labelWidth = ceil(labelSize.width);
+
+			labelRect = [self cocoaRectForPosition:NSMakePoint(
+							position.x + ((CGFloat)iconSize - labelWidth) / 2.0,
+							position.y + (CGFloat)iconSize)
+						  size:NSMakeSize(labelWidth, (CGFloat)WSIconLabelHeight)];
+		}
 		[NSGraphicsContext saveGraphicsState];
 		[[NSBezierPath bezierPathWithRect:labelBand] addClip];
 		[label drawInRect:labelRect withAttributes:attributes];

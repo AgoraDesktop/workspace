@@ -551,9 +551,15 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		 * sit a padded half-cell to the right of the folder it named. */
 		label = WSIconLabelText([item name], cellRect.size.width - 4.0, attributes);
 		labelSize = [label sizeWithAttributes:attributes];
-		labelRect = NSMakeRect(NSMidX(iconRect) - labelSize.width / 2.0,
-				       NSMaxY(iconRect) + (CGFloat)WSIconLabelGap,
-				       labelSize.width, (CGFloat)WSIconLabelHeight);
+		/* **ROUNDED UP FOR THE SAME REASON THE CLOCK IS**: a rect exactly as wide as the advance clips the last
+		 * glyph. The label is cut to the cell's width, so the point cannot spill into the neighbour. */
+		{
+			CGFloat labelWidth = ceil(labelSize.width);
+
+			labelRect = NSMakeRect(NSMidX(iconRect) - labelWidth / 2.0,
+					       NSMaxY(iconRect) + (CGFloat)WSIconLabelGap,
+					       labelWidth, (CGFloat)WSIconLabelHeight);
+		}
 		[NSGraphicsContext saveGraphicsState];
 		[[NSBezierPath bezierPathWithRect:highlightRect] addClip];
 		[label drawInRect:labelRect withAttributes:attributes];

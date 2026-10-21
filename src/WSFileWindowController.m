@@ -270,6 +270,10 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	_contentScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(WS_SIDEBAR_WIDTH, 0.0,
 									 900.0 - WS_SIDEBAR_WIDTH, 500.0)];
 	[_contentScroll setHasVerticalScroller:YES];
+	/* **A BAR THE DOCUMENT DOES NOT NEED STEPS ASIDE, the same rule as the sidebar's and the browser's columns.
+	 * Without autohide a configured scroller is always a subview, so the icon grid wore a full-height bar in a
+	 * folder whose rows already fit. */
+	[_contentScroll setAutohidesScrollers:YES];
 	[_contentScroll setBorderType:NSNoBorder];
 	[_contentScroll setDrawsBackground:YES];
 	_iconView = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0,

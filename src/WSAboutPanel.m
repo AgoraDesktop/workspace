@@ -71,8 +71,12 @@ static NSDictionary *WSTextAttributes(CGFloat size, BOOL bold, NSColor *colour)
 static void WSDrawCentredLine(NSString *text, NSRect bounds, NSDictionary *attributes, CGFloat top)
 {
 	NSSize size = [text sizeWithAttributes:attributes];
-	NSRect line = NSMakeRect((bounds.size.width - size.width) / 2.0,
-				 bounds.size.height - top - size.height, size.width, size.height);
+	/* **ROUNDED UP, BECAUSE A RECT EXACTLY AS WIDE AS THE ADVANCE CLIPS THE LAST GLYPH.** The clock and the AppKit
+	 * cells needed the same point; see `WSMenuBarClock.m` for the measurement. */
+	CGFloat width = ceil(size.width);
+	CGFloat height = ceil(size.height);
+	NSRect line = NSMakeRect((bounds.size.width - width) / 2.0,
+				 bounds.size.height - top - height, width, height);
 
 	[text drawInRect:line withAttributes:attributes];
 }

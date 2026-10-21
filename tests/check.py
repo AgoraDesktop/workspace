@@ -9,9 +9,12 @@ TRANSPARENCY:
     wherever there is no icon — and an icon appears where its sidecar says it goes;
   * an ordinary window over both is on top;
 
-AND THE MENU BAR IS NOW TWO SURFACES RATHER THAN ONE. The server owns the strip and the System menu's square; an
-application's own menus are a window of ITS OWN at the same level, as wide as its titles, and the last two checks
-read that width off the pixels — ink where the server left room, and none past where the titles end.
+AND THE MENU BAR IS NOW THREE SURFACES RATHER THAN ONE, and the third is the interesting one. The server owns the
+strip and the System menu's square; an application's own menus are a window of ITS OWN at the same level, as wide as
+its titles; and the CLOCK is an `NSStatusItem` — a window the APPLICATION draws that the SERVER PACKS against the
+screen's right edge, because an application does not know what else is in the bar and therefore cannot know where its
+own item goes. The last checks read all three off the pixels: ink where the server left room for the menus, none past
+where the titles end, and the time packed in at the right end with the bar's own face around it.
 """
 import os
 import sys
@@ -30,12 +33,24 @@ SCREEN = (1280, 720)
 MENU_BAR_INK_LEFT = 36
 MENU_BAR_INK_RIGHT = 440
 
+# **HOW MUCH OF THE STRIP'S RIGHT END THE CLOCK MAY OCCUPY.** The item is as wide as the locale's short time plus ten
+# points of air, so its width moves with the locale and the font — 44 points for "10:05" at 13-point Helvetica, 62 for
+# "7:14 AM". A hundred and twenty is not a measurement of the clock; it is the room this suite allows one, and what is
+# asserted INSIDE it is the measurement: ink, packed against the edge, on the bar's face.
+CLOCK_ZONE = 120
+
 
 def strip_ink(px, x0, x1):
     """Dark pixels in the menu-bar strip (rows 2..21). The strip is one flat colour and the only ink in it that is
     NOT an application's is the server's System glyph at x = 10..25 — so ink to the right of the glyph is a
     menu's."""
     return sum(1 for y in range(2, 22) for x in range(x0, x1) if all(c < 150 for c in px[x, y]))
+
+
+def ink_columns(px, x0, x1):
+    """The COLUMNS of the menu-bar strip that carry ink — the shape a packer's answer has, where `strip_ink`'s count
+    is enough to say only that something is there."""
+    return [x for x in range(x0, x1) if any(all(c < 150 for c in px[x, y]) for y in range(2, 22))]
 # A point clear of the icon, of the normal window, and of any label — where a TRANSPARENT icon window must show
 # the wallpaper straight through.
 EMPTY_AT = (640, 400)
@@ -101,6 +116,13 @@ def main():
          near(px[over[0], over[1]], cnormal, 6)),
         ("and it is not the wallpaper showing through",
          not near(px[over[0], over[1]], cwall, 10)),
+
+        # 4. **THE CLOCK, WHICH IS AN APPLICATION'S AND NOT THE BAR'S.** A status item is placed by the SERVER and drawn
+        # by the APPLICATION, and — unlike a menu bar — it stays on the strip when the application is not active,
+        # because a clock that came and went with the front window would be a window and not a clock. This scene has
+        # another client's window in front, so the menus are absent and the clock is not.
+        ("THE CLOCK IS IN THE STRIP even with another application in front — a status item is not a window",
+         len(ink_columns(px, SCREEN[0] - CLOCK_ZONE, SCREEN[0])) > 20),
     ]
 
     # 4. **THE APPLICATION'S MENU BAR, READ FROM A SCENE WHERE WORKSPACE IS THE ACTIVE APPLICATION.** A menu bar
@@ -110,16 +132,31 @@ def main():
     if menu_shot is not None:
         mim = Image.open(menu_shot).convert("RGB")
         mpx = mim.load()
+        clock_ink = ink_columns(mpx, SCREEN[0] - CLOCK_ZONE, SCREEN[0])
         checks += [
             (f"the second scene is also {mim.size[0]}x{mim.size[1]}", mim.size == SCREEN),
             ("WITH WORKSPACE ALONE, its menu bar IS drawn in the strip, right of the System menu",
              strip_ink(mpx, MENU_BAR_INK_LEFT, MENU_BAR_INK_RIGHT) > 100),
             ("and its first title begins where the server said an application's menus may",
              strip_ink(mpx, MENU_BAR_INK_LEFT, MENU_BAR_INK_LEFT + 44) > 0),
-            ("the bar is ONLY as wide as its menus: the strip beyond it is the server's alone",
-             strip_ink(mpx, 520, SCREEN[0]) == 0),
             ("and the server's System menu still shows to its left",
              strip_ink(mpx, 10, 26) > 0),
+
+            # **AND THE CLOCK IS THE THIRD SURFACE: THE SERVER'S STRIP, THE APPLICATION'S MENUS, AND AN ITEM THE
+            # SERVER PACKS.** The item is the application's (the view and the digits are Workspace's) and the position
+            # is not: it is flushed against the right edge, which is the one thing an application cannot ask for and
+            # the strip's packer decides. What is measured is therefore three claims at once — that the item is there,
+            # that its ink stops short of the edge by its own padding rather than being clipped by it, and that the
+            # strip between the menus and the clock is the bar's face and nothing else.
+            (f"THE CLOCK is in the strip's right end ({len(clock_ink)} column(s) of ink)", len(clock_ink) > 20),
+            (f"and it is PACKED AGAINST THE EDGE: its last ink is at x = {max(clock_ink) if clock_ink else -1}",
+             bool(clock_ink) and max(clock_ink) >= SCREEN[0] - 20),
+            ("with its own padding before the edge, so the time is not clipped by the screen",
+             bool(clock_ink) and max(clock_ink) < SCREEN[0] - 2),
+            ("the strip between the menus and the clock is the bar's alone",
+             strip_ink(mpx, 520, SCREEN[0] - CLOCK_ZONE) == 0),
+            ("and the item paints the bar's own face out to the edge, so it is a piece of the bar",
+             near(mpx[SCREEN[0] - 2, 12], BAR, 6)),
         ]
 
     failed = 0

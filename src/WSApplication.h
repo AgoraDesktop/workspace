@@ -24,11 +24,13 @@
 
 @class WSDesktopWindow;
 @class WSFileWindowController;
+@class WSMenuBarClock;
 @class NSMutableArray;
 
 @interface WSApplication : NSObject <WSPreferencesWindowTarget>
 {
 	WSDesktopWindow *_desktop;
+	WSMenuBarClock *_clock;		/* the menu bar's status area: the time, and the only thing here that is not a window */
 	WSPreferencesWindow *_preferences;
 	NSMutableArray *_fileWindows;		/* RETAINED: WSFileWindowController */
 	BOOL _showsAboutOnStart;
@@ -36,7 +38,12 @@
 	NSInteger _fileWindowViewMode;
 }
 
-/* Create the desktop window and put it on the screen. NO if it could not be made. */
+/* Create the desktop window and put it on the screen. NO if it could not be made.
+ *
+ * **IT ALSO PUTS THE CLOCK IN THE MENU BAR, AND A FAILURE THERE IS NOT A FAILURE TO START.** A status item needs a
+ * bar to be placed in, which needs a window server — but the desktop window needs one too, so the two either both
+ * work or neither does. The item is nevertheless allowed to fail on its own: a desktop with no clock is a desktop,
+ * and refusing to start over one would be a shell that cannot run without a decoration. */
 - (BOOL)start;
 
 /* Run the ordinary application loop for `seconds`. **THE LOOP IS THE APPKIT'S NOW, NOT A PUMP OF W0'S OWN**, and
