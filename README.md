@@ -46,6 +46,12 @@ desktop rather than a window; the wallpaper is the window one level below it. Th
 the whole screen, `[NSScreen frame]` and not `visibleFrame`, because the Dock and the menu bar are drawn
 *over* the wallpaper.
 
+**AND THAT LEVEL IS WHAT MAKES A DOCK CLICK DO THE RIGHT THING WHEN NO FILE WINDOW IS OPEN.** The AppKit asks its
+delegate `-applicationShouldHandleReopen:hasVisibleWindows:` when a click on the Dock tile finds nothing above the
+furniture levels — the desktop is below them, so "nothing" is the honest answer — and this application answers it
+the way Finder does: `newWorkspaceWindow:`, one folder window on the desk. A click that DOES have file windows never
+reaches the question; the Dock raises them, back to front, and they keep the order they were in.
+
 ### What is measured, not assumed
 
 `ctest` runs **twelve tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —

@@ -30,49 +30,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* **THE DEADLINE, WHICH IS A DELEGATE BECAUSE THE LOOP ANNOUNCES ITS OWN PASSES.** `-[NSApplication run]` posts
+/* **THE DEADLINE, WHICH IS NO LONGER A DELEGATE OF ITS OWN.** `-[NSApplication run]` posts
  * `NSApplicationWillUpdate`/`DidUpdate` to its delegate once per pass — "a place to change what is shown BETWEEN
  * passes", which is Apple's own reason for the pair — and that is exactly where a bounded run belongs: the flag
  * `-[NSApplication stop:]` sets is read at the top of the loop, so setting it from the pass that passes the
- * deadline ends the loop within a frame. */
-@interface WSRunDeadline : NSObject
-{
-	NSDate *_deadline;
-	NSUInteger _passes;
-}
-- (instancetype)initWithSeconds:(double)seconds;
-- (NSUInteger)passes;
+ * deadline ends the loop within a frame.
+ *
+ * IT USED TO BE A THROWAWAY OBJECT in the delegate slot, because the deadline was the only delegate question the
+ * shell answered. It answers a second one now — `-applicationShouldHandleReopen:hasVisibleWindows:`, the Dock's
+ * click — and a delegate that forwards is a second place for every future delegate method to be forgotten. So the
+ * deadline is a DATE and the application is the delegate. */
+@interface WSApplication (WSRunLoopDelegate)
 - (void)applicationDidUpdate:(NSNotification *)notification;
-@end
-
-@implementation WSRunDeadline
-
-- (instancetype)initWithSeconds:(double)seconds
-{
-	self = [super init];
-	if (self != nil) {
-		_deadline = [[NSDate dateWithTimeIntervalSinceNow:seconds] retain];
-	}
-	return self;
-}
-
-- (void)dealloc
-{
-	[_deadline release];
-	[super dealloc];
-}
-
-- (NSUInteger)passes { return _passes; }
-
-- (void)applicationDidUpdate:(NSNotification *)notification
-{
-	(void)notification;
-	_passes++;
-	if ([_deadline timeIntervalSinceNow] <= 0.0) {
-		[[NSApplication sharedApplication] stop:nil];
-	}
-}
-
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag;
 @end
 
 @interface WSApplication ()
@@ -171,13 +141,42 @@
 - (void)runForSeconds:(double)seconds
 {
 	NSApplication *application = [NSApplication sharedApplication];
-	WSRunDeadline *deadline = [[WSRunDeadline alloc] initWithSeconds:seconds];
 
-	[application setDelegate:deadline];
+	[_deadline release];
+	_deadline = [[NSDate dateWithTimeIntervalSinceNow:seconds] retain];
+	_passes = 0;
+	[application setDelegate:self];
 	[application run];
 	[application setDelegate:nil];
-	fprintf(stderr, "workspace: ran %lu loop pass(es)\n", (unsigned long)[deadline passes]);
-	[deadline release];
+	fprintf(stderr, "workspace: ran %lu loop pass(es)\n", (unsigned long)_passes);
+	[_deadline release];
+	_deadline = nil;
+}
+
+/* **A PASS OF THE LOOP, AND THE ONLY THING THE DEADLINE NEEDS IT FOR.** Apple's own reason for this pair is "a
+ * place to change what is shown between passes"; a bounded run is the same shape, read once per pass instead of
+ * once per event. */
+- (void)applicationDidUpdate:(NSNotification *)notification
+{
+	(void)notification;
+	_passes++;
+	if (_deadline != nil && [_deadline timeIntervalSinceNow] <= 0.0) {
+		[[NSApplication sharedApplication] stop:nil];
+	}
+}
+
+/* **AND A CLICK ON WORKSPACE'S DOCK TILE WHEN THERE IS NO WINDOW TO RAISE.** The desktop is furniture by level, so
+ * a Workspace showing nothing but its desktop has NO visible window as far as the AppKit's question is concerned —
+ * and the Mac's answer for that state is Finder's: open a window. So this is `File > New Workspace Window`, by
+ * another route: one folder window, for the same directory the menu row opens. A click that DOES have a window to
+ * raise never gets here; the Dock raises them and the question is not asked. */
+- (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag
+{
+	(void)sender;
+	if (!flag) {
+		[self newWorkspaceWindow:nil];
+	}
+	return YES;
 }
 
 - (void)stop

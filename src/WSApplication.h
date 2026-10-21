@@ -36,6 +36,10 @@
 	BOOL _showsAboutOnStart;
 	BOOL _showsFileWindowOnStart;
 	NSInteger _fileWindowViewMode;
+	/* **THE BOUNDED RUN'S CLOCK AND ITS PASS COUNT**, which used to live in a throwaway delegate object. The
+	 * application is the delegate now — it has a second question to answer — so the two numbers are its own. */
+	NSDate *_deadline;
+	NSUInteger _passes;
 }
 
 /* Create the desktop window and put it on the screen. NO if it could not be made.
