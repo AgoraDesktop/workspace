@@ -4,7 +4,8 @@
 #
 # W0 IS THE SMALLEST HONEST WORKSPACE: it launches, it makes ONE borderless window at the desktop level, and it
 # fills it with the Argentum wallpaper. It is an APPLICATION, so it consumes the AppKit as a built package
-# (`AgoraApp::App`) and installs no package of its own — an application is not a library.
+# (`AgoraApp::App`) and installs no package of its own — an application is not a library. It DOES install its
+# BUNDLE, which is the other half of being an application: see the install block at the end of this file.
 #
 # THE BUNDLE IS PART OF THE DELIVERABLE. A program with an `Info.plist` beside it IS a bundle, and that is what
 # the launch path and `libagora-launchservices` read, so the build lays `Workspace.app/Contents/` out rather
@@ -138,3 +139,47 @@ add_custom_command(TARGET Workspace POST_BUILD
 
 enable_testing()
 add_subdirectory(tests)
+
+# ---------------------------------------------------------------------------
+# The install: the same bundle, laid out under the prefix — by CMake, not by a directory copy
+# ---------------------------------------------------------------------------
+# **A SUCCESSFUL COMPILE IS NOT AN INSTALLABLE APPLICATION, AND `-E copy_directory` IS NOT `install(TARGETS)`.**
+# Two things belong to the install and to nothing else.
+#
+# FIRST, THE LAYOUT: the executable has to land in the bundle's own slot under the prefix, beside the `Info.plist`
+# and the `Resources` directory, because what `libagora-core`'s resolver reads is a SHAPE
+# (`Contents/<platform>/<arch>/<name>`) and not a bare file. The names above are reused verbatim, so the installed
+# bundle cannot disagree with the build-tree one.
+#
+# SECOND — THE PART A COPY GETS WRONG — THE RUNPATH. CMake REWRITES the executable's dynamic search path at install
+# time: the build tree links against build locations, and copying the bundle wholesale carried those into the installed
+# tree, where they are stale or absent. `install(TARGETS)` replaces them with `INSTALL_RPATH`, stated here as this
+# prefix's own library directory — the same answer the build tree already runs with, because that is where this build's
+# AppKit, Foundation and Icon Services come from. A stated install path is not a leaked build path; that is the whole
+# difference between the two, and it is why the copy was not equivalent.
+#
+# **WHAT THIS DOES NOT FIX IS A DEPENDENCY'S DEPENDENCY.** A `DT_RUNPATH` is not consulted for the libraries a
+# library needs, and `libagora-base`/`libagora-core` are installed with an empty runpath over their own
+# `libagora-dispatch`/`libBlocksRuntime` neighbours — so an installed bundle still wants `LD_LIBRARY_PATH` until
+# THOSE install rules carry an `$ORIGIN`. That is their fix to make, and `README.md` records it as the known gap
+# rather than letting it read as a broken install here.
+#
+# THE DESTINATION IS `libexec` AND NOT `bin`: a bundle is not a `$PATH` program. `bin` is for the executable a person
+# types. This one is started by `libagora-launchservices` FROM the bundle it reads, so the thing installed is the whole
+# `Workspace.app` directory, and the file inside it is nobody's command.
+set(_bundle_install "${CMAKE_INSTALL_LIBEXECDIR}/Workspace.app")
+
+set_target_properties(Workspace PROPERTIES
+    INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+
+install(TARGETS Workspace
+    RUNTIME DESTINATION "${_bundle_install}/Contents/${_bundle_platform}/${_bundle_arch}")
+
+# The plist is `configure_file`'s output, so it is installed from the bundle the configure step wrote rather than
+# configured a second time — one source, one substitution, and the installed plist cannot drift from the built one.
+install(FILES "${_bundle}/Contents/Info.plist"
+    DESTINATION "${_bundle_install}/Contents")
+
+# AND THE ICON, WHERE `CFBundleIconFile` SAYS IT IS — the installed tile reads it from the same relative path.
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Workspace.icns"
+    DESTINATION "${_bundle_install}/Contents/Resources")

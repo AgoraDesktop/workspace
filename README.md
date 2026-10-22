@@ -5,7 +5,8 @@ and the wallpaper-and-icons surface behind everything.
 
 Agora is an installable desktop environment for Linux and the BSDs; see the project README in the parent
 directory (`../README.md`). Workspace is an **application**: it consumes the AppKit as a built package
-(`AgoraApp::App`) and installs no package of its own.
+(`AgoraApp::App`) and installs no package of its own — an application is not a library. It does install its
+**bundle** (`libexec/Workspace.app`), which is not a package either.
 
 ## Status
 
@@ -445,6 +446,22 @@ cd build && ctest --output-on-failure
 The AppKit must be built and **installed** into the prefix first (`cmake --install ../libagora-app/build`);
 W0 is the first component to consume it as a package, and doing so is what turned AppKit's previously-unrun
 install rules on.
+
+Workspace installs its bundle into the same prefix:
+
+```sh
+cmake --install build      # -> <prefix>/libexec/Workspace.app
+```
+
+`install` is not a directory copy: the executable is laid into the bundle's own slot
+(`Contents/<platform>/<arch>/`) beside the `Info.plist` and `Resources/Workspace.icns`, and CMake **rewrites its
+runpath** from the build tree's to the prefix's library directory — which is why the installed bundle does not carry
+build-tree paths. The destination is `libexec` rather than `bin` because a bundle is not a `$PATH` program: it is
+started by `libagora-launchservices` from the bundle it reads.
+
+**Known gap, not this component's:** running the installed bundle without `LD_LIBRARY_PATH` still fails on
+`libagora-dispatch`/`libBlocksRuntime`, which `libagora-base` and `libagora-core` need transitively and whose own
+installed libraries carry no `$ORIGIN` runpath. That belongs to those libraries' install rules.
 
 ## Licence
 
