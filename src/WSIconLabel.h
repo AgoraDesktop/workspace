@@ -1,8 +1,10 @@
 /*
  * WSIconLabel.h — an icon's name cut to the width of its cell.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE GRID'S CELL IS THE LIMIT, not the name's own measured width. An icon view draws names under ICONS in a
  * grid, and a name wider than its cell spills into the next one — long directory names stack on top of their

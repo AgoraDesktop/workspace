@@ -1,8 +1,10 @@
 /*
  * WSHistory.h — where a file window has been, and the two arrows that go back and forward.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE HISTORY IS SEPARATE FROM THE VIEW AND FROM THE MODEL, WHICH IS WHY IT CAN BE MEASURED WITHOUT EITHER.**
  * It is the same rule `WSIconLayout` follows: the interesting part of Back and Forward is not a button, it is the

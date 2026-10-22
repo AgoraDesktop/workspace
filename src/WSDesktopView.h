@@ -1,8 +1,10 @@
 /*
  * WSDesktopView.h — the desktop's own view: the wallpaper, and the icons on it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * W1 MAKES THIS A FILE MANAGER SURFACE RATHER THAN WALLPAPER: it draws one icon per item in a directory, lets a
  * person select them, rubber-band a group, drag them to new places and open them. The three pieces it is built

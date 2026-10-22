@@ -1,8 +1,10 @@
 /*
  * WSItemKind.h — the Kind column's one question, answered by Launch Services.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TYPE ANSWER IS F1'S, NOT AN EXTENSION TABLE IN THE VIEW.** `LSCopyKindStringForURL` is Launch Services'
  * own door, fed by the Agora bundles in this tree; a directory is "Folder" because that is what a person reads. When

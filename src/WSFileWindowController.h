@@ -1,8 +1,10 @@
 /*
  * WSFileWindowController.h — the file window's shell.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **W2 IS THE SHELL, NOT THE VIEWS.** One folder, one `WSItemModel`, and the chrome a person navigates with: a
  * toolbar, a sidebar of places, a path bar, a status bar and the three-way view switcher. The Icon mode is W3's

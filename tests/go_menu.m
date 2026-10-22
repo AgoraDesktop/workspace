@@ -1,8 +1,10 @@
 /*
  * go_menu — the Go menu, LAID OUT AND DRAWN OFFSCREEN, because opening it is what crashed.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ONE MENU THAT HAS A KEY EQUIVALENT WHICH IS NOT A CHARACTER.** "Enclosing Folder" is ⌘↑, whose key
  * equivalent is the UP ARROW function key — a single code point in the Private Use Area (U+F700). Everything a

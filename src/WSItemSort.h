@@ -1,8 +1,10 @@
 /*
  * WSItemSort.h — the list view's ordering rules, separate from both the model and the table.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **DIRECTORIES FIRST, ALWAYS.** That is the reference file manager's rule and it is not one of the sort keys: a
  * directory is a place before it is a name, and reversing the name order does not put the files above the folders.

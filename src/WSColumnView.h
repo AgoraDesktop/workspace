@@ -1,8 +1,10 @@
 /*
  * WSColumnView.h — the file window's Column mode: an NSBrowser and the preview beside it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE BROWSER IS THE NAVIGATION; THE PREVIEW IS THE LAST COLUMN.** `WSColumnView` owns an `NSBrowser` whose columns
  * are folders and rows are their items, plus a fixed preview panel at the right that shows the selected item's

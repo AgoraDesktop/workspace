@@ -1,8 +1,10 @@
 /*
  * WSMainMenu.h — the application's menu bar: WHICH menus and WHAT is in them.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHERE THE LINE IS.** The AppKit owns the MECHANISM and this file owns the CONTENTS. `-[NSApplication
  * setMainMenu:]` takes a menu, puts the APPLICATION'S OWN menu at its front — named after the process, because the

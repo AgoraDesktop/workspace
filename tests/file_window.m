@@ -1,8 +1,10 @@
 /*
  * file_window — the W2 shell: one folder, one model, and every strip reading it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHAT THIS PROVES IS THE SHELL'S ONE RULE: the title, the path bar, the status bar and the icon view are four
  * renderings of ONE `WSItemModel`.** A navigation replaces that model and every strip follows; the history's

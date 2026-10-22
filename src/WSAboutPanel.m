@@ -1,8 +1,10 @@
 /*
  * WSAboutPanel.m — the About panel: the application's icon, its name, its version, and what it is.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY STRING IN IT COMES FROM THE BUNDLE.** `CFBundleName`, `CFBundleShortVersionString` and
  * `CFBundleIdentifier` are read out of `Contents/Info.plist` through `-[NSBundle objectForInfoDictionaryKey:]`, so
@@ -144,7 +146,7 @@ static void WSDrawApplicationIcon(NSRect bounds)
 
 	WSDrawCentredLine(@"Agora's file manager and desktop.", bounds, WSTextAttributes(11.0, NO, [NSColor blackColor]),
 			  162.0);
-	WSDrawCentredLine(@"© 2026 Kyle J. Cardoza. MIT licensed.", bounds, WSTextAttributes(10.0, NO, grey), 182.0);
+	WSDrawCentredLine(@"© 2026 Kyle J. Cardoza. GPL-3.0-or-later.", bounds, WSTextAttributes(10.0, NO, grey), 182.0);
 	if ([identifier length] > 0) {
 		WSDrawCentredLine(identifier, bounds, WSTextAttributes(9.0, NO, grey), 202.0);
 	}

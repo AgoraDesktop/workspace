@@ -1,8 +1,10 @@
 /*
  * WSAboutPanel.h — the panel "About Workspace" opens.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * WHY THIS IS WORKSPACE'S AND NOT THE APPKIT'S. `-[NSApplication orderFrontStandardAboutPanel:]` is a NAMED REFUSAL
  * in this tree — "a panel AND text drawing, neither of which this tier has" — and the first half of that is no

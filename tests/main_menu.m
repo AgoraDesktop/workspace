@@ -1,8 +1,10 @@
 /*
  * main_menu — the application's menu bar, CHECKED WITHOUT A COMPOSITOR.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHAT THIS CAN AND CANNOT SEE.** `-[NSApplication setMainMenu:]` builds the bar's WINDOW from the menu-bar
  * region the compositor sends, and with no compositor there is no region and no window — so what the desktop suite

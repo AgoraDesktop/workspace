@@ -1,8 +1,10 @@
 /*
  * file_ops — the manager does the operations, and Undo takes each of them back.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The temp tree is on `/tmp`; a second destination is on `/dev/shm`, so "across a volume" is a fact. The conflict
  * handler answers Skip and Keep Both directly; the progress handler counts the items. Compress is checked by the ZIP

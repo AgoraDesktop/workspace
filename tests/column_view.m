@@ -1,8 +1,10 @@
 /*
  * column_view — W5: the browser's columns, the selection that opens the next one, and the preview.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE RELATIONSHIP IS THE TEST.** Column 0 is the folder; selecting a branch row must make column 1 its children,
  * and column 2 their children; selecting a leaf must add no column and put that item in the preview. The preview is

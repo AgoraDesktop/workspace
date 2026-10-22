@@ -1,8 +1,10 @@
 /*
  * trash — the recycle, the Put Back record and the empty.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * The trash is handed an EXPLICIT root, so a probe never recycles into the real home directory. What is measured is
  * the move into that root, the unique name when one is already there, the record that carries the original path,

@@ -1,8 +1,10 @@
 /*
  * WSIconView.m — the grid, the keyboard, the rename field and the drag destination.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE LAYOUT IS `WSIconLayout`'S AND THE ITEMS ARE `WSItemModel`'S; this file is the interaction between them. The
  * order is `WSIconOrderLeftToRightRows`: a row fills, then the next row down. The desktop's right-to-left columns

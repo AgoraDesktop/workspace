@@ -1,8 +1,10 @@
 /*
  * WSFileOperations.h — the operations a file manager performs, and their undo.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MANAGER OWNS THE OPERATION, NOT THE VIEW.** New Folder, Duplicate, Rename, Move/Copy To, Move to Trash,
  * Put Back, Empty Trash and Compress are methods here; a view asks for one and reloads its model. Every operation

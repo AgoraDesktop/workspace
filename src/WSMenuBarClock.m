@@ -1,8 +1,10 @@
 /*
  * WSMenuBarClock.m — an `NSStatusItem` whose view draws the time, and the width arithmetic that goes with it.
  *
- * Copyright © 2026 Kyle J. Cardoza. MIT licensed — see LICENSE.
- * SPDX-License-Identifier: MIT
+ * Copyright © 2026 Kyle J. Cardoza.
+ * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE THREE THINGS A STATUS ITEM HAS TO GET RIGHT, AND THIS FILE IS ONE APiece.**
  *
