@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * PURE GEOMETRY, SO NO COMPOSITOR AND NO WINDOW: a cell size, a column-major grid, a snap that avoids what is
  * taken, an arrange order and a hit test. These are the numbers a desktop and a file window's icon view will

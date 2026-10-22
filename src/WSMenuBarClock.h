@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **WHY THIS EXISTS AT ALL, AND IT IS NOT ONLY BECAUSE A DESKTOP WANTS A CLOCK.** Everything else this shell owns is
  * a WINDOW: the desktop, a file window, a sheet, a panel. A status item is the one piece of an application that is

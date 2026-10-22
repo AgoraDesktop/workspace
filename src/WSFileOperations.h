@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE MANAGER OWNS THE OPERATION, NOT THE VIEW.** New Folder, Duplicate, Rename, Move/Copy To, Move to Trash,
  * Put Back, Empty Trash and Compress are methods here; a view asks for one and reloads its model. Every operation

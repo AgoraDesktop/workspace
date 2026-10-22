@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE TRASH IS THE FILE MANAGER'S OPERATION, NOT THE DOCK'S ICON.** The Dock owns the picture; Workspace owns the
  * directories, the Put Back records and the empty. The default directory is `~/.Trash` for items on the home volume

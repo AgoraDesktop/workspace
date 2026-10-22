@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **IT SHOWS THE PREFERENCES THAT EXIST AND INVENTS NONE.** Workspace has exactly two settings today: WHICH
  * directory is the desktop (set by `AGORA_DESKTOP`, or `~/Desktop`) and HOW BIG its icons are (kept in the folder's

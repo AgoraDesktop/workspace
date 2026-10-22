@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE GRID IS `WSIconLayout`'S, THE ITEMS ARE `WSItemModel`'S, AND THIS VIEW IS THE PART THAT IS NEITHER.** W2
  * proved the shell; W3 makes the icon mode do what a person expects: a selection that the keyboard can move, a

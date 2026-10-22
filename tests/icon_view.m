@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE THREE HALVES ARE ASKED SEPARATELY.** The GRID is `WSIconLayout`'s left-to-right row order; the KEYBOARD and
  * TYPE-SELECT are `WSIconView`'s own state; the RENAME is a field over the label and an `NSFileManager` move; and the

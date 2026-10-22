@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE APPLICATION MENU IS NOT BUILT HERE, AND THAT IS THE FIRST THING TO KNOW.** `-[NSApplication setMainMenu:]`
  * INSERTS it — at index 0, titled with `-[NSProcessInfo processName]` — and moves Help last, because those two

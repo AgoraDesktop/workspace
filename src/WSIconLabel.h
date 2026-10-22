@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE GRID'S CELL IS THE LIMIT, not the name's own measured width. An icon view draws names under ICONS in a
  * grid, and a name wider than its cell spills into the next one — long directory names stack on top of their

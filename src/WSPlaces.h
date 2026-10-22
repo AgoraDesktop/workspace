@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE SIDEBAR'S MODEL IS DATA, NOT VIEW STATE.** A place is a title and a path; a section is a title and its
  * places. The file window's outline reads these, and the same small model answers where "Desktop" is, so the

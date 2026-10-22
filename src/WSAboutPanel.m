@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **EVERY STRING IN IT COMES FROM THE BUNDLE.** `CFBundleName`, `CFBundleShortVersionString` and
  * `CFBundleIdentifier` are read out of `Contents/Info.plist` through `-[NSBundle objectForInfoDictionaryKey:]`, so

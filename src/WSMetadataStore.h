@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THIS IS THE `.DS_Store` QUESTION, ANSWERED THE TREE'S OWN WAY (WORKSPACE-PLAN.md §5.1). The Mac's MODEL is
  * followed — a per-folder sidecar beside the items — and the FORMAT and the FILENAME are Agora's, because the

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **ICON SERVICES ANSWERS A `CGImageRef`; THE APPKIT WANTS AN `NSImage`.** The conversion is one function, and the
  * desktop, the sidebar and the file window's icon view all ask it rather than each carrying its own copy of the

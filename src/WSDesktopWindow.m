@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE DESKTOP IS TWO LEVELS, AND THIS IS THE UPPER ONE.** The wallpaper is a window at
  * `kCGDesktopWindowLevel` — BELOW every ordinary window, and eventually the Dock's to draw; this window is at

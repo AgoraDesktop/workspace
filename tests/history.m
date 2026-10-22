@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * Offscreen and Foundation-only: `WSHistory` is the arithmetic a file window's arrows ask, and none of it needs a
  * window. The cases are the reference file manager's: a new location truncates what was forward, the current

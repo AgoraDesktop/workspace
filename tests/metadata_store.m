@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * THE SIDECAR IS WRITTEN, REOPENED AND READ BACK, and a sidecar from a version this build does not know is
  * refused WHOLE rather than read field by field — because a person's icon positions are the thing a bad read

@@ -4,7 +4,6 @@
  * Copyright © 2026 Kyle J. Cardoza.
  * SPDX-FileCopyrightText: 2026 Kyle J. Cardoza
  * SPDX-License-Identifier: GPL-3.0-or-later
- * Portions of this file may derive from GNUstep; see THIRD-PARTY.md.
  *
  * **THE ORDERING IS ASKED OF `WSItemSort`, AND THE VIEW IS ASKED TO SHOW IT.** Directories first is a rule about
  * groups; natural order is a rule about digits (`file2` before `file10`); date, size and Kind are the three column
