@@ -16,6 +16,7 @@
 #import "WSMainMenu.h"
 #import "WSMenuBarClock.h"
 #import "WSPreferencesWindow.h"
+#import "WSPrintService.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
@@ -333,6 +334,21 @@
 	[self stop];
 	[_fileWindows release];
 	[super dealloc];
+}
+
+/* ============================================================================================ *
+ * THE LAUNCH'S PRINT REQUEST.                                                                   *
+ * ============================================================================================ */
+
+/* **A PRINT REQUEST IS A LIST OF FILES AND A SETTINGS DICTIONARY**, and everything a file manager can print about one is
+ * a listing — the body is `WSPrintService`'s so that `File > Print…` and a request from outside run the same code. */
+- (NSApplicationPrintReply)application:(NSApplication *)application
+			    printFiles:(NSArray *)fileNames
+			  withSettings:(NSDictionary *)printSettings
+		      showPrintPanels:(BOOL)showPrintPanels
+{
+	(void)application;
+	return [WSPrintService printFiles:fileNames settings:printSettings showPrintPanels:showPrintPanels];
 }
 
 @end

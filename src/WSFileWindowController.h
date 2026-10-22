@@ -76,6 +76,12 @@
 - (NSString *)directory;
 - (NSInteger)itemCount;
 
+/* **PRINTING IS THE FILE MANAGER'S, AND IT IS A LISTING.** `-printablePaths` is the selection when there is one and the
+ * whole folder otherwise; `-printSelection:` hands those paths to `-application:printFiles:`, which is the launch's own
+ * door — so the menu row is the FIRST REAL CALLER of it rather than a second printing path. */
+- (NSArray *)printablePaths;
+- (void)printSelection:(nullable id)sender;
+
 - (BOOL)canGoBack;
 - (BOOL)canGoForward;
 - (void)goBack:(nullable id)sender;

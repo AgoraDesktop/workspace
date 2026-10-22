@@ -368,6 +368,27 @@ rollback the code does not perform.
 progress counts, Trash/Undo/Put Back, Empty and Compress with Undo; `tests/trash.m` measures recycle, unique names,
 Put Back, a directory and an empty over an explicit trash root.
 
+## Printing — a listing, and the launch's own door
+
+**THE COMPONENT PRINTS A LISTING, NOT A DOCUMENT.** `WSPrintView` builds one row per path — name, kind (through
+`WSItemKind`, the same registry the list view uses), size and modification date — and is otherwise a tall flipped
+`NSView`: it does not answer `-knowsPageRange:`, so `NSPrintOperation` paginates it by the ticket's imageable height and
+the only number this component owns is the row height. The width is A4's imageable width, so a default ticket centres
+it with no clipping.
+
+**`WSPrintService` IS THE BODY BEHIND BOTH DOORS.** `WSApplication -application:printFiles:withSettings:showPrintPanels:`
+is the launch's and `File > Print…` is the app's; neither owns a renderer, so both reach the service, which copies the
+shared ticket per file (a request must not change the application's default paper), merges the settings dictionary,
+and prints. The reply is the launch's three-valued one, and a cancel anywhere wins over a success.
+
+**AND THE MENU ROW TAKES THE LAUNCH DOOR RATHER THAN A SECOND PATH.** `-printSelection:` hands its paths to
+`-[NSApplication application:printFiles:]`, which asks the delegate — so the menu and an outside request run the same
+code, and `tests/printing.m` measures the handoff with a recording delegate instead of printing.
+
+What this deliberately does not do: print a file's CONTENTS (that needs the owning application, and there is no Apple
+Event transport here), and draw a running header on every page (that needs `-knowsPageRange:`/`-rectForPage:` and a page
+count the listing does not have to offer). Both are named here rather than left to be found.
+
 ## Known gaps, recorded rather than left to be found
 
 **THE ABOUT PANEL SHOWS A GENERIC FOLDER AS THE APPLICATION'S ICON.** `WSAboutPanel` asks Icon Services for the
@@ -379,8 +400,9 @@ application, and its icon is the application's.
 
 ## Licence per file
 
-Every file is MIT. There is no third-party code in this component, so there is no per-file licence split to
-record.
+This repository was relicensed to **LGPL-3.0-or-later** (libraries) and **GPL-3.0-or-later** (the application) on
+2026-10-22; the per-file `SPDX-License-Identifier` header is the authority. There is no third-party code in this
+component, so there is no other split to record.
 
 ## The bundle icon (`Resources/Workspace.icns`)
 

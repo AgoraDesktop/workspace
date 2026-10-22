@@ -124,6 +124,10 @@ static NSMenu *WSFileMenu(id target)
 	WSRow(menu, @"New Folder", @selector(newFolder:), nil, @"n", NSCommandKeyMask | NSShiftKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Open", @selector(openDocument:), nil, @"o", NSCommandKeyMask);
+	/* **PRINT IS THE FILE WINDOW'S AND ARRIVES THROUGH THE RESPONDER CHAIN**, like every row here whose owner is a
+	 * window rather than the application: `WSFileWindowController -printSelection:` prints the selection, or the whole
+	 * folder when nothing is selected, as a listing. */
+	WSRow(menu, @"Print…", @selector(printSelection:), nil, @"p", NSCommandKeyMask);
 	WSRow(menu, @"Close Window", @selector(performClose:), nil, @"w", NSCommandKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Get Info", @selector(getInfo:), nil, @"i", NSCommandKeyMask);

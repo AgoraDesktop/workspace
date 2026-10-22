@@ -208,3 +208,47 @@ target_link_libraries(file_ops PRIVATE Foundation::Foundation ZLIB::ZLIB objc)
 add_test(NAME workspace-file-ops COMMAND file_ops)
 set_tests_properties(workspace-file-ops PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
+
+# **PRINTING: THE LISTING A FILE MANAGER CAN PRINT.** The printable view's rows and height, a three-row page and a
+# hundred-row three-page listing, the ink on page one, the service's preview/save/cancel replies, the application's
+# delegate door, and the window's verb measured THROUGH NSApplication with a recording delegate — so no job touches a
+# printer and the probe runs anywhere. The sources are the view, the service and the two model files the view asks for
+# a kind and a size.
+add_executable(printing printing.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPrintView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPrintService.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSApplication.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSAboutPanel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMenuBarClock.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPreferencesWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+target_include_directories(printing PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(printing PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices
+    Foundation::Foundation
+    ZLIB::ZLIB
+    objc)
+add_test(NAME workspace-printing COMMAND printing)
+set_tests_properties(workspace-printing PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")

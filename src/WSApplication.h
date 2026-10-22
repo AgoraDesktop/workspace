@@ -16,6 +16,9 @@
 #define WORKSPACE_WSAPPLICATION_H
 
 #import <Foundation/NSObject.h>
+/* **APPKIT FOR ONE TYPE.** The launch's print reply (`NSApplicationPrintReply`) is AppKit's, and a delegate method that
+ * named it as an integer would not match the protocol it conforms to by being sent. */
+#import <AppKit/NSApplication.h>
 
 /* **THE PROTOCOL'S OWN HEADER, BECAUSE A FORWARD DECLARATION IS NOT A CONFORMANCE.** `@protocol X;` is enough to
  * NAME a protocol but not to ADOPT it — MEASURED, clang warns "cannot find protocol definition for
@@ -26,6 +29,8 @@
 @class WSDesktopWindow;
 @class WSFileWindowController;
 @class WSMenuBarClock;
+@class NSArray;
+@class NSDictionary;
 @class NSMutableArray;
 
 @interface WSApplication : NSObject <WSPreferencesWindowTarget>
@@ -85,6 +90,14 @@
 
 /* `WSPreferencesWindow`'s answer to a moved slider: apply the size and let the desktop re-lay out. */
 - (void)preferencesWindow:(id)window didChangeIconSize:(NSInteger)size;
+
+/* **THE LAUNCH'S PRINT REQUEST, WHICH IS THE FIRST THING THAT MAKES A FILE PRINTABLE.** NSApplication asks its delegate
+ * this when a print request arrives; the body is `WSPrintService`, which prints one listing per file. The reply is the
+ * launch's three-valued one, and `-application:printFiles:` turns it into the open-or-print reply. */
+- (NSApplicationPrintReply)application:(NSApplication *)application
+			    printFiles:(NSArray *)fileNames
+			  withSettings:(nullable NSDictionary *)printSettings
+		      showPrintPanels:(BOOL)showPrintPanels;
 
 @end
 

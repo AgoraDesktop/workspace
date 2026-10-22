@@ -875,6 +875,41 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[self refresh];
 }
 
+/* **THE LISTING IS THE SELECTION OR THE FOLDER.** A file manager prints what it is showing: with items selected, those
+ * items; with nothing selected, every item the window is looking at. An empty folder has nothing to print, and the menu
+ * row is disabled there rather than printing a blank page. */
+- (NSArray *)printablePaths
+{
+	NSArray *selected = [self selectedPaths];
+	NSMutableArray *paths;
+	NSArray *items;
+	NSUInteger i;
+
+	if ([selected count] > 0) {
+		return selected;
+	}
+	paths = [NSMutableArray array];
+	items = [_model items];
+	for (i = 0; i < [items count]; i++) {
+		[paths addObject:[[items objectAtIndex:i] path]];
+	}
+	return paths;
+}
+
+/* **AND THE VERB ITSELF CALLS THE LAUNCH'S DOOR.** `-application:printFiles:` is what a print request from outside
+ * reaches; calling it here means the menu and the request take one path, and that the delegate's reply is used
+ * (NSApplication turns it into the open-or-print reply). */
+- (void)printSelection:(id)sender
+{
+	NSArray *paths = [self printablePaths];
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	[[NSApplication sharedApplication] application:nil printFiles:paths];
+}
+
 - (void)newFolder:(id)sender
 {
 	(void)sender;
@@ -975,6 +1010,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	}
 	if (action == @selector(newFolder:)) {
 		return YES;
+	}
+	if (action == @selector(printSelection:)) {
+		return [[self printablePaths] count] > 0;
 	}
 	if (action == @selector(duplicate:) || action == @selector(compress:)
 	    || action == @selector(moveToTrash:)) {

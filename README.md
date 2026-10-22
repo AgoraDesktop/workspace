@@ -55,7 +55,7 @@ reaches the question; the Dock raises them, back to front, and they keep the ord
 
 ### What is measured, not assumed
 
-`ctest` runs **twelve tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
+`ctest` runs **fourteen tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
 against **Agora's own window server**, headless: it runs the **bundle's** executable (the bundle path is part of what
 W0 proves), places a **normal** window over the desktop with the server's own test client, and reads the server's
 screenshot. **9 checks, 0 fail**:
@@ -69,8 +69,8 @@ The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
 (**59 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
 `workspace-list-view` (**33 checks**); the column view's `workspace-column-view` (**28 checks**); and W6's
-`workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**). The file-window through file-ops suites
-are the W2–W6 proofs below.
+`workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**); and the print system's
+`workspace-printing` (**24 checks**). The file-window through printing suites are the proofs below.
 
 ### W1: the desktop's icons
 
@@ -373,6 +373,30 @@ archiver is run, which is why the test can read the local header and find the en
 `tests/file_ops.m` is the proof: New Folder, Duplicate, Rename, Move, Copy (including `/dev/shm`), conflict Skip and
 Keep Both, progress counts, Trash/Undo/Put Back, Empty and Compress with Undo after each. `tests/trash.m` is the
 Trash's own: recycle, unique names, Put Back, a directory and an empty.
+
+### Printing: the listing, and the launch's own door
+
+**A FILE MANAGER PRINTS WHAT IT SHOWS.** Printing a document's contents needs the application that owns it, and this
+tree has no Apple Event transport to hand a file to one; what Workspace can print — and what the reference file
+manager prints for a window — is a **listing**: a title and one row per item with its kind, size and modification date.
+`WSPrintView` builds those rows once from the file system (the kind is `WSItemKind`'s, the same registry the list view
+uses) and lets the AppKit's paginator cut the tall view by the ticket's imageable height, so two hundred items need no
+arithmetic here — only a row height.
+
+**AND THE MENU ROW IS THE LAUNCH DOOR'S FIRST REAL CALLER.** `File > Print…` (⌘P) sends `-printSelection:` to the file
+window: the selection when there is one, the whole folder otherwise. That hands the paths to
+`-[NSApplication application:printFiles:]`, the launch's own door, which asks the delegate —
+`WSApplication -application:printFiles:withSettings:showPrintPanels:` — and that reaches `WSPrintService`, which prints
+one listing per file with the reply the launch turns into its open-or-print answer. One printing path, reached from
+both ends.
+
+**NOTHING A PROBE DOES TOUCHES A PRINTER.** A print request carries a settings dictionary, so the probe asks for a
+`NSPrintPreviewJob` or a `NSPrintSaveJob` and asserts the pages; the window's verb is measured through NSApplication
+with a recording delegate. A probe that printed paper would be a probe nobody could run twice.
+
+`tests/printing.m` is the proof: the rows and their arithmetic, a three-row page and a hundred-row three-page listing,
+the ink on page one, the service's preview/save/cancel replies, the application's delegate door, and the verb's paths
+arriving at the launch door — **24 checks**.
 
 ### The strip that needed a level of its own — now fixed, and measured
 

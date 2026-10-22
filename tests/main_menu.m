@@ -44,6 +44,9 @@ static void check(BOOL condition, const char *name)
 /* W2's File > New Workspace Window is the one row in the five menus with a target: the application owns the
  * second window, so the test's stand-in answers it too and the enabling walk can be measured. */
 - (void)newWorkspaceWindow:(id)sender;
+/* **AND `File > Print…` IS THE SECOND ROW WITH AN OWNER**, the file window's: a stand-in that answers it is what makes
+ * "the print row is live" a claim about the menu rather than about nothing. */
+- (void)printSelection:(id)sender;
 @end
 
 @implementation WSMenuTestTarget
@@ -51,6 +54,7 @@ static void check(BOOL condition, const char *name)
 - (void)orderFrontAboutPanel:(id)sender { (void)sender; }
 - (void)showPreferences:(id)sender { (void)sender; }
 - (void)newWorkspaceWindow:(id)sender { (void)sender; }
+- (void)printSelection:(id)sender { (void)sender; }
 
 @end
 
@@ -204,6 +208,13 @@ int main(void)
 		      "New Workspace Window is the application's own row");
 		check(item != nil && [item isEnabled], "and it is ENABLED, because the application answers it");
 
+		/* **AND THE SECOND ROW WITH AN OWNER SINCE THE PRINT SYSTEM LANDED**: the file window's `-printSelection:`. */
+		item = itemTitled([itemTitled(bar, @"File") submenu], @"Print…");
+		check(item != nil && [item target] == target && [item action] == @selector(printSelection:),
+		      "File > Print… is the file window's row, through the chain");
+		check(item != nil && [item isEnabled], "and it is ENABLED, because the stand-in answers it");
+		check(item != nil && [[item keyEquivalent] isEqual:@"p"], "and it carries Cmd-P");
+
 		/* AND THE MENUS BESIDE IT ARE A SKELETON: every row names the reference file manager's own selector and none of them has a
 		 * target until the stage that implements it exists. Greyed is the honest state — an enabled row nobody
 		 * answers is a promise the menu cannot keep. */
@@ -223,9 +234,10 @@ int main(void)
 					if ([row isSeparatorItem]) {
 						continue;
 					}
-					/* NEW WORKSPACE WINDOW IS W2'S, and is checked above; every other row here still waits for
-					 * its stage and must be grey. */
-					if ([row action] == @selector(newWorkspaceWindow:)) {
+					/* NEW WORKSPACE WINDOW IS W2'S AND PRINT IS THE PRINT SYSTEM'S; both are checked above, and
+					 * every other row here still waits for its stage and must be grey. */
+					if ([row action] == @selector(newWorkspaceWindow:)
+					    || [row action] == @selector(printSelection:)) {
 						continue;
 					}
 					inspected++;
