@@ -483,9 +483,15 @@ runpath** from the build tree's to the prefix's library directory — which is w
 build-tree paths. The destination is `libexec` rather than `bin` because a bundle is not a `$PATH` program: it is
 started by `libagora-launchservices` from the bundle it reads.
 
-**Known gap, not this component's:** running the installed bundle without `LD_LIBRARY_PATH` still fails on
-`libagora-dispatch`/`libBlocksRuntime`, which `libagora-base` and `libagora-core` need transitively and whose own
-installed libraries carry no `$ORIGIN` runpath. That belongs to those libraries' install rules.
+**A dependency's dependency is resolved without any environment.** A runpath is not inherited, so the libraries a
+library needs are looked up through THAT library's path — and every Agora library now installs with `$ORIGIN`,
+which is the directory they all land in. The installed bundle starts with `LD_LIBRARY_PATH` unset; that was not
+true before, and it is the difference between an install and a staging area.
+
+**And a packager's runpath wins.** `CMAKE_INSTALL_RPATH` is consulted rather than overridden: when a distribution
+configures the install with an empty (or its own) value, that is what the executable gets, because a staged tree is
+read with `ldd` before the prefix exists and an absolute configure-time `libdir` in the RUNPATH makes `ldd` resolve
+the HOST's libraries instead.
 
 ## Licence
 

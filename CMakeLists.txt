@@ -164,19 +164,32 @@ add_subdirectory(tests)
 # AppKit, Foundation and Icon Services come from. A stated install path is not a leaked build path; that is the whole
 # difference between the two, and it is why the copy was not equivalent.
 #
-# **WHAT THIS DOES NOT FIX IS A DEPENDENCY'S DEPENDENCY.** A `DT_RUNPATH` is not consulted for the libraries a
-# library needs, and `libagora-base`/`libagora-core` are installed with an empty runpath over their own
-# `libagora-dispatch`/`libBlocksRuntime` neighbours — so an installed bundle still wants `LD_LIBRARY_PATH` until
-# THOSE install rules carry an `$ORIGIN`. That is their fix to make, and `README.md` records it as the known gap
-# rather than letting it read as a broken install here.
+# **A DEPENDENCY'S DEPENDENCY IS THE LIBRARIES' OWN BUSINESS, AND THEY NOW STATE IT.** A `DT_RUNPATH` is not
+# consulted for the libraries a library needs, so an installed bundle used to want `LD_LIBRARY_PATH` pointing at the
+# directory its libraries were already in. Every Agora library now installs with `$ORIGIN`, which is that directory,
+# so the chain resolves on its own: an installed `Workspace.app` starts with no environment at all — verified by
+# running the installed bundle with `LD_LIBRARY_PATH` unset.
 #
 # THE DESTINATION IS `libexec` AND NOT `bin`: a bundle is not a `$PATH` program. `bin` is for the executable a person
 # types. This one is started by `libagora-launchservices` FROM the bundle it reads, so the thing installed is the whole
 # `Workspace.app` directory, and the file inside it is nobody's command.
 set(_bundle_install "${CMAKE_INSTALL_LIBEXECDIR}/Workspace.app")
 
-set_target_properties(Workspace PROPERTIES
-    INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+# **AND A PACKAGER'S CHOICE WINS, WHICH IT COULD NOT BEFORE.** This property was assigned unconditionally, so a
+# distribution that configured the install with an empty `CMAKE_INSTALL_RPATH` — the correct answer for a package
+# whose libraries live in the system's own directories and whose staged tree is read by `ldd` before installation —
+# got `DT_RPATH` naming the CONFIGURE-TIME absolute libdir instead. MEASURED on a staged aarch64 package:
+# `/usr/lib64` in the RUNPATH, `ldd -r` picking the HOST's libraries over the staged ones, and unresolved
+# NSDraggingItem/NSBrowser/NSProgressIndicator/NSLayoutConstraint as the symptom.
+#
+# `CMAKE_INSTALL_RPATH` is CMake's own door for exactly this, so it is consulted rather than overridden: the
+# default below is applied only when nobody has set it. `get_property(... CACHE ...)` is what tells "set to empty"
+# from "not set" — the empty string is a legitimate, explicit answer and is honoured as one.
+get_property(_workspace_rpath_is_set CACHE CMAKE_INSTALL_RPATH PROPERTY TYPE SET)
+if(NOT _workspace_rpath_is_set)
+    set_target_properties(Workspace PROPERTIES
+        INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+endif()
 
 install(TARGETS Workspace
     RUNTIME DESTINATION "${_bundle_install}/Contents/${_bundle_platform}/${_bundle_arch}")
