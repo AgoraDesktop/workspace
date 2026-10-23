@@ -43,6 +43,7 @@
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSSegmentedControl.h>
 #import <AppKit/NSSplitView.h>
+#import <AppKit/NSWorkspace.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSTextFieldCell.h>
@@ -656,18 +657,17 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[self refresh];
 }
 
+/* **A DOCUMENT OPENS THROUGH THE WORKSPACE'S OWN APPKIT DOOR, NOT THROUGH THE SEAM DIRECTLY.** `NSWorkspace` is this
+ * stack's face over Launch Services — `WORKSPACE-PLAN.md` puts it in the AppKit rather than here — so the file manager
+ * asks it and the policy (which applications are registered, what a type resolves to, what a refusal looks like) stays
+ * in the one place that owns it. MEASURED: this method used to build a CFURL and call `LSOpenCFURLRef` itself, which
+ * meant the file window had a second copy of the launch decision and no way to see the AppKit's answer. */
 - (void)openItem:(WSItem *)item
 {
 	if ([item isDirectory]) {
 		[self navigateToDirectory:[item path]];
 	} else {
-		CFStringRef path = CFStringCreateWithCString(NULL, [[item path] UTF8String],
-							     kCFStringEncodingUTF8);
-		CFURLRef url = CFURLCreateWithFileSystemPath(NULL, path, kCFURLPOSIXPathStyle, false);
-
-		CFRelease(path);
-		LSOpenCFURLRef(url, NULL);
-		CFRelease(url);
+		(void)[[NSWorkspace sharedWorkspace] openFile:[item path]];
 	}
 }
 
