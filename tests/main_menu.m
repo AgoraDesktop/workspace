@@ -21,6 +21,7 @@
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
 
 #import "WSMainMenu.h"
@@ -37,8 +38,12 @@ static void check(BOOL condition, const char *name)
 
 /* **A TARGET THAT ANSWERS THE TWO ROWS THE APPKIT REFUSES.** The bar's application menu names this object for About
  * and Preferences, and the walk below enables a row exactly when its target answers its action — so the target has
- * to exist for "About is live" to be a claim about the menu rather than about nothing. */
-@interface WSMenuTestTarget : NSObject
+ * to exist for "About is live" to be a claim about the menu rather than about nothing.
+ *
+ * **AND IT IS AN `NSResponder`, BECAUSE ONE OF THE ROWS IT STANDS IN FOR ARRIVES THROUGH THE CHAIN.** File > Print…
+ * has no target of its own: the enabling walk finds it in the responder chain, so being answerable means being IN
+ * that chain. The test makes this object a key window's first responder before it asks the menu to update. */
+@interface WSMenuTestTarget : NSResponder
 - (void)orderFrontAboutPanel:(id)sender;
 - (void)showPreferences:(id)sender;
 /* W2's File > New Workspace Window is the one row in the five menus with a target: the application owns the
@@ -50,6 +55,13 @@ static void check(BOOL condition, const char *name)
 @end
 
 @implementation WSMenuTestTarget
+
+/* **A RESPONDER THAT WANTS THE KEYBOARD**, which is opt-in in this tier — `NSResponder`'s base answer is NO, so a
+ * stand-in that did not answer YES could never be the key window's first responder and the chain would start nowhere. */
+- (BOOL)acceptsFirstResponder
+{
+	return YES;
+}
 
 - (void)orderFrontAboutPanel:(id)sender { (void)sender; }
 - (void)showPreferences:(id)sender { (void)sender; }
@@ -208,13 +220,6 @@ int main(void)
 		      "New Workspace Window is the application's own row");
 		check(item != nil && [item isEnabled], "and it is ENABLED, because the application answers it");
 
-		/* **AND THE SECOND ROW WITH AN OWNER SINCE THE PRINT SYSTEM LANDED**: the file window's `-printSelection:`. */
-		item = itemTitled([itemTitled(bar, @"File") submenu], @"Print…");
-		check(item != nil && [item target] == target && [item action] == @selector(printSelection:),
-		      "File > Print… is the file window's row, through the chain");
-		check(item != nil && [item isEnabled], "and it is ENABLED, because the stand-in answers it");
-		check(item != nil && [[item keyEquivalent] isEqual:@"p"], "and it carries Cmd-P");
-
 		/* AND THE MENUS BESIDE IT ARE A SKELETON: every row names the reference file manager's own selector and none of them has a
 		 * target until the stage that implements it exists. Greyed is the honest state — an enabled row nobody
 		 * answers is a promise the menu cannot keep. */
@@ -284,6 +289,41 @@ int main(void)
 			check(item != nil && [item isEnabled], "\"Bring All to Front\" IS enabled: -arrangeInFront: is answered");
 			item = itemTitled(windowMenu, @"Minimize");
 			check(item != nil && ![item isEnabled], "and Minimize is not — the desktop is never the key window");
+		}
+
+		/* **AND THE SECOND ROW WITH AN OWNER SINCE THE PRINT SYSTEM LANDED**, which is the file window's
+		 * `-printSelection:`. **ITS ITEM KEEPS A NIL TARGET, AND THAT IS THE POINT RATHER THAN AN OMISSION:** a
+		 * chain-routed row resolves its target when the action is SENT (`NSApplication -targetForAction:`), so the
+		 * item's own target is nil and the row's liveness is the only evidence that anybody answers it. The pair of
+		 * checks below is what makes "through the chain" a measurement: with no key window the walk starts at nil and
+		 * the row is grey; with the stand-in as a key window's first responder the same row is live.
+		 *
+		 * MEASURED, and it is why this block is LAST: making a window key changes what SEVERAL chain-routed rows
+		 * answer, so the rows above are checked before it exists. */
+		{
+			NSMenu *fileMenu = (NSMenu *)[[bar itemAtIndex:indexTitled(bar, @"File")] submenu];
+			NSWindow *window;
+
+			item = itemTitled(fileMenu, @"Print…");
+			check(item != nil && [item action] == @selector(printSelection:),
+			      "File > Print… names the file window's action, and carries no target of its own");
+			check(item != nil && [[item keyEquivalent] isEqual:@"p"], "and it carries Cmd-P");
+
+			[bar update];
+			check(item != nil && ![item isEnabled],
+			      "with NO key window the chain starts at nil, so the row is disabled");
+
+			/* A TITLED WINDOW, because `-makeKeyWindow` is abandoned for one that cannot become key and a borderless
+			 * window cannot in this tier (Apple's own rule, and `NSWindow -canBecomeKeyWindow` says so). */
+			window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 300.0, 200.0)
+				styleMask:NSTitledWindowMask backing:NSBackingStoreBuffered defer:YES];
+			[window makeKeyWindow];
+			[window makeFirstResponder:target];
+			[bar update];
+			check(item != nil && [item isEnabled],
+			      "and with the stand-in as that window's first responder it is ENABLED, through the chain");
+			[window close];
+			[window release];
 		}
 
 		printf("main_menu: %d case(s) failed\n", failed);
