@@ -56,6 +56,10 @@
  * and refusing to start over one would be a shell that cannot run without a decoration. */
 - (BOOL)start;
 
+/* **RUN THE ORDINARY APPLICATION LOOP UNTIL SOMETHING STOPS IT.** This is what a launch does, and it is the whole
+ * difference between a desktop and a test: the loop the AppKit names, no deadline, no pass count that ends it. */
+- (void)run;
+
 /* Run the ordinary application loop for `seconds`. **THE LOOP IS THE APPKIT'S NOW, NOT A PUMP OF W0'S OWN**, and
  * that is load-bearing rather than tidy: a menu opened from the bar is driven by `NSMenuView`'s own loop, which
  * fetches events only while `-[NSApplication isRunning]` — so an application that pumps by hand gets a menu that is

@@ -7,8 +7,9 @@
  *
  *   Workspace [--seconds N]
  *
- * The `--seconds` is a TEST'S door and is named as one: a desktop is a thing that stays, and the suite needs it
- * to be able to leave. Later stages replace it with the ordinary run loop.
+ * **A DESKTOP IS A THING THAT STAYS, SO AN ORDINARY LAUNCH RUNS THE ORDINARY LOOP.** The `--seconds` is a TEST'S
+ * door and is named as one: the suite needs to be able to leave, so an EXPLICIT `--seconds N` bounds the run and
+ * nothing else does. The default is not a short deadline — it is no deadline at all.
  */
 #import <AppKit/NSApplication.h>
 #import <Foundation/NSAutoreleasePool.h>
@@ -21,7 +22,8 @@
 
 int main(int argc, char **argv)
 {
-	double seconds = 3.0;
+	double seconds = 0.0;
+	int bounded = 0;
 	WSApplication *workspace;
 	int i;
 	int showAbout = 0;
@@ -48,6 +50,7 @@ int main(int argc, char **argv)
 	for (i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "--seconds") == 0 && i + 1 < argc) {
 			seconds = atof(argv[++i]);
+			bounded = 1;
 		} else if (strcmp(argv[i], "--column-view") == 0) {
 			showFileWindow = 1;
 			showColumnView = 1;
@@ -92,7 +95,13 @@ int main(int argc, char **argv)
 			fprintf(stderr, "workspace: THE DESKTOP WINDOW WAS NOT MADE\n");
 			return 1;
 		}
-		[workspace runForSeconds:seconds];
+		/* **THE ONLY BOUNDED RUN IS THE ONE THAT WAS ASKED FOR.** `--seconds 0` is still a bounded run — a caller that
+		 * named zero asked for a loop that leaves immediately — so the flag, not the value, decides. */
+		if (bounded) {
+			[workspace runForSeconds:seconds];
+		} else {
+			[workspace run];
+		}
 		[workspace stop];
 		[workspace release];
 	}

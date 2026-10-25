@@ -88,6 +88,19 @@ set_tests_properties(workspace-desktop PROPERTIES
     SKIP_RETURN_CODE 77
     ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>")
 
+# **AND AN ORDINARY LAUNCH STAYS, WHICH IS THE ONE THING A DESKTOP MUST DO.** The three-second deadline used to be
+# installed for every launch, so a session whose launcher treated Workspace as its foreground process lost the desktop
+# about three seconds in. This measures the process, not a picture: with no arguments it is still running after five
+# seconds, and `--seconds 0.2` and `--seconds 0` still leave on their own — the flag is what bounds a run.
+add_test(NAME workspace-default-run
+    COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/run-default-run.sh"
+            "${WORKSPACE_BUNDLE_EXECUTABLE}"
+            "${AGORA_WINDOW_SERVER_BINARY}")
+
+set_tests_properties(workspace-default-run PROPERTIES
+    SKIP_RETURN_CODE 77
+    ENVIRONMENT "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>")
+
 # **THE HISTORY, WITHOUT A WINDOW.** Back/Forward is a stack and a cursor; the view only asks whether the arrows
 # are possible. Foundation-only, so it runs anywhere.
 add_executable(history history.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m")

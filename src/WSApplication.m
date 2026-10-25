@@ -52,6 +52,8 @@
 - (void)openFileWindowAtDirectory:(NSString *)directory;
 - (void)desktopOpenFolder:(NSNotification *)notification;
 - (void)fileWindowWillClose:(NSNotification *)notification;
+/* **ONE LOOP, TWO DEADLINES** — the ordinary run passes nil, and `--seconds` passes the date. */
+- (void)fn_runWithDeadline:(NSDate *)deadline;
 @end
 
 @implementation WSApplication
@@ -140,12 +142,25 @@
  * true the moment this door uses the loop the AppKit names instead of one of its own. The deadline is enforced
  * from the loop's own per-pass notification, so `--seconds` survives; the desktop's events, its windows and its
  * frame pacing are now the AppKit's, which is what the plan always said W0's pump was standing in for. */
+- (void)run
+{
+	[self fn_runWithDeadline:nil];
+}
+
+/* **THE BOUNDED RUN IS THE SAME LOOP WITH A DEADLINE, WHICH IS WHY IT IS THE SAME CODE.** `--seconds` is a test's
+ * door; a run with no deadline is the desktop. A nil deadline makes `-applicationDidUpdate:` count passes and
+ * stop for nothing. */
 - (void)runForSeconds:(double)seconds
+{
+	[self fn_runWithDeadline:[NSDate dateWithTimeIntervalSinceNow:seconds]];
+}
+
+- (void)fn_runWithDeadline:(NSDate *)deadline
 {
 	NSApplication *application = [NSApplication sharedApplication];
 
 	[_deadline release];
-	_deadline = [[NSDate dateWithTimeIntervalSinceNow:seconds] retain];
+	_deadline = [deadline retain];
 	_passes = 0;
 	[application setDelegate:self];
 	[application run];
