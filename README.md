@@ -67,7 +67,7 @@ screenshot. **9 checks, 0 fail**:
 
 The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**59 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
+(**70 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
 `workspace-list-view` (**33 checks**); the column view's `workspace-column-view` (**28 checks**); and W6's
 `workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**); and the print system's
 `workspace-printing` (**24 checks**). The file-window through printing suites are the proofs below.
@@ -165,6 +165,17 @@ folder; a folder double-clicked on the desktop posts `WSDesktopViewOpenFolderNot
 opens it in a file window of its own. Each controller keeps its own folder, history and path bar, and closing one
 removes it from the application's list without touching the desktop or the other windows.
 
+**AN APPLICATION BUNDLE IS A PACKAGE, AND A PACKAGE IS OPENED RATHER THAN BROWSED.** An `.app` is a directory on
+disk, so `-isDirectory` alone sent a double-click into its `Contents` — the opposite of what a person who
+double-clicked an application asked for. `WSItem -isPackage` asks the AppKit's own door
+(`NSWorkspace -isFilePackageAtPath:`) once, and `WSItem -isBrowsable` is the ONE rule every view shares: a browsable
+item is navigated into, anything else is opened (`-openFile:`, which launches an application bundle), and only a
+browsable item gets a disclosure triangle or a browser column. The desktop's double-click reads the same rule, so a
+bundle dropped on the Desktop launches too, and `WSItemKind` asks Launch Services for a package's Kind instead of
+answering "Folder". `tests/file_window.m` builds a real bundle whose executable is a script and measures both
+halves: the window did not navigate, and the script wrote its sentinel — a bundle nobody can launch would otherwise
+pass a weaker check.
+
 **THE CONTENT VIEW IS NOT FLIPPED, AND THE STRIPS ARE PLACED BY AUTO LAYOUT.** The strips want a top-down layout,
 but this tier's live drawing path enters the content view without mirroring a flipped ROOT, so a flipped content
 view placed its top strip at the bottom. The window keeps Cocoa's y-up direction, and the three strips are now
@@ -189,7 +200,8 @@ browser's first column is back at the document's origin.
 `tests/file_window.m` is the proof: a temporary tree of folders, a file and a hidden file; the model's count and the
 status bar's; the path bar's URL; the sidebar's two sections and four places; the switcher's three segments and their
 enablement; the toolbar's items; Back disabled at the first location; a double-click that navigates and updates
-every strip; Back/Forward and a new navigation's truncation; the resize's strip geometry; and a second controller
+every strip; an application bundle that is OPENED rather than navigated into, runs, and stays a leaf in List and
+Column; Back/Forward and a new navigation's truncation; the resize's strip geometry; and a second controller
 with its own model and history.
 
 ### W3: the icon view
@@ -453,7 +465,10 @@ Services and the change stream — is already built (`../libagora-launchservices
 through its API and the Dock's Trash icon remains W7/§5.3; the conflict question is a MODAL PANEL rather than a
 sheet, because `WSConflictSheet` was built before the tier had `NSPanel`/`NSAlert` and has not moved to them; the
 progress window has no Cancel; Compress writes a ZIP without ZIP64; and a multi-item move that fails halfway can leave
-the items it already moved (the conflict sheet is per destination, not a rollback). The preview is still a fixed panel rather than a browser column (W9 for its content); the icon view's
+the items it already moved (the conflict sheet is per destination, not a rollback). **A package has no "Show Package
+Contents"** — making an application bundle opaque is the right default, and the escape hatch into its `Contents` is
+the path bar (type the folder) or a terminal, not a menu row this tier has not built. The preview is still a fixed
+panel rather than a browser column (W9 for its content); the icon view's
 alias is a symbolic link until `WSAlias`; the list has no drag/drop (its rows do carry 16-point icons); the desktop is not
 LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand); a document's icon is its TYPE's generic; and
 the sidecar does not yet hold grid spacing or label placement.

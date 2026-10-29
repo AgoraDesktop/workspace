@@ -14,6 +14,8 @@
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
 
+#import <AppKit/NSWorkspace.h>
+
 #include <ctype.h>
 
 /* **NATURAL ORDER, BECAUSE A PERSON READS NUMBERS AS NUMBERS.** A run of digits is compared by its VALUE, not its
@@ -79,6 +81,8 @@ static NSComparisonResult fn_natural_compare(NSString *left, NSString *right)
 		_name = [name copy];
 		_path = [path copy];
 		_isDirectory = isDirectory;
+		_isPackage = NO;
+		_packageLoaded = NO;
 	}
 	return self;
 }
@@ -86,6 +90,25 @@ static NSComparisonResult fn_natural_compare(NSString *left, NSString *right)
 - (NSString *)name { return _name; }
 - (NSString *)path { return _path; }
 - (BOOL)isDirectory { return _isDirectory; }
+
+/* **THE PACKAGE QUESTION IS THE APPKIT'S, AND IT IS ASKED ONCE AND ONLY IF NEEDED.** The listing does not carry it,
+ * and a directory that nobody opens or expands never pays for the answer. `NSWorkspace -isFilePackageAtPath:` is the
+ * door the rest of this window asks about what opens a file, so the item and the launch path cannot disagree about
+ * whether a bundle is an application or a folder. */
+- (BOOL)isPackage
+{
+	if (!_packageLoaded) {
+		_packageLoaded = YES;
+		_isPackage = _isDirectory
+		             && [[NSWorkspace sharedWorkspace] isFilePackageAtPath:_path];
+	}
+	return _isPackage;
+}
+
+- (BOOL)isBrowsable
+{
+	return _isDirectory && ![self isPackage];
+}
 
 - (void)loadAttributes
 {

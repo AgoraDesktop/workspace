@@ -23,13 +23,16 @@
 @class NSDate;
 @class NSString;
 
-/* ONE ITEM: a name, the path it lives at, and whether it is a directory. The type and the icon come from Launch
- * Services and Icon Services by URL; this holds what the directory listing gave. */
+/* ONE ITEM: a name, the path it lives at, whether it is a directory, and whether that directory is a PACKAGE. The
+ * type and the icon come from Launch Services and Icon Services by URL; the listing supplies the name and the
+ * directory bit, and the package question is asked of the AppKit on the first ask. */
 @interface WSItem : NSObject
 {
 	NSString *_name;
 	NSString *_path;
 	BOOL _isDirectory;
+	BOOL _isPackage;			/* read from the AppKit on first ask */
+	BOOL _packageLoaded;
 	NSDate *_modificationDate;	/* RETAINED, read from the file's attributes on first ask */
 	unsigned long long _size;
 	BOOL _attributesLoaded;
@@ -38,6 +41,18 @@
 - (NSString *)name;
 - (NSString *)path;
 - (BOOL)isDirectory;
+
+/* **A PACKAGE IS A DIRECTORY THAT IS ONE THING TO A PERSON, NOT A PLACE TO BROWSE.** An application bundle is the
+ * case that matters: `isDirectory` is the filesystem fact and stays true, while this says the directory is opaque —
+ * a double-click OPENS it (Launch Services decides what opening a bundle means) instead of navigating into its
+ * `Contents`, and the views that draw a disclosure triangle or a column make it a leaf. The answer is
+ * `NSWorkspace -isFilePackageAtPath:`, which is the AppKit's own door for it, and it is asked once. */
+- (BOOL)isPackage;
+
+/* **THE ONE RULE EVERY VIEW ASKS ABOUT A DIRECTORY**: a folder is a place to browse into, and a package is not.
+ * Double-clicking a browsable item navigates; double-clicking anything else opens it. A disclosure triangle and a
+ * browser column are drawn for exactly the same set. Views ask this rather than re-deriving it from `isDirectory`. */
+- (BOOL)isBrowsable;
 
 /* **THE TWO FACTS THE LIST VIEW'S COLUMNS NEED, READ LAZILY.** A directory listing does not carry them, so the first
  * ask reads the item's attributes once and keeps the date and the size; an item nobody sorts or displays never pays

@@ -1121,7 +1121,7 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 	if (_springIndex < 0 || _springIndex >= [self itemCount] || _springIndex == _sprungIndex) {
 		return;
 	}
-	if (![[[_model items] objectAtIndex:(NSUInteger)_springIndex] isDirectory]) {
+	if (![[[_model items] objectAtIndex:(NSUInteger)_springIndex] isBrowsable]) {
 		return;
 	}
 	_sprungIndex = _springIndex;

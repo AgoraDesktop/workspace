@@ -259,12 +259,15 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 
 /* ---- THE TREE AND THE SORT CACHE ------------------------------------------------------------- */
 
+/* **A PACKAGE IS A LEAF.** The outline's children come from a child model over the item's path, and an application
+ * bundle has a path full of `Contents` that nobody is browsing for — so the same `-isBrowsable` rule that decides a
+ * double-click decides the triangle, and a bundle is one row with no disclosure. */
 - (WSItemModel *)modelForItem:(WSItem *)item
 {
 	WSItemModel *child;
 	NSString *path;
 
-	if (item == nil || ![item isDirectory]) {
+	if (item == nil || ![item isBrowsable]) {
 		return nil;
 	}
 	path = [item path];
@@ -314,7 +317,7 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 - (BOOL)outlineView:(NSOutlineView *)outlineView isItemExpandable:(id)item
 {
 	(void)outlineView;
-	return (item != nil) && [(WSItem *)item isDirectory];
+	return (item != nil) && [(WSItem *)item isBrowsable];
 }
 
 - (WSItem *)cg_itemForPath:(NSString *)path
@@ -333,7 +336,7 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		if ([[item path] isEqual:path]) {
 			return item;
 		}
-		if ([item isDirectory]
+		if ([item isBrowsable]
 		    && [path hasPrefix:[[item path] stringByAppendingString:@"/"]]) {
 			WSItem *found = [self itemForPath:path inModel:[self modelForItem:item]];
 
@@ -588,7 +591,7 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		NSString *path = [expanded objectAtIndex:i];
 		WSItem *item = [self cg_itemForPath:path];
 
-		if (item != nil && [item isDirectory]) {
+		if (item != nil && [item isBrowsable]) {
 			[self expandItem:item];
 		} else {
 			[_expandedPaths removeObject:path];
@@ -718,12 +721,12 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		return;
 	}
 	item = [self selectedItem];
-	if (character == NSRightArrowFunctionKey && item != nil && [item isDirectory]
+	if (character == NSRightArrowFunctionKey && item != nil && [item isBrowsable]
 	    && ![self isItemExpanded:item]) {
 		[self expandItem:item];
 		return;
 	}
-	if (character == NSLeftArrowFunctionKey && item != nil && [item isDirectory]
+	if (character == NSLeftArrowFunctionKey && item != nil && [item isBrowsable]
 	    && [self isItemExpanded:item]) {
 		[self collapseItem:item];
 		return;

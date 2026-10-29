@@ -6,9 +6,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * **THE TYPE ANSWER IS F1'S, NOT AN EXTENSION TABLE IN THE VIEW.** `LSCopyKindStringForURL` is Launch Services'
- * own door, fed by the Agora bundles in this tree; a directory is "Folder" because that is what a person reads. When
- * the registry has nothing to say (an unregistered extension, or no declaring bundle), the fallback is named rather
- * than hidden: the extension, or "Document" when there is none.
+ * own door, fed by the Agora bundles in this tree; a plain directory is "Folder" because that is what a person reads,
+ * while a PACKAGE is asked about like a file — an application bundle is an application to Launch Services, not a
+ * folder. When the registry has nothing to say (an unregistered extension, or no declaring bundle), the fallback is
+ * named rather than hidden: the extension, or "Document" when there is none.
  */
 #ifndef WORKSPACE_WSITEMKIND_H
 #define WORKSPACE_WSITEMKIND_H

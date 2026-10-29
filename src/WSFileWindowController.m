@@ -661,10 +661,15 @@ static void fn_resetContentScroll(NSScrollView *scroll)
  * stack's face over Launch Services — `WORKSPACE-PLAN.md` puts it in the AppKit rather than here — so the file manager
  * asks it and the policy (which applications are registered, what a type resolves to, what a refusal looks like) stays
  * in the one place that owns it. MEASURED: this method used to build a CFURL and call `LSOpenCFURLRef` itself, which
- * meant the file window had a second copy of the launch decision and no way to see the AppKit's answer. */
+ * meant the file window had a second copy of the launch decision and no way to see the AppKit's answer.
+ *
+ * **AND A FOLDER IS NAVIGATED WHILE A PACKAGE IS OPENED.** `isDirectory` alone cannot tell them apart — an `.app` bundle
+ * is a directory — so a bundle used to be entered and its `Contents` shown, when what a person double-clicking an
+ * application asked for was for it to RUN. A package is the item that is one thing rather than a place, and opening it
+ * is `-openFile:`, which launches an application bundle and refuses a package that is not one. */
 - (void)openItem:(WSItem *)item
 {
-	if ([item isDirectory]) {
+	if ([item isBrowsable]) {
 		[self navigateToDirectory:[item path]];
 	} else {
 		(void)[[NSWorkspace sharedWorkspace] openFile:[item path]];

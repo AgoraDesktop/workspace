@@ -390,7 +390,8 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 
 /* Double-click. An application bundle launches; a document opens in its default application (both are
  * `LSOpenCFURLRef`, F1); a FOLDER is a file window, and the APPLICATION makes it. The desktop asks rather than
- * building one: a folder is a navigation surface, and this view's job is the icon that was clicked. */
+ * building one: a folder is a navigation surface, and this view's job is the icon that was clicked. A PACKAGE is
+ * not that surface — the bundle is a directory on disk and one thing to a person, so it takes the launch door. */
 - (void)openItemAtIndex:(NSUInteger)index
 {
 	WSItem *item = [[_model items] objectAtIndex:index];
@@ -398,7 +399,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	CFURLRef url = CFURLCreateWithFileSystemPath(NULL, path, kCFURLPOSIXPathStyle, [item isDirectory] ? true : false);
 
 	CFRelease(path);
-	if ([item isDirectory]) {
+	if ([item isBrowsable]) {
 		NSDictionary *info = [NSDictionary dictionaryWithObject:[item path] forKey:WSDesktopViewPathKey];
 
 		CFRelease(url);

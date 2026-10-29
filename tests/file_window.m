@@ -13,7 +13,9 @@
 #import "WSColumnView.h"
 #import "WSIconView.h"
 #import "WSFileWindowController.h"
+#import "WSItemKind.h"
 #import "WSItemModel.h"
+#import "WSListView.h"
 #import "WSPlaces.h"
 
 #import <AppKit/NSApplication.h>
@@ -33,6 +35,8 @@
 #import <Foundation/Foundation.h>
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 static int s_failed;
@@ -68,6 +72,22 @@ static BOOL makeDirectory(NSString *path)
 static BOOL makeFile(NSString *path)
 {
 	return [[NSFileManager defaultManager] createFileAtPath:path contents:[NSData data] attributes:nil];
+}
+
+/* THE LAUNCH IS A PROCESS, SO THE PROOF IS A FILE: a bundle's executable writes its sentinel when it runs, and this
+ * waits for it rather than assuming a spawn has been scheduled by the time `-openItem:` returns. */
+static BOOL waitForFile(NSString *path, int milliseconds)
+{
+	int waited = 0;
+
+	while (waited < milliseconds) {
+		if ([[NSFileManager defaultManager] fileExistsAtPath:path]) {
+			return YES;
+		}
+		usleep(20 * 1000);
+		waited += 20;
+	}
+	return [[NSFileManager defaultManager] fileExistsAtPath:path];
 }
 
 static NSString *placeTitleAt(WSFileWindowController *controller, NSInteger section, NSInteger child)
@@ -293,6 +313,92 @@ int main(void)
 		      "the sidebar is still the width it was");
 		check([contentPane frame].size.width > contentWidthAt700,
 		      "and the content pane takes the added width");
+	}
+
+	/* **AN APPLICATION BUNDLE IS A PACKAGE, AND DOUBLE-CLICKING IT RUNS IT.** The bundle's `Contents` is a directory
+	 * like any other, so `-isDirectory` alone cannot tell a person's application from a folder to browse — the item
+	 * asks the AppKit whether the directory is a PACKAGE, and every open and every disclosure tree reads that one
+	 * answer. The fixture is a real bundle whose executable is a script, so "it ran" is a file on disk. */
+	{
+		NSString *bundleRoot = [root stringByAppendingPathComponent:@"Applications"];
+		NSString *bundle = [bundleRoot stringByAppendingPathComponent:@"Probe.app"];
+		NSString *contents = [bundle stringByAppendingPathComponent:@"Contents"];
+		NSString *macos = [contents stringByAppendingPathComponent:@"MacOS"];
+		NSString *probe = [macos stringByAppendingPathComponent:@"Probe"];
+		NSString *marker = [root stringByAppendingPathComponent:@"probe-ran.txt"];
+		NSString *manifest = @"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+			"<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+			"\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+			"<plist version=\"1.0\"><dict>\n"
+			"<key>CFBundleIdentifier</key><string>com.agora.file-window-probe</string>\n"
+			"<key>CFBundleExecutable</key><string>Probe</string>\n"
+			"<key>CFBundlePackageType</key><string>APPL</string>\n"
+			"</dict></plist>\n";
+		WSItem *bundleItem;
+		WSItem *folderItem = [[[WSItem alloc] initWithName:@"A Folder" path:folderA isDirectory:YES] autorelease];
+		WSFileWindowController *applications;
+		NSString *kind;
+
+		check(makeDirectory(macos)
+		      && [manifest writeToFile:[contents stringByAppendingPathComponent:@"Info.plist"]
+				     atomically:YES encoding:NSUTF8StringEncoding error:NULL]
+		      && [@"#!/bin/sh\nprintf ran > \"$AGORA_PROBE_OUT\"\n" writeToFile:probe
+										     atomically:YES
+										       encoding:NSUTF8StringEncoding error:NULL]
+		      && chmod([probe UTF8String], 0755) == 0,
+		      "the probe built an application bundle with a runnable executable");
+
+		bundleItem = [[[WSItem alloc] initWithName:@"Probe.app" path:bundle isDirectory:YES] autorelease];
+		check([bundleItem isDirectory], "an application bundle is a directory on disk");
+		check([bundleItem isPackage], "and the AppKit says it is a package");
+		check(![folderItem isPackage] && [folderItem isBrowsable],
+		      "a plain folder is not a package, and is browsable");
+		check(![bundleItem isBrowsable], "while a bundle is not something to browse into");
+		kind = [WSItemKind kindForItem:bundleItem];
+		check(kind != nil
+		      && [[kind lowercaseString] rangeOfString:@"application"].location != NSNotFound,
+		      "and its Kind is Launch Services', not \"Folder\"");
+
+		applications = [[WSFileWindowController alloc] initWithDirectory:bundleRoot];
+		check([applications itemCount] == 1, "the Applications folder lists the bundle");
+		setenv("AGORA_PROBE_OUT", [marker UTF8String], 1);
+		{
+			WSIconView *icons = [applications cg_iconView];
+			NSPoint inWindow = [icons convertPoint:NSMakePoint(30.0, 30.0) toView:nil];
+			NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown location:inWindow
+						       modifierFlags:0 timestamp:0.0 windowNumber:0 context:nil
+						      eventNumber:0 clickCount:2 pressure:1.0f];
+
+			[icons mouseDown:down];
+		}
+		check([[applications directory] isEqual:bundleRoot],
+		      "double-clicking the bundle does not open its Contents");
+		check(waitForFile(marker, 3000), "and the bundle's executable RAN instead");
+
+		/* THE SAME ANSWER DECIDES THE TREE, so the bundle is a leaf in the two views that can expand one. */
+		[applications cg_useListView:nil];
+		{
+			WSListView *list = [applications cg_listView];
+			WSItem *row = [list cg_itemForPath:bundle];
+
+			check(row != nil && ![list outlineView:list isItemExpandable:row],
+			      "in List mode it is one row with no disclosure triangle");
+		}
+		[applications cg_useColumnView:nil];
+		{
+			WSColumnView *columns = [applications cg_columnView];
+			NSBrowser *browser = [columns cg_browser];
+			WSItem *previewed;
+
+			[browser selectRow:0 inColumn:0];
+			previewed = [columns cg_previewItem];
+			check(previewed != nil && [[previewed name] isEqual:@"Probe.app"]
+			      && [browser numberOfRowsInColumn:1] == 0,
+			      "and in Column mode it previews, and opens no column of Contents");
+		}
+
+		[applications close];
+		[applications release];
 	}
 
 	/* A SECOND WINDOW IS A SECOND MODEL AND A SECOND HISTORY. */

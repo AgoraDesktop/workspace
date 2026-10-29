@@ -25,7 +25,7 @@
 	CFStringRef kind;
 	NSString *answer = nil;
 
-	if ([item isDirectory]) {
+	if ([item isDirectory] && ![item isPackage]) {
 		return @"Folder";
 	}
 	path = CFStringCreateWithCString(NULL, [[item path] UTF8String], kCFStringEncodingUTF8);

@@ -239,12 +239,14 @@ static NSString *fn_size_string(WSItem *item)
 
 /* ---- THE MODEL PER COLUMN -------------------------------------------------------------------- */
 
+/* **A PACKAGE OPENS NO COLUMN.** Selecting an application bundle is selecting a thing, not a place: it previews and
+ * can be opened, and the browser grows no column of its `Contents`. */
 - (WSItemModel *)childModelForItem:(WSItem *)item
 {
 	WSItemModel *child;
 	NSString *path;
 
-	if (item == nil || ![item isDirectory]) {
+	if (item == nil || ![item isBrowsable]) {
 		return nil;
 	}
 	path = [item path];
@@ -329,7 +331,7 @@ static NSString *fn_size_string(WSItem *item)
 	[cell setStringValue:[item name]];
 	[cell setImage:[WSItemIcons iconForPath:[item path] isDirectory:[item isDirectory] size:16]];
 	if ([cell respondsToSelector:@selector(setLeaf:)]) {
-		[cell setLeaf:![item isDirectory]];
+		[cell setLeaf:![item isBrowsable]];
 		[cell setLoaded:YES];
 	}
 }
