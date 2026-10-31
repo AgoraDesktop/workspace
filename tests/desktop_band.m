@@ -173,10 +173,11 @@ int main(void)
 	check([[view cg_selection] count] > 0, "letting go selects the items the band touched");
 	check(NSEqualRects([view cg_bandRect], NSZeroRect), "and the band is gone");
 	{
-		/* AND THE PAINT AGREES: with no band, the pixel that was washed is the desktop again — the band's own empty part,
-		 * which the selected icon does not cover. */
+		/* AND THE PAINT AGREES: with no band, the pixel that was washed is the desktop again. The point is the band's own
+		 * left margin, OUTSIDE the selected cell's highlight — the wash now covers the whole cell (icon and name), which
+		 * is the point of sharing it with a file window, so a sample six points in would land on the selection itself. */
 		NSBitmapImageRep *after = draw_view(view, 600, 400);
-		NSColor *pixel = [after colorAtX:(NSInteger)NSMinX(band) + 6 y:(NSInteger)NSMidY(band)];
+		NSColor *pixel = [after colorAtX:(NSInteger)NSMinX(band) + 3 y:(NSInteger)NSMidY(band)];
 
 		check(pixel != nil && [pixel redComponent] > 0.999 && [pixel blueComponent] > 0.999,
 		      "a point away from any selected icon is clear again");

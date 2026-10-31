@@ -18,6 +18,7 @@
 
 #import "WSFileOperations.h"
 #import "WSIconLabel.h"
+#import "WSIconCell.h"
 #import "WSIconLayout.h"
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
@@ -59,18 +60,9 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 #define WS_ICON_DRAG_THRESHOLD 4.0
 #define WS_ICON_SPRING_DELAY 0.6
 
-/* THE LABEL BAND'S THREE NUMBERS: the air between the icon and its name, the air between a selection's edge and what
- * it contains, and the corner a selection's wash and ring are both rounded by. The gap is used by the drawing and by
- * the rename field, which must land exactly where the label was. */
-static const NSInteger WSIconLabelGap = 2;
-static const NSInteger WSIconHighlightInset = 2;
-static const NSInteger WSIconHighlightRadius = 4;
-/* THE RING IS STROKED ON THE HIGHLIGHT'S EDGE, so it paints half a point OUTSIDE the rectangle and antialiases a
- * point either side of that. This is how far an invalidation has to reach past the rectangle to catch all of it:
- * TWO points, because a one-point stroke centred on an edge leaves a pixel either side of it once the rasterizer has
- * covered the partial ones — MEASURED on a live screen, one point was enough to clear the stroke and left a ghost of
- * its antialiasing when the selection moved from icon to icon. */
-static const NSInteger WSIconHighlightSlop = 2;
+/* **THE LABEL'S BAND, THE WASH AND THE RING ARE `WSIconCell`'S NOW**, because the desktop draws the same cell and the two
+ * had drifted apart — see that header. This file keeps the two things that are its own: the ink (black, because the
+ * background is white) and the invalidation that follows a selection. */
 
 /* ---- the two facts a drop needs about the file system ------------------------------------------ */
 
@@ -412,15 +404,7 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 - (NSRect)highlightRectAtIndex:(NSInteger)index
 {
-	NSRect iconRect = [self iconRectAtIndex:index];
-	NSSize cell = [self cellSize];
-	CGFloat side = (cell.width - iconRect.size.width) / 2.0;
-
-	return NSMakeRect(iconRect.origin.x - side,
-			  iconRect.origin.y - (CGFloat)WSIconHighlightInset,
-			  cell.width,
-			  iconRect.size.height + (CGFloat)WSIconLabelGap + (CGFloat)WSIconLabelHeight +
-			  2.0 * (CGFloat)WSIconHighlightInset);
+	return WSIconCellHighlightRect([self iconRectAtIndex:index], [self cellSize].width, YES);
 }
 
 /* **THE SELECTION BEFORE A CHANGE, AS A SNAPSHOT, BECAUSE `-copy` IS NOT ONE.** This tree's immutable family
@@ -559,15 +543,11 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 	for (i = 0; i < count; i++) {
 		WSItem *item = [items objectAtIndex:(NSUInteger)i];
-		NSRect iconRect = [self iconRectAtIndex:i];
-		NSImage *icon = [self iconForIndex:i];
-		BOOL selected = [_selection containsIndex:(NSUInteger)i];
-		NSDictionary *attributes;
-		NSSize labelSize;
-		NSRect labelRect;
 		NSRect cellRect = [self cellRectAtIndex:i];
 		NSRect highlightRect = [self highlightRectAtIndex:i];
+		NSDictionary *attributes;
 		NSString *label;
+		WSIconCell cell;
 
 		/* **AND AN ITEM THE DIRTY RECTANGLE DOES NOT TOUCH IS NOT DRAWN AT ALL.** The clip already stops its pixels,
 		 * but a name is CUT TO THE CELL BY MEASURING IT (`WSIconLabelText`) before anything is drawn, and a measure is
@@ -576,50 +556,26 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		if (!NSIsEmptyRect(dirtyRect) && !NSIntersectsRect(dirtyRect, highlightRect)) {
 			continue;
 		}
-		if (selected) {
-			[[NSColor colorWithCalibratedRed:0.30 green:0.50 blue:0.90 alpha:0.35] setFill];
-			[[NSBezierPath bezierPathWithRoundedRect:highlightRect
-							 xRadius:(CGFloat)WSIconHighlightRadius
-							 yRadius:(CGFloat)WSIconHighlightRadius] fill];
-		}
-		if (icon != nil) {
-			[icon drawInRect:iconRect];
-		}
-		/* **THE SELECTED NAME STAYS IN BLACK INK ON THE WASH.** A selected name used to be drawn in white on a 35%
-		 * blue wash over white — a wash is not a plate, and the result was the ghost the screenshot showed. The
-		 * table view reached the same verdict for the platform's own light accent ("white on it is a wash,
-		 * MEASURED"), and one rule for selected ink across the tier is worth more than one gesture's brightness. */
+		/* **THE NAME STAYS IN BLACK INK ON THE WASH.** A selected name used to be drawn in white on a 35% blue wash
+		 * over white — a wash is not a plate, and the result was the ghost the screenshot showed. The table view reached
+		 * the same verdict for the platform's own light accent ("white on it is a wash, MEASURED"), and one rule for
+		 * selected ink across the tier is worth more than one gesture's brightness. The name is CUT to the cell
+		 * (`WSIconLabelText`), which is a measurement, so the cell's width is what decides how much of it there is. */
 		attributes = [NSDictionary dictionaryWithObjectsAndKeys:[NSColor blackColor],
 							  NSForegroundColorAttributeName, nil];
-		/* **THE LABEL IS THE CELL'S, NOT THE NAME'S, AND IT IS CENTRED ON THE ICON.** A directory's name can be longer
-		 * than the cell, and drawing its measured width centred on the icon spilled half of it into each neighbour.
-		 * The label is cut in the middle to the cell's width and clipped to the highlight as a second guard — and it
-		 * is centred on the ICON, not on the cell, because the cell's left edge is the icon's and the label used to
-		 * sit a padded half-cell to the right of the folder it named. */
 		label = WSIconLabelText([item name], cellRect.size.width - 4.0, attributes);
-		labelSize = [label sizeWithAttributes:attributes];
-		/* **ROUNDED UP FOR THE SAME REASON THE CLOCK IS**: a rect exactly as wide as the advance clips the last
-		 * glyph. The label is cut to the cell's width, so the point cannot spill into the neighbour. */
-		{
-			CGFloat labelWidth = ceil(labelSize.width);
 
-			labelRect = NSMakeRect(NSMidX(iconRect) - labelWidth / 2.0,
-					       NSMaxY(iconRect) + (CGFloat)WSIconLabelGap,
-					       labelWidth, (CGFloat)WSIconLabelHeight);
-		}
-		[NSGraphicsContext saveGraphicsState];
-		[[NSBezierPath bezierPathWithRect:highlightRect] addClip];
-		[label drawInRect:labelRect withAttributes:attributes];
-		[NSGraphicsContext restoreGraphicsState];
-
-		/* **THE RING IS THE HIGHLIGHT'S OUTLINE, DRAWN LAST SO IT IS NEVER PAINTED OVER** — and because the
-		 * highlight encloses the label rather than stopping at the icon, it no longer strikes through the name. */
-		if (focused && i == [self selectedIndex]) {
-			[[NSColor darkGrayColor] setStroke];
-			[[NSBezierPath bezierPathWithRoundedRect:highlightRect
-							 xRadius:(CGFloat)WSIconHighlightRadius
-							 yRadius:(CGFloat)WSIconHighlightRadius] stroke];
-		}
+		cell.iconRect = [self iconRectAtIndex:i];
+		cell.cellWidth = cellRect.size.width;
+		cell.labelBelow = YES;	/* this view is flipped: `NSMaxY` is below the icon */
+		cell.icon = [self iconForIndex:i];
+		cell.label = label;
+		cell.attributes = attributes;
+		cell.selected = [_selection containsIndex:(NSUInteger)i];
+		/* **THE RING IS THE FIRST SELECTED CELL'S**, not every selected one's: a band that takes six icons draws one
+		 * outline, which is where the keyboard's focus is. */
+		cell.focused = (focused && i == [self selectedIndex]);
+		WSIconCellDraw(cell);
 	}
 
 	/* **AND THE BAND, OVER EVERYTHING IT IS TAKING.** It is the pointer's footprint, so it is drawn after the icons: a

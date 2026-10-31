@@ -19,10 +19,12 @@
  */
 #import "WSDesktopView.h"
 
+#import "WSIconCell.h"
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
+#import "WSItemIcons.h"
 #import "WSItemModel.h"
 #import "WSMetadataStore.h"
 
@@ -165,36 +167,26 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	return NSMakePoint(cocoa.x, [self bounds].size.height - cocoa.y);
 }
 
-/* THE ICON, MADE ONCE. A `CGImage` from Icon Services wrapped in a rep; NSNull while it has not been needed. */
-- (NSBitmapImageRep *)iconRepForItemAtIndex:(NSUInteger)index
+/* THE ICON, MADE ONCE. `NSNull` while it has not been needed.
+ *
+ * **THE SAME LOOKUP THE FILE WINDOW MAKES, THROUGH `WSItemIcons`.** This view used to carry its own copy of the
+ * CFURL/IconRef dance, which is a second place for two surfaces to disagree about what an icon is — and a second thing
+ * to fix when the resolver learns something. */
+- (NSImage *)iconRepForItemAtIndex:(NSUInteger)index
 {
 	id cached = [_icons objectAtIndex:index];
 	WSItem *item;
-	CFStringRef path;
-	CFURLRef url;
-	IconRef icon;
-	CGImageRef image;
-	NSBitmapImageRep *rep;
-	NSInteger size = [self iconSize];
+	NSImage *image;
 
-	if (cached != [NSNull null]) return cached;
-
+	if (cached != [NSNull null]) {
+		return cached;
+	}
 	item = [[_model items] objectAtIndex:index];
-	path = CFStringCreateWithCString(NULL, [[item path] UTF8String], kCFStringEncodingUTF8);
-	url = CFURLCreateWithFileSystemPath(NULL, path, kCFURLPOSIXPathStyle, [item isDirectory] ? true : false);
-	CFRelease(path);
-
-	icon = AGIconCreateWithURL(url);
-	CFRelease(url);
-	if (icon == NULL) return nil;
-	image = AGIconCopyImage(icon, CGSizeMake((CGFloat)size, (CGFloat)size));
-	AGIconRelease(icon);
-	if (image == NULL) return nil;
-
-	rep = [NSBitmapImageRep imageRepWithCGImage:image];
-	CGImageRelease(image);
-	if (rep != nil) [_icons replaceObjectAtIndex:index withObject:rep];
-	return rep;
+	image = [WSItemIcons iconForPath:[item path] isDirectory:[item isDirectory] size:[self iconSize]];
+	if (image != nil) {
+		[_icons replaceObjectAtIndex:index withObject:image];
+	}
+	return image;
 }
 
 - (void)drawRect:(NSRect)dirtyRect
@@ -209,65 +201,46 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	 * to alpha zero before the tree drew, so this view's job is the icons, their labels and the selection; the
 	 * wallpaper shows through from the level below. */
 
-	/* THE ICONS, each selected one's backing first. */
+	/* **THE SAME CELL A FILE WINDOW DRAWS**, through `WSIconCell`: the wash is the highlight rectangle the two surfaces
+	 * share, the ring comes with the keyboard's focus, and only the INK is this view's own — white, because what is behind
+	 * the name is a wallpaper and not a white page. Before this the wash was a square four points outside the icon,
+	 * unrounded and stopping above the name, so a desktop selection was not recognisably the same gesture as a file
+	 * window's. */
 	for (i = 0; i < (int)[items count]; i++) {
 		NSPoint position = [[_positions objectAtIndex:i] pointValue];
 		NSRect iconRect = [self cocoaRectForPosition:position
 							size:NSMakeSize((CGFloat)iconSize, (CGFloat)iconSize)];
-		NSBitmapImageRep *rep;
-		NSString *label;
-		NSSize labelSize;
-		NSSize cell = [WSIconLayout cellSizeForIconSize:iconSize];
+		NSSize cellSize = [WSIconLayout cellSizeForIconSize:iconSize];
+		NSRect highlight = WSIconCellHighlightRect(iconRect, cellSize.width, NO);
 		NSDictionary *attributes;
-		NSRect labelRect;
-		/* **THE BAND IS THE CELL'S WIDTH CENTRED ON THE ICON, NOT THE CELL.** The cell starts at the icon and carries
-		 * its padding to the right, so a name cut to the cell's width and centred on the cell sat a padded half-cell to
-		 * the right of the folder it named — the same off-centre the icon view had. The band is what the label is
-		 * clipped to, so nothing has to be shaved off the left of a centred name. */
-		NSRect labelBand = [self cocoaRectForPosition:NSMakePoint(
-					  position.x - (cell.width - (CGFloat)iconSize) / 2.0,
-					  position.y + (CGFloat)iconSize)
-					  size:NSMakeSize(cell.width, (CGFloat)WSIconLabelHeight)];
+		WSIconCell cell;
+		BOOL selected = NO;
 		NSUInteger s;
 
+		if (!NSIsEmptyRect(dirtyRect) && !NSIntersectsRect(dirtyRect, highlight)) {
+			continue;	/* the highlight holds everything this item draws, so it is the unit of work */
+		}
 		for (s = 0; s < [_selection count]; s++) {
-			if ([[_selection objectAtIndex:s] integerValue] == (NSInteger)i) break;
+			if ([[_selection objectAtIndex:s] integerValue] == (NSInteger)i) {
+				selected = YES;
+				break;
+			}
 		}
-		if (s < [_selection count]) {
-			[[NSColor colorWithCalibratedRed:0.30 green:0.50 blue:0.90 alpha:0.35] setFill];
-			[[NSBezierPath bezierPathWithRect:NSInsetRect(iconRect, -4.0, -4.0)] fill];
-		}
+		attributes = [NSDictionary dictionaryWithObjectsAndKeys:[NSColor whiteColor],
+							  NSForegroundColorAttributeName, nil];
 
-		rep = [self iconRepForItemAtIndex:(NSUInteger)i];
-		if (rep != nil) [rep drawInRect:iconRect];
-
-		/* THE LABEL under it, in the desktop's own ink, CENTRED ON THE ICON — and the arithmetic below is the ICON's
-		 * centre, not the cell's, because the cell carries its padding to the right. **`-drawInRect:withAttributes:`
-		 * DOES NOT HONOUR A PARAGRAPH STYLE'S ALIGNMENT** — MEASURED: this tree's `NSStringDrawing.m` never mentions
-		 * alignment at all, which is why `NSCenterTextAlignment` left the text exactly where it was. So the centring
-		 * is GEOMETRIC: measure the string, and hand `-drawInRect:` a rectangle exactly as wide as the text, whose
-		 * LEFT edge is the icon's centre minus half the text's width. */
-		label = [[items objectAtIndex:i] name];
-		attributes = [NSDictionary dictionaryWithObjectsAndKeys:
-				[NSColor whiteColor], NSForegroundColorAttributeName,
-				nil];
-		label = WSIconLabelText(label, cell.width - 4.0, attributes);
-		labelSize = [label sizeWithAttributes:attributes];
-		/* **THE RECT IS ROUNDED UP, BECAUSE A RECT EXACTLY AS WIDE AS THE ADVANCE CLIPS THE LAST GLYPH** — the same
-		 * fractional clipping the clock and the AppKit cells round. The label is still cut to the cell's width, so a
-		 * point of rounding cannot spill into the neighbour. */
-		{
-			CGFloat labelWidth = ceil(labelSize.width);
-
-			labelRect = [self cocoaRectForPosition:NSMakePoint(
-							position.x + ((CGFloat)iconSize - labelWidth) / 2.0,
-							position.y + (CGFloat)iconSize)
-						  size:NSMakeSize(labelWidth, (CGFloat)WSIconLabelHeight)];
-		}
-		[NSGraphicsContext saveGraphicsState];
-		[[NSBezierPath bezierPathWithRect:labelBand] addClip];
-		[label drawInRect:labelRect withAttributes:attributes];
-		[NSGraphicsContext restoreGraphicsState];
+		cell.iconRect = iconRect;
+		cell.cellWidth = cellSize.width;
+		cell.labelBelow = NO;	/* this view is unflipped: the name hangs toward the foot of the screen */
+		cell.icon = [self iconRepForItemAtIndex:(NSUInteger)i];
+		cell.label = WSIconLabelText([[items objectAtIndex:i] name], cellSize.width - 4.0, attributes);
+		cell.attributes = attributes;
+		cell.selected = selected;
+		/* **THE DESKTOP WEARS THE RING TOO, AND IT HAS TO EARN IT**: this view had no `-acceptsFirstResponder` and its
+		 * press never made it first responder, so a click on an icon left the keyboard with another window and the
+		 * selected cell was drawn as though nothing had the focus. See `-mouseDown:`. */
+		cell.focused = ([[self window] firstResponder] == self);
+		WSIconCellDraw(cell);
 	}
 
 	/* **THE BAND IS DRAWN LAST, OVER THE ICONS IT IS TAKING.** It is a pointer's footprint, and a wash drawn under the
@@ -296,9 +269,28 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	return _positions;
 }
 
+/* **THE HIGHLIGHT, AS A PROBE ASKS FOR IT** — the same rectangle the drawing fills and outlines, in the view's own
+ * (unflipped) space, so a test can compare it with a file window's rather than compare screenshots. */
+- (NSRect)cg_highlightRectAtIndex:(NSInteger)index
+{
+	NSPoint position = [[_positions objectAtIndex:(NSUInteger)index] pointValue];
+	NSSize cell = [WSIconLayout cellSizeForIconSize:[self iconSize]];
+
+	return WSIconCellHighlightRect([self cocoaRectForPosition:position
+							    size:NSMakeSize((CGFloat)[self iconSize],
+									    (CGFloat)[self iconSize])],
+				       cell.width, NO);
+}
+
+- (BOOL)acceptsFirstResponder { return YES; }
+
 - (void)mouseDown:(NSEvent *)event
 {
 	NSPoint point = [self topLeftPointForEvent:event];
+	/* **A PRESS ON THE DESKTOP TAKES THE KEYBOARD, AS A PRESS ON AN ICON IN A WINDOW DOES.** Without it the desktop
+	 * never became first responder, so its selected cell could never show the focus ring and the arrow keys and
+	 * type-select went to the window that happened to hold the keyboard. */
+	[[self window] makeFirstResponder:self];
 	NSInteger index = [WSIconLayout indexOfPosition:point among:_positions iconSize:[self iconSize]];
 	BOOL shift = ([event modifierFlags] & NSShiftKeyMask) != 0;
 

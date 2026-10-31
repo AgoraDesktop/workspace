@@ -12,6 +12,7 @@
  * `/dev/shm` so "across a volume" is a fact rather than a claim.
  */
 #import "WSIconLabel.h"
+#import "WSIconCell.h"
 #import "WSIconLayout.h"
 #import "WSDesktopView.h"
 #import "WSIconView.h"
@@ -82,15 +83,54 @@ static NSBitmapImageRep *new_rep(int width, int height)
 		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
 }
 
-static NSBitmapImageRep *draw_view(NSView *view, int width, int height)
+static NSBitmapImageRep *draw_view_over(NSView *view, int width, int height, NSColor *background)
 {
 	NSBitmapImageRep *rep = new_rep(width, height);
 
 	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
-	[[NSColor whiteColor] setFill];
+	[background setFill];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)width, (CGFloat)height)] fill];
 	[view drawRect:[view bounds]];
 	return rep;
+}
+
+static NSBitmapImageRep *draw_view(NSView *view, int width, int height)
+{
+	return draw_view_over(view, width, height, [NSColor whiteColor]);
+}
+
+/* **WHERE THE SELECTION'S WASH IS, in a rep.** The wash is the accent at 35% over white, so the pixels it tints have one
+ * exact colour; the icon drawn on top of it does not, which is what leaves the wash visible around the icon and gives the
+ * rectangle its bounds. */
+static NSRect wash_bounds(NSBitmapImageRep *rep, int width, int height)
+{
+	int x, y;
+	int minX = width, minY = height, maxX = -1, maxY = -1;
+	/* The wash is a fill with an alpha, so what a rep shows is it composited over the white the view painted first. */
+	NSColor *wash = WSIconCellSelectionColor();
+	CGFloat alpha = [wash alphaComponent];
+	CGFloat wantR = alpha * [wash redComponent] + (1.0 - alpha);
+	CGFloat wantG = alpha * [wash greenComponent] + (1.0 - alpha);
+	CGFloat wantB = alpha * [wash blueComponent] + (1.0 - alpha);
+
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			NSColor *c = [rep colorAtX:x y:y];
+
+			if (c == nil || fabs([c redComponent] - wantR) > 0.02 || fabs([c greenComponent] - wantG) > 0.02
+			    || fabs([c blueComponent] - wantB) > 0.02) {
+				continue;
+			}
+			if (x < minX) minX = x;
+			if (y < minY) minY = y;
+			if (x > maxX) maxX = x;
+			if (y > maxY) maxY = y;
+		}
+	}
+	if (maxX < 0) {
+		return NSZeroRect;
+	}
+	return NSMakeRect((CGFloat)minX, (CGFloat)minY, (CGFloat)(maxX - minX + 1), (CGFloat)(maxY - minY + 1));
 }
 
 static NSEvent *mouse(NSEventType type, NSPoint point)
@@ -126,6 +166,7 @@ static NSInteger indexNamed(WSIconView *view, NSString *name)
 @interface WSDesktopView (AGIconSelectionProbe)
 - (NSArray *)cg_selection;
 - (NSArray *)cg_positions;
+- (NSRect)cg_highlightRectAtIndex:(NSInteger)index;
 @end
 
 @interface NSApplication (APPKITIconProbe)
@@ -513,10 +554,153 @@ int main(void)
 		check([[second selectedIndexes] count] == 0, "the emptied window has nothing selected");
 		check([[view selectedIndexes] count] == 1, "and the window that held the selection still does");
 
-		[desktopWindow release];
-		[desktop release];
-		[secondWindow release];
-		[second release];
+		/* **AND THE SPACE BETWEEN AN ICON AND ITS NAME IS ONE NUMBER, MEASURED ON BOTH.** A rep's rows run from its own
+		 * first one and the two views disagree about which end that is, so each gap is taken in VISUAL terms: away from the
+		 * icon, downward on the screen. What is asserted is that the two agree — the first row of ink is the same distance
+		 * below the icon on a desktop and in a file window — and that the distance is a sane one rather than a number that
+		 * happens to match because both surfaces stopped drawing. */
+		{
+			NSBitmapImageRep *viewRep = draw_view(view, 400, 400);
+			NSBitmapImageRep *deskRep = draw_view_over(desktop, 520, 400,
+								   [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0]);
+			NSPoint dp = [[[desktop cg_positions] objectAtIndex:0] pointValue];
+			int deskIconBottomRow = (int)dp.y + (int)[desktop iconSize];
+			int viewIconBottomRow = 400 - ((int)[desktop iconSize] + 16);	/* view y 80, and this rep counts from the top */
+			int y, x, viewFirst = -1, deskFirst = -1;
+			int viewGap, deskGap;
+
+			for (y = viewIconBottomRow; y > viewIconBottomRow - 40 && viewFirst < 0; y--) {
+				for (x = 16; x < 96; x++) {
+					NSColor *c = [viewRep colorAtX:x y:y];
+
+					if (c != nil && [c redComponent] < 0.45 && [c greenComponent] < 0.45) {
+						viewFirst = y;
+						break;
+					}
+				}
+			}
+			for (y = deskIconBottomRow; y < deskIconBottomRow + 40 && y < 400 && deskFirst < 0; y++) {
+				for (x = (int)dp.x; x < (int)dp.x + 80; x++) {
+					NSColor *c = [deskRep colorAtX:x y:y];
+
+					if (c != nil && [c redComponent] > 0.85 && [c greenComponent] > 0.85
+					    && [c blueComponent] > 0.85) {
+						deskFirst = y;
+						break;
+					}
+				}
+			}
+			viewGap = viewIconBottomRow - viewFirst;
+			deskGap = deskFirst - deskIconBottomRow;
+			check(viewFirst >= 0 && deskFirst >= 0, "both surfaces draw a name under their icon");
+			check(viewGap == deskGap,
+			      "and the space between the icon and the first row of ink is the SAME on both");
+			check(viewGap >= 2 && viewGap <= 8,
+			      "which is a gap rather than the icon touching its name, and not a margin");
+		}
+
+		/* THE VIEWS STAY: they registered for the shared selection, and the tier's centre holds them WEAKLY — a view
+		 * released here is not the test's to free while a post could still be in flight. A probe leaks four objects. */
+		(void)desktop;
+		(void)second;
+		(void)desktopWindow;
+		(void)secondWindow;
+	}
+
+	/* 1f. **THE DESKTOP AND A FILE WINDOW DRAW THE SAME SELECTED CELL.** The complaint was visual: a desktop selection was
+	 * a square four points outside the icon, unrounded and stopping above the name, while a file window's was a rounded
+	 * rectangle the width of the cell that enclosed the label. Two questions, asked two ways: the RECTANGLE each view
+	 * answers (exact, and where the geometry lives) and the WASH each view actually paints (the thing a person sees, and
+	 * the reason the rectangle cannot be believed on its own). */
+	{
+		WSDesktopView *desktop = [[WSDesktopView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 520.0, 400.0)
+								     directory:root];
+		NSWindow *desktopWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 520.0, 400.0)
+								      styleMask:NSBorderlessWindowMask
+									backing:NSBackingStoreBuffered defer:NO];
+		NSSize cell = [WSIconLayout cellSizeForIconSize:[desktop iconSize]];
+		CGFloat wantWidth = cell.width;
+		CGFloat wantHeight = (CGFloat)[desktop iconSize] + (CGFloat)WSIconLabelGap
+			+ (CGFloat)WSIconLabelHeight + 2.0 * (CGFloat)WSIconHighlightInset;
+		NSRect iconWash;
+		NSRect desktopWash;
+
+		[desktopWindow setContentView:desktop];
+
+		[view selectIndex:0];
+		iconWash = wash_bounds(draw_view(view, 400, 400), 400, 400);
+		/* The corners are rounded, so the outermost rows and columns are only PARTLY tinted and the pure-colour box is a
+		 * point or two inside the rectangle. What it pins is the thing that changed: the wash reaches past the icon. */
+		check(NSWidth(iconWash) > (CGFloat)WSIconDefaultSize + 4.0
+		      && NSHeight(iconWash) > (CGFloat)WSIconDefaultSize + 8.0,
+		      "a file window's wash is wider than the icon and tall enough for the name");
+
+		{
+			NSPoint position = [[[desktop cg_positions] objectAtIndex:0] pointValue];
+			NSRect bounds = [desktop bounds];
+			NSPoint windowPoint = NSMakePoint(position.x + 32.0, bounds.size.height - (position.y + 32.0));
+
+			[desktop mouseDown:mouse(NSLeftMouseDown, windowPoint)];
+			[desktop mouseUp:mouse(NSLeftMouseUp, windowPoint)];
+		}
+		/* **OVER A WALLPAPER, WHICH IS WHAT A DESKTOP IS.** Painting it over white would let a wash with no plate of its
+		 * own pass, because white is what the plate is; over a dark green, only a cell that lays its own plate down shows
+		 * the file window's colour at all. */
+		desktopWash = wash_bounds(draw_view_over(desktop, 520, 400,
+							 [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0]),
+					  520, 400);
+		/* **AND THE SAME PIXELS, NOT JUST THE SAME RECTANGLE.** The wash is measured as its own colour composited over white,
+		 * which is only what the desktop shows because the cell lays a white plate down first: without it the wash would be
+		 * tinted by the wallpaper and none of these pixels would be found. */
+		check(near(NSWidth(desktopWash), NSWidth(iconWash)) && near(NSHeight(desktopWash), NSHeight(iconWash)),
+		      "and the desktop paints the SAME wash as a file window — the same rectangle, of the same colour");
+		check(NSWidth(desktopWash) > (CGFloat)[desktop iconSize] + 4.0,
+		      "which is wider than the four-point square the desktop used to fill");
+
+		/* **AND THE RECTANGLES ARE THE SAME SHAPE**, which the pixels cannot say — the desktop's first icon sits against
+		 * the edge of its view, so its wash is clipped. Each view answers the rectangle it fills; what is compared is its
+		 * size and its position RELATIVE to the icon, so two different layouts are held to one presentation. */
+		{
+			NSPoint viewIconPosition = [[[view cg_positions] objectAtIndex:0] pointValue];
+			NSRect viewIcon = NSMakeRect(viewIconPosition.x, viewIconPosition.y,
+						     (CGFloat)WSIconDefaultSize, (CGFloat)WSIconDefaultSize);
+			NSRect inView = [view cg_highlightRectAtIndex:0];
+			NSRect inDesktop = [desktop cg_highlightRectAtIndex:0];
+			NSPoint desktopIconPosition = [[[desktop cg_positions] objectAtIndex:0] pointValue];
+			NSRect desktopIcon = NSMakeRect(desktopIconPosition.x,
+							[desktop bounds].size.height - desktopIconPosition.y
+							- (CGFloat)[desktop iconSize],
+							(CGFloat)[desktop iconSize], (CGFloat)[desktop iconSize]);
+
+			check(near(NSWidth(inDesktop), NSWidth(inView)) && near(NSHeight(inDesktop), NSHeight(inView)),
+			      "the two surfaces answer the same highlight SIZE for the same cell");
+			/* **"THE SAME WAY" HAS TO BE SAID IN VISUAL TERMS, NOT IN y.** A file window is flipped and the desktop is
+			 * not, so the name hanging BELOW the icon is a larger y in one and a smaller y in the other. What must match
+			 * is the AIR above the icon and the AIR below it, whichever way the numbers run. */
+			{
+				CGFloat viewAirAbove = NSMinY(viewIcon) - NSMinY(inView);
+				CGFloat viewAirBelow = NSMaxY(inView) - NSMaxY(viewIcon);
+				CGFloat desktopAirAbove = NSMaxY(inDesktop) - NSMaxY(desktopIcon);
+				CGFloat desktopAirBelow = NSMinY(desktopIcon) - NSMinY(inDesktop);
+				CGFloat wantAirAbove = (CGFloat)WSIconHighlightInset;
+				CGFloat wantAirBelow = (CGFloat)WSIconLabelGap + (CGFloat)WSIconLabelHeight
+					+ (CGFloat)WSIconHighlightInset;
+
+				check(near(NSMinX(inDesktop) - NSMinX(desktopIcon), NSMinX(inView) - NSMinX(viewIcon)),
+				      "and sits the same way around the icon horizontally");
+				check(near(viewAirAbove, wantAirAbove) && near(desktopAirAbove, wantAirAbove),
+				      "with the same air above the icon in both — the name is on the other side");
+				check(near(viewAirBelow, wantAirBelow) && near(desktopAirBelow, wantAirBelow),
+				      "and the same room below it for the name");
+			}
+			check(near(NSWidth(inView), wantWidth) && near(NSHeight(inView), wantHeight),
+			      "which is the cell's width and tall enough for the icon and the name");
+		}
+
+		/* THE VIEWS STAY: they registered for the shared selection, and a released observer is not this probe's business
+		 * (a probe leaks two objects rather than freeing one the centre may still be holding). */
+		(void)desktop;
+		(void)desktopWindow;
 	}
 
 	/* 2. THE KEYBOARD MOVES THE SELECTION IN THE GRID. */

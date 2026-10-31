@@ -51,6 +51,7 @@ add_executable(Workspace
     src/WSPrintService.m
     src/WSPrintView.m
     src/WSHistory.m
+    src/WSIconCell.m
     src/WSIconLabel.m
     src/WSIconLayout.m
     src/WSItemIcons.m
