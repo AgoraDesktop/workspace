@@ -21,8 +21,16 @@
 
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
+#import "WSSelectionBand.h"
 #import "WSItemModel.h"
 #import "WSMetadataStore.h"
+
+#import <AppKit/NSWindow.h>
+
+/* The pointer, taken for the length of the band — see `WSIconView.m`'s declaration of the same door. */
+@interface NSWindow (APPKITDesktopBandCapture)
+- (void)cg_setPointerCapture:(BOOL)flag;
+@end
 
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSBezierPath.h>
@@ -255,9 +263,32 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		[label drawInRect:labelRect withAttributes:attributes];
 		[NSGraphicsContext restoreGraphicsState];
 	}
+
+	/* **THE BAND IS DRAWN LAST, OVER THE ICONS IT IS TAKING.** It is a pointer's footprint, and a wash drawn under the
+	 * icons would leave them looking untaken until the mouse came up. */
+	if (_rubberBanding) {
+		WSSelectionBandDraw([self cocoaRectForPosition:_rubberRect.origin size:_rubberRect.size]);
+	}
 }
 
 /* ---- the mouse ---------------------------------------------------------------------------------- */
+
+/* **THE BAND AND THE SELECTION, AS A PROBE ASKS FOR THEM** — `NSZeroRect` and an empty array when there is neither,
+ * which is also what the view answers before the first press. */
+- (NSRect)cg_bandRect
+{
+	return _rubberBanding ? _rubberRect : NSZeroRect;
+}
+
+- (NSArray *)cg_selection
+{
+	return _selection;
+}
+
+- (NSArray *)cg_positions
+{
+	return _positions;
+}
 
 - (void)mouseDown:(NSEvent *)event
 {
@@ -274,6 +305,9 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		_rubberBanding = YES;
 		_rubberStart = point;
 		_rubberRect = NSMakeRect(point.x, point.y, 0.0, 0.0);
+		/* The compositor sends motion to the surface under the pointer, so the desktop takes it for the gesture: a band
+		 * dragged across the Dock or off the screen's edge keeps following the hand and ends when it is let go. */
+		[[self window] cg_setPointerCapture:YES];
 		[self setNeedsDisplay:YES];
 		return;
 	}
@@ -341,6 +375,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 			if (NSIntersectsRect(rect, _rubberRect)) [self addToSelection:(NSInteger)i];
 		}
 		_rubberBanding = NO;
+		[[self window] cg_setPointerCapture:NO];
 		[self setNeedsDisplay:YES];
 		return;
 	}

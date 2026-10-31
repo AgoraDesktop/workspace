@@ -19,6 +19,7 @@
 #import "WSFileOperations.h"
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
+#import "WSSelectionBand.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
 
@@ -43,6 +44,13 @@
 
 #include <math.h>
 #include <sys/stat.h>
+
+/* **THE POINTER, FOR THE LENGTH OF A BAND.** A compositor sends motion to the surface under the pointer, so a gesture that
+ * walks out of the view needs the pointer taken for its duration — the same door the window's own title-bar drag and the
+ * drag session use. Declared here as those two declare it: a `cg_` seam is the tier's own passage, not Apple's API. */
+@interface NSWindow (APPKITIconViewCapture)
+- (void)cg_setPointerCapture:(BOOL)flag;
+@end
 
 NSString *WSIconViewRequestFolderWindowNotification = @"WSIconViewRequestFolderWindowNotification";
 NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
@@ -388,6 +396,13 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
  * So the highlight is its own rectangle: the cell's WIDTH, centred on the icon, and tall enough to hold the icon, the
  * label and `WSIconHighlightInset` points of air on every side. The fill and the ring both take it, which is what
  * makes the colour and the outline the same shape. */
+/* **THE BAND, AS A PROBE ASKS FOR IT** — `NSZeroRect` when no band is in flight, which is also what the selection's own
+ * doors answer for "nothing". */
+- (NSRect)cg_bandRect
+{
+	return _banding ? _bandRect : NSZeroRect;
+}
+
 - (NSRect)highlightRectAtIndex:(NSInteger)index
 {
 	NSRect iconRect = [self iconRectAtIndex:index];
@@ -574,6 +589,12 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 							 xRadius:(CGFloat)WSIconHighlightRadius
 							 yRadius:(CGFloat)WSIconHighlightRadius] stroke];
 		}
+	}
+
+	/* **AND THE BAND, OVER EVERYTHING IT IS TAKING.** It is the pointer's footprint, so it is drawn after the icons: a
+	 * wash under them would leave them looking untaken until the button came up. */
+	if (_banding) {
+		WSSelectionBandDraw(_bandRect);
 	}
 
 	if (_dropOperation != NSDragOperationNone) {
@@ -777,11 +798,27 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		return;
 	}
 	if (index < 0) {
+		/* **A PRESS IN THE EMPTY SPACE BEGINS A BAND.** It used to clear the selection and stop, which made the gesture
+		 * that takes several icons at once impossible — the one thing a grid of icons is for. The band's selection is
+		 * applied when the button comes up (the desktop's own rule), so a drag across the grid does not repaint the
+		 * selection under the hand it is following. */
 		if (!shift && !command) {
 			[self selectIndex:-1];
 		}
 		_anchorIndex = -1;
 		_pressing = NO;
+		_banding = YES;
+		/* **THE BAND TAKES THE POINTER FOR THE LENGTH OF THE GESTURE.** A person dragging a selection walks out of the
+		 * view — over the sidebar, the toolbar, the desktop — and a compositor delivers motion to the surface under the
+		 * pointer, so without the capture the motion and the release go to whichever surface the hand is over: the band
+		 * stopped following the hand, and letting go left it on the screen. The window's own doors take the pointer the
+		 * same way for a title-bar drag. */
+		[[self window] cg_setPointerCapture:YES];
+		_bandAdditive = (shift || command);
+		_bandOrigin = point;
+		_bandRect = NSMakeRect(point.x, point.y, 0.0, 0.0);
+		[_bandBase release];
+		_bandBase = [[self snapshotSelection] retain];
 		return;
 	}
 	if (shift) {
@@ -813,6 +850,23 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 {
 	NSPoint point;
 
+	/* **THE BAND FOLLOWS THE POINTER, AND ONLY ITS OWN TWO RECTANGLES ARE REPAINTED.** A band moves every motion, so
+	 * the view-wide invalidation the selection uses would repaint every icon sixty times a second. The old and the new
+	 * rectangle are both damaged, with a margin for the hairline. */
+	if (_banding) {
+		NSRect old = _bandRect;
+
+		point = [self convertPoint:[event locationInWindow] fromView:nil];
+		_bandRect = NSMakeRect(point.x < _bandOrigin.x ? point.x : _bandOrigin.x,
+				       point.y < _bandOrigin.y ? point.y : _bandOrigin.y,
+				       (CGFloat)fabs((double)(point.x - _bandOrigin.x)),
+				       (CGFloat)fabs((double)(point.y - _bandOrigin.y)));
+		if (!NSIsEmptyRect(old)) {
+			[self setNeedsDisplayInRect:NSInsetRect(old, -2.0, -2.0)];
+		}
+		[self setNeedsDisplayInRect:NSInsetRect(_bandRect, -2.0, -2.0)];
+		return;
+	}
 	if (!_pressing || _pressIndex < 0) {
 		return;
 	}
@@ -828,6 +882,43 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 - (void)mouseUp:(NSEvent *)event
 {
 	(void)event;
+	if (_banding) {
+		NSIndexSet *before = [self snapshotSelection];
+		NSMutableIndexSet *chosen = [NSMutableIndexSet indexSet];
+		NSInteger count = (NSInteger)[[_model items] count];
+		NSInteger i;
+
+		/* **EVERY ITEM THE BAND TOUCHES IS TAKEN**, which is the rectangle's answer rather than its centre's: a band
+		 * dragged across the corner of an icon has taken that icon, and a person who did not mean it drags again. */
+		for (i = 0; i < count; i++) {
+			if (NSIntersectsRect(_bandRect, [self highlightRectAtIndex:i])) {
+				[chosen addIndex:(NSUInteger)i];
+			}
+		}
+		if (_bandAdditive) {
+			[chosen addIndexes:_bandBase];
+		}
+		[_selection removeAllIndexes];
+		[_selection addIndexes:chosen];
+		if (count > 0) {
+			_anchorIndex = (NSInteger)[chosen firstIndex];
+			if (_anchorIndex == (NSInteger)NSNotFound) {
+				_anchorIndex = -1;
+			}
+		}
+		_banding = NO;
+		[_bandBase release];
+		_bandBase = nil;
+		[[self window] cg_setPointerCapture:NO];
+		/* **THE END OF A BAND REPAINTS THE VIEW, ONCE.** The band is a wash over everything it crossed, so the cells it
+		 * took are not the only pixels it changed — the gaps between them are too, and a per-rectangle invalidation left a
+		 * strip of wash behind. MEASURED on a live screen: letting go of a band that crossed a folder left a lavender
+		 * strip down the grid's right edge until something else repainted the view. One full repaint at the end of the
+		 * gesture is a cost paid once, where the drag's own damage is paid per motion. */
+		[self setNeedsDisplay:YES];
+		[self invalidateSelectionChangeFrom:before];
+		return;
+	}
 	_pressing = NO;
 }
 

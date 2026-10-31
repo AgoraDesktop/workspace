@@ -24,6 +24,26 @@ add_test(NAME workspace-desktop-layout COMMAND desktop_layout)
 set_tests_properties(workspace-desktop-layout PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
 
+# **THE DESKTOP'S OWN BAND, PAINTED.** The rectangle was computed and never drawn, so the gesture left no trace on the
+# screen; this paints the view into a bitmap and samples the wash, the darker edge and the background outside it. The
+# view makes its own model and metadata store from a directory, so the fixture is three files in /tmp.
+add_executable(desktop_band desktop_band.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+target_include_directories(desktop_band PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(desktop_band PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-desktop-band COMMAND desktop_band)
+set_tests_properties(workspace-desktop-band PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
 add_executable(metadata_store metadata_store.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
 target_include_directories(metadata_store PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(metadata_store PRIVATE Foundation::Foundation objc)
@@ -123,6 +143,7 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
@@ -148,6 +169,7 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
@@ -178,6 +200,7 @@ set_tests_properties(workspace-file-window PROPERTIES ENVIRONMENT
 # drop policies — with a second root on /dev/shm so "across a volume" is measured rather than asserted.
 add_executable(icon_view icon_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
@@ -264,11 +287,13 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSAboutPanel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"

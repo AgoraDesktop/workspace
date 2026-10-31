@@ -42,6 +42,7 @@ add_executable(Workspace
     src/WSDesktopWindow.m
     src/WSDesktopView.m
     src/WSIconView.m
+    src/WSSelectionBand.m
     src/WSColumnView.m
     src/WSConflictSheet.m
     src/WSFileOperations.m

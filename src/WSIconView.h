@@ -74,6 +74,16 @@ extern NSString *WSIconViewFolderPathKey;
 	BOOL _pressing;
 	BOOL _dragging;
 
+	/* **AND THE BAND A PRESS IN THE EMPTY SPACE BEGINS.** `_bandOrigin` is where the press landed and `_bandRect` is the
+	 * normalised rectangle it has been dragged into — in this view's own (flipped) coordinates, which is what the icons'
+	 * highlight rects are in. `_bandBase` is the selection as it was when the band began, so a Shift- or Command-drag ADDS
+	 * to what was already chosen instead of replacing it. */
+	NSPoint _bandOrigin;
+	NSRect _bandRect;
+	BOOL _banding;
+	BOOL _bandAdditive;
+	NSIndexSet *_bandBase;			/* RETAINED while a band is in flight */
+
 	/* THE DROP TARGET AND THE SPRING. */
 	NSInteger _dropIndex;
 	NSDragOperation _dropOperation;

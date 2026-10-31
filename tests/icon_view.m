@@ -15,8 +15,13 @@
 #import "WSIconLayout.h"
 #import "WSIconView.h"
 #import "WSItemModel.h"
+#import "WSSelectionBand.h"
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBitmapImageRep.h>
+#import <AppKit/NSBezierPath.h>
+#import <AppKit/NSColor.h>
+#import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSPasteboard.h>
@@ -66,6 +71,27 @@ static NSEvent *key(unichar character, NSUInteger flags)
 				isARepeat:NO keyCode:0];
 }
 
+/* **A VIEW PAINTED INTO A BITMAP, so the band's two colours are measured rather than asserted.** The white underlay
+ * matters: the band is SEMITRANSPARENT, so what it looks like is the accent over whatever is beneath — and a probe that
+ * drew it over black would be measuring a different colour. */
+static NSBitmapImageRep *new_rep(int width, int height)
+{
+	return [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+}
+
+static NSBitmapImageRep *draw_view(NSView *view, int width, int height)
+{
+	NSBitmapImageRep *rep = new_rep(width, height);
+
+	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	[[NSColor whiteColor] setFill];
+	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)width, (CGFloat)height)] fill];
+	[view drawRect:[view bounds]];
+	return rep;
+}
+
 static NSEvent *mouse(NSEventType type, NSPoint point)
 {
 	return [NSEvent mouseEventWithType:type location:point modifierFlags:0
@@ -89,6 +115,10 @@ static NSInteger indexNamed(WSIconView *view, NSString *name)
 /* THE UNION OF THE VIEW'S INVALIDATED RECTANGLES: the window's private seam, declared here as the other probes do. */
 @interface NSView (AGIconDamageProbe)
 - (NSRect)cg_dirtyUnion;
+@end
+
+@interface WSIconView (AGIconBandProbe)
+- (NSRect)cg_bandRect;
 @end
 
 @interface NSApplication (APPKITIconProbe)
@@ -318,6 +348,97 @@ int main(void)
 		check([view needsDisplayInRect:first] && [view needsDisplayInRect:second],
 		      "moving the selection invalidates the cell it left AND the cell it entered");
 		check(![view needsDisplayInRect:elsewhere], "and still nothing else");
+	}
+
+	/* 1d. **A PRESS IN THE EMPTY SPACE BEGINS A BAND, AND THE BAND IS DRAWN.** There was no gesture: every press between
+	 * icons cleared the selection and stopped, so several icons could only be taken with the keyboard. What is asserted
+	 * is the three things a band is — the rectangle it reports, the damage it asks for, and the two colours it paints (an
+	 * accent wash inside a darker edge), sampled out of a real draw.
+	 *
+	 * **THE PAINT IS MEASURED OVER THE VIEW'S OWN WHITE**, so the band used for it is the narrow strip left of the first
+	 * column: over a folder's blue artwork the wash tints the picture, and the question "which colour is the band" would
+	 * be answered by the picture instead. The strip is also SYMMETRIC about the view's middle (y 100..300 of 400), so the
+	 * sample point is the same row whichever way a bitmap counts its rows. */
+	{
+		NSPoint paintStart = NSMakePoint(2.0, 100.0);
+		NSPoint paintEnd = NSMakePoint(6.0, 300.0);	/* it must stop short of the first cell's wash at x 8 */
+		NSPoint start = NSMakePoint(2.0, 2.0);		/* the gesture: an empty corner, across the first icon */
+		NSPoint end = NSMakePoint(70.0, 55.0);
+		NSRect band;
+		NSBitmapImageRep *rep;
+		NSColor *inside;
+		NSColor *edge;
+		NSColor *outside;
+
+		[view selectIndex:-1];
+		[view setNeedsDisplay:NO];
+		[view mouseDown:mouse(NSLeftMouseDown, [view convertPoint:paintStart toView:nil])];
+		[view mouseDragged:mouse(NSLeftMouseDragged, [view convertPoint:paintEnd toView:nil])];
+		band = [view cg_bandRect];
+		check(near(NSMinX(band), 2.0) && near(NSMinY(band), 100.0)
+		      && near(NSWidth(band), 4.0) && near(NSHeight(band), 200.0),
+		      "the band is the rectangle between the press and the pointer, in either direction");
+		check(NSContainsRect([view cg_dirtyUnion], NSInsetRect(band, -2.0, -2.0)),
+		      "and the damage covers it, with the margin the hairline needs");
+
+		rep = draw_view(view, 400, 400);
+		inside = [rep colorAtX:4 y:200];
+		edge = [rep colorAtX:2 y:200];
+		outside = [rep colorAtX:380 y:380];
+		/* **THE FILL IS THE ACCENT AT ITS STATED ALPHA OVER WHITE** — not "a blue something". The expectation is computed
+		 * from `+cg_accentColor` and `WSSelectionBandFillAlpha`, so a hue or an alpha change shows up here. */
+		{
+			NSColor *accent = [[NSColor cg_accentColor] colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+
+			if (accent == nil) {
+				accent = [NSColor cg_accentColor];	/* already an RGB colour; the conversion refuses its own space */
+			}
+			{
+				CGFloat alpha = WSSelectionBandFillAlpha;
+				CGFloat r = alpha * [accent redComponent] + (1.0 - alpha);
+				CGFloat g = alpha * [accent greenComponent] + (1.0 - alpha);
+				CGFloat b = alpha * [accent blueComponent] + (1.0 - alpha);
+
+				check(inside != nil && near([inside redComponent], r) && near([inside greenComponent], g)
+				      && near([inside blueComponent], b),
+				      "the band's fill is the accent at its stated alpha over the view's white");
+				check(inside != nil && [inside redComponent] < 0.999,
+				      "and it is SEMITRANSPARENT — white shows through it");
+			}
+		}
+		check(edge != nil && [edge blueComponent] < [inside blueComponent] - 0.2,
+		      "the border is a darker shade of that same accent");
+		check(outside != nil && [outside redComponent] > 0.999 && [outside greenComponent] > 0.999
+		      && [outside blueComponent] > 0.999,
+		      "and outside the band the view is untouched white");
+		[view mouseUp:mouse(NSLeftMouseUp, [view convertPoint:paintEnd toView:nil])];
+		check([[view selectedIndexes] count] == 0, "a band over the empty margin selects nothing");
+		check(NSEqualRects([view cg_bandRect], NSZeroRect), "and the band is gone");
+
+		/* **THE SELECTION IS APPLIED WHEN THE BUTTON COMES UP**, which is the desktop's own rule: a drag across the grid
+		 * must not repaint the selection under the hand that is following it. */
+		[view mouseDown:mouse(NSLeftMouseDown, [view convertPoint:start toView:nil])];
+		[view mouseDragged:mouse(NSLeftMouseDragged, [view convertPoint:end toView:nil])];
+		check([[view selectedIndexes] count] == 0, "nothing is selected while the band is still being dragged");
+		[view mouseUp:mouse(NSLeftMouseUp, [view convertPoint:end toView:nil])];
+		check([[view selectedIndexes] count] == 1 && [[view selectedIndexes] containsIndex:0],
+		      "letting go selects the one item the band touched");
+
+		/* **AND A SHIFT-BAND ADDS TO WHAT WAS CHOSEN** rather than replacing it, which is the only reason to press in the
+		 * empty space with Shift held. */
+		[view selectIndex:3];
+		{
+			NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown
+							  location:[view convertPoint:start toView:nil]
+						     modifierFlags:NSShiftKeyMask timestamp:0.0 windowNumber:0 context:nil
+						       eventNumber:0 clickCount:1 pressure:1.0f];
+
+			[view mouseDown:down];
+			[view mouseDragged:mouse(NSLeftMouseDragged, [view convertPoint:end toView:nil])];
+			[view mouseUp:mouse(NSLeftMouseUp, [view convertPoint:end toView:nil])];
+		}
+		check([[view selectedIndexes] containsIndex:3] && [[view selectedIndexes] containsIndex:0],
+		      "a Shift-band keeps the item that was already selected and adds the ones it touches");
 	}
 
 	/* 2. THE KEYBOARD MOVES THE SELECTION IN THE GRID. */
