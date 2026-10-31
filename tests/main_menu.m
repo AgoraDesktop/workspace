@@ -202,6 +202,22 @@ int main(void)
 		item = itemTitled(appMenu, @"Show All");
 		check(item != nil && [[item keyEquivalent] length] == 0, "and Show All has no shortcut at all");
 
+		/* **AND THE VIEW MENU'S ONE ROW WITH A STATE.** "Show Toolbar Labels" is the application's — a preference, applied
+		 * to every file window — and it is chain-routed like its neighbours, so the skeleton bar draws it grey here: this
+		 * test's stand-in answers About, Preferences, New Window and Print, and nothing answers a preference about a
+		 * toolbar. The row's SHAPE is what this checks, and its behaviour is `file_window.m`'s. */
+		{
+			NSMenu *view = (NSMenu *)[[bar itemAtIndex:indexTitled(bar, @"View")] submenu];
+
+			item = itemTitled(view, @"Show Toolbar Labels");
+			check(item != nil, "the View menu offers \"Show Toolbar Labels\"");
+			check(item != nil && [item action] == @selector(toggleToolbarLabels:),
+			      "whose action is the application's toggle");
+			check(item != nil && [[item keyEquivalent] length] == 0, "with no shortcut, as a preference row has none");
+			check(item != nil && indexTitled(view, @"Show Toolbar") < indexTitled(view, @"Show Toolbar Labels"),
+			      "and it sits under \"Show Toolbar\", which is the other half of the same subject");
+		}
+
 		/* 4. WHAT THE ENABLING WALK MAKES OF IT — RUN, NOT ASSUMED. */
 		[bar update];
 

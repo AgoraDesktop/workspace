@@ -162,6 +162,10 @@ static NSMenu *WSViewMenu(void)
 	WSRow(menu, @"as Columns", @selector(cg_useColumnView:), nil, @"3", NSCommandKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Show Toolbar", @selector(toggleToolbarShown:), nil, @"t", NSCommandKeyMask | NSAlternateKeyMask);
+	/* **AND THE SAME PAIR FORGE'S PROJECT WINDOW HAS: THE BAND'S WORDS CAN BE PUT AWAY.** A file window's band is a Back, a
+	 * Forward and a mode switch, so the words are useful the first time and clutter every time after — and the choice is
+	 * the APPLICATION's, applied to every window, which is why its action is the delegate's and not a window's. */
+	WSRow(menu, @"Show Toolbar Labels", @selector(toggleToolbarLabels:), nil, nil, 0);
 	WSRow(menu, @"Customize Toolbar…", @selector(runToolbarCustomizationPalette:), nil, nil, 0);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Show View Options", @selector(showViewOptions:), nil, @"j", NSCommandKeyMask);

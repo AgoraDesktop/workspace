@@ -114,6 +114,14 @@
 - (nullable WSListView *)cg_listView;
 - (nullable WSColumnView *)cg_columnView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
+
+/* **THE TOOLBAR'S WORDS, AS ONE APPLICATION-WIDE PREFERENCE** — the same arrangement Forge's project window has, because
+ * it is the same question. `-cg_applyToolbarLabels` puts the remembered answer on this window's band; the two class
+ * doors read and write it; and `+cg_showToolbarLabelsStateOn:` is the tick the View menu asks for on its way to opening. */
++ (BOOL)cg_toolbarLabelsVisible;
++ (void)cg_setToolbarLabelsVisible:(BOOL)visible;
+- (void)cg_applyToolbarLabels;
++ (void)cg_showToolbarLabelsStateOn:(nullable NSMenuItem *)item;
 - (nullable NSSplitView *)cg_splitView;
 
 @end

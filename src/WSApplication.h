@@ -82,6 +82,10 @@
  * and every window keeps its own model, history and path bar. */
 - (void)newWorkspaceWindow:(id)sender;
 
+/* **THE TOOLBAR'S WORDS ARE ONE PREFERENCE FOR THE WHOLE APPLICATION**, so the row that flips it lives here and applies to
+ * every file window — including the ones behind the one it was pressed in. */
+- (void)toggleToolbarLabels:(nullable id)sender;
+
 - (void)runForSeconds:(double)seconds;
 
 - (void)stop;

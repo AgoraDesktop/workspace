@@ -162,6 +162,7 @@ int main(void)
 	      "all three views are enabled");
 	check([[[first window] toolbar] items] != nil && [[[[first window] toolbar] items] count] >= 4,
 	      "the toolbar has its items");
+
 	check(![first canGoBack] && ![first canGoForward], "a new window has nowhere to go back or forward to");
 
 	outline = [first cg_sidebarOutline];
@@ -423,6 +424,54 @@ int main(void)
 	check(![second canGoBack] && [first canGoBack],
 	      "the two windows do not share a history cursor");
 	check([[[[second cg_pathControl] URL] path] isEqual:subTwo], "nor a current folder");
+
+	/* **AND THE BAND'S WORDS ARE ONE PREFERENCE, WHICH THE VIEW MENU FLIPS.** A toolbar's labels are not a per-window
+	 * choice: putting them away means the same thing in every file window, so the answer is remembered and applied, and
+	 * the menu's tick is read back from it rather than remembered a second time.
+	 *
+	 * **IT RUNS LAST, ON A WINDOW OF ITS OWN, AND BOTH ARE DELIBERATE.** `NSToolbar -setDisplayMode:` changes the band's
+	 * height and with it the window's frame, and a round trip through `IconOnly` back to `IconAndLabel` does not restore
+	 * the frame EXACTLY — a known latent defect of `-setSizeMode:`, not of this preference. A window made for the
+	 * measurement keeps that perturbation away from the thirteen checks above, which read the first window's layout. */
+	{
+		WSFileWindowController *banded = [[WSFileWindowController alloc] initWithDirectory:folderA];
+		NSMenuItem *row = [[NSMenuItem alloc] initWithTitle:@"Show Toolbar Labels" action:NULL keyEquivalent:@""];
+
+		check([WSFileWindowController cg_toolbarLabelsVisible],
+		      "a window nobody has chosen for shows its toolbar's words");
+		check([[[banded window] toolbar] displayMode] == NSToolbarDisplayModeIconAndLabel,
+		      "and its band was built that way");
+
+		[WSFileWindowController cg_setToolbarLabelsVisible:NO];
+		check(![WSFileWindowController cg_toolbarLabelsVisible], "the preference can be put away");
+		[banded cg_applyToolbarLabels];
+		check([[[banded window] toolbar] displayMode] == NSToolbarDisplayModeIconOnly,
+		      "and a window applies it to the band it already has");
+
+		[WSFileWindowController cg_showToolbarLabelsStateOn:row];
+		check([row state] == NSOffState, "the menu's tick says the words are off");
+		/* **AND A WINDOW MADE WHILE THE WORDS ARE AWAY IS BUILT WITHOUT THEM**, which is the half a window's own apply
+		 * cannot cover: the preference is read when the band is BUILT, so a file window opened after the choice already
+		 * agrees with it rather than waiting to be told. */
+		{
+			WSFileWindowController *later = [[WSFileWindowController alloc] initWithDirectory:folderA];
+
+			check([[[later window] toolbar] displayMode] == NSToolbarDisplayModeIconOnly,
+			      "a window opened while the words are away is born without them");
+			[later close];
+			[later release];
+		}
+
+		[WSFileWindowController cg_setToolbarLabelsVisible:YES];
+		[WSFileWindowController cg_showToolbarLabelsStateOn:row];
+		check([row state] == NSOnState, "and it follows the preference back on");
+		[banded cg_applyToolbarLabels];
+		check([[[banded window] toolbar] displayMode] == NSToolbarDisplayModeIconAndLabel,
+		      "with the band following it back too");
+		[row release];
+		[banded close];
+		[banded release];
+	}
 
 	[backItem release];
 	[listItem release];

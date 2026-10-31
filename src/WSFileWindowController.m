@@ -57,6 +57,7 @@
 #import <Foundation/NSString.h>
 #import <Foundation/NSURL.h>
 #import <Foundation/NSUndoManager.h>
+#import <Foundation/NSUserDefaults.h>
 #import <Foundation/NSValue.h>
 
 #import <LaunchServices/LSOpen.h>
@@ -74,6 +75,11 @@ static NSString * const WSFileWindowToolbarIdentifier = @"WorkspaceFileWindowToo
 static NSString * const WSBackItemIdentifier = @"WorkspaceBack";
 static NSString * const WSForwardItemIdentifier = @"WorkspaceForward";
 static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
+/* **THE ONE PREFERENCE A TOOLBAR HAS: WHETHER ITS ITEMS SAY THEIR WORDS.** A file window's band is a Back, a Forward
+ * and a mode switch, so the words are useful the first time and clutter every time after — which is why the View menu
+ * offers to put them away and the answer is remembered. The key lives here rather than in a preferences class because
+ * the toolbar is what reads it. */
+static NSString * const WSToolbarLabelsKey = @"WSShowToolbarLabels";
 
 /* ============================================================================================ *
  * THE SIDEBAR'S CELL — a text field cell that draws the place's picture beside its title.      *
@@ -361,7 +367,8 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	_toolbar = [[NSToolbar alloc] initWithIdentifier:WSFileWindowToolbarIdentifier];
 	[_toolbar setDelegate:self];
-	[_toolbar setDisplayMode:NSToolbarDisplayModeIconAndLabel];
+	[_toolbar setDisplayMode:[WSFileWindowController cg_toolbarLabelsVisible]
+				  ? NSToolbarDisplayModeIconAndLabel : NSToolbarDisplayModeIconOnly];
 	[[self window] setToolbar:_toolbar];
 }
 
@@ -1049,6 +1056,46 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		return [_undoManager canRedo];
 	}
 	return YES;
+}
+
+/* ============================================================================================ *
+ * THE TOOLBAR'S WORDS, WHICH ARE ONE PREFERENCE AND NOT A PER-WINDOW CHOICE.                     *
+ *                                                                                                *
+ * **THE SAME ARRANGEMENT FORGE'S PROJECT WINDOW HAS**, because it is the same question: a band whose items are a verb and
+ * a picture says both usefully the first time and clutters every time after, so the View menu offers to put the words
+ * away, and the answer belongs to the APPLICATION rather than to the window a person happened to press it in. It is
+ * `NSToolbar`'s own vocabulary — `IconAndLabel` against `IconOnly` — so nothing here invents a second notion of a
+ * toolbar's face.
+ * ============================================================================================ */
+
++ (BOOL)cg_toolbarLabelsVisible
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
+	if ([defaults objectForKey:WSToolbarLabelsKey] == nil) {
+		return YES;		/* a window nobody has chosen for keeps what this application always drew */
+	}
+	return [defaults boolForKey:WSToolbarLabelsKey];
+}
+
++ (void)cg_setToolbarLabelsVisible:(BOOL)visible
+{
+	[[NSUserDefaults standardUserDefaults] setBool:visible forKey:WSToolbarLabelsKey];
+}
+
+- (void)cg_applyToolbarLabels
+{
+	[_toolbar setDisplayMode:[WSFileWindowController cg_toolbarLabelsVisible]
+				  ? NSToolbarDisplayModeIconAndLabel : NSToolbarDisplayModeIconOnly];
+}
+
+/* **THE TICK DESCRIBES THE PREFERENCE NOW, NOT THE LAST PRESS.** The menu asks this on its way to opening, so a value
+ * changed by another window — or by an edit to the defaults store — is never drawn stale. */
++ (void)cg_showToolbarLabelsStateOn:(NSMenuItem *)item
+{
+	if (item != nil) {
+		[item setState:[self cg_toolbarLabelsVisible] ? NSOnState : NSOffState];
+	}
 }
 
 /* ---- THE SEAMS ------------------------------------------------------------------------------ */

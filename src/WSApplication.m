@@ -306,8 +306,30 @@
 /* THE APPLICATION'S OWN ROW. Everything else the menus offer is a window's or the responder chain's. */
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem
 {
-	(void)menuItem;
+	/* **AND THE ONE ROW WITH A STATE IS TOLD WHICH STATE IT IS IN NOW**, on the way to opening, so a tick set by an edit
+	 * to the defaults store or by another window's press is never drawn stale. */
+	if ([menuItem action] == @selector(toggleToolbarLabels:)) {
+		[WSFileWindowController cg_showToolbarLabelsStateOn:menuItem];
+	}
 	return YES;
+}
+
+/* **ONE PREFERENCE, EVERY WINDOW, AND THE ROW SAYS WHICH WAY IT WENT.** A toolbar's labels are not a per-window choice —
+ * putting them away means the same thing in all of them — so the answer is written once and applied to every file window
+ * that is open. The sender's state is set here as well as in `-validateMenuItem:`, because a press that leaves a stale
+ * tick until the next opening is a row that lies about what it just did. */
+- (void)toggleToolbarLabels:(id)sender
+{
+	BOOL visible = ![WSFileWindowController cg_toolbarLabelsVisible];
+	NSUInteger i;
+
+	[WSFileWindowController cg_setToolbarLabelsVisible:visible];
+	for (i = 0; i < [_fileWindows count]; i++) {
+		[[_fileWindows objectAtIndex:i] cg_applyToolbarLabels];
+	}
+	if ([sender isKindOfClass:[NSMenuItem class]]) {
+		[WSFileWindowController cg_showToolbarLabelsStateOn:(NSMenuItem *)sender];
+	}
 }
 
 /* ---- THE APPLICATION MENU'S OWN TWO ROWS ----------------------------------------------------------- */
