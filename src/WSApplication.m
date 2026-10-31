@@ -308,7 +308,7 @@
 {
 	/* **AND THE ONE ROW WITH A STATE IS TOLD WHICH STATE IT IS IN NOW**, on the way to opening, so a tick set by an edit
 	 * to the defaults store or by another window's press is never drawn stale. */
-	if ([menuItem action] == @selector(toggleToolbarLabels:)) {
+	if (sel_isEqual([menuItem action], @selector(toggleToolbarLabels:))) {
 		[WSFileWindowController cg_showToolbarLabelsStateOn:menuItem];
 	}
 	return YES;

@@ -172,18 +172,18 @@ int main(void)
 
 		/* 3. WHERE EACH OF THEM GOES, WHICH IS THE PART A PICTURE CANNOT SHOW. */
 		item = itemTitled(appMenu, [NSString stringWithFormat:@"About %@", name]);
-		check(item != nil && [item target] == target && [item action] == @selector(orderFrontAboutPanel:),
+		check(item != nil && [item target] == target && sel_isEqual([item action], @selector(orderFrontAboutPanel:)),
 		      "About is sent to the application's own door, not the AppKit's refusal");
 
 		item = itemTitled(appMenu, @"Preferences…");
-		check(item != nil && [item target] == target && [item action] == @selector(showPreferences:),
+		check(item != nil && [item target] == target && sel_isEqual([item action], @selector(showPreferences:)),
 		      "and Preferences to the application's");
 		check(item != nil && [[item keyEquivalent] isEqualToString:@","] &&
 		      ([item keyEquivalentModifierMask] & NSCommandKeyMask) != 0,
 		      "with Command-, as its shortcut");
 
 		item = itemTitled(appMenu, [NSString stringWithFormat:@"Quit %@", name]);
-		check(item != nil && [item target] == application && [item action] == @selector(terminate:),
+		check(item != nil && [item target] == application && sel_isEqual([item action], @selector(terminate:)),
 		      "Quit goes to the application's own -terminate:");
 
 		/* **THE MASK IS THE POINT OF THIS ONE.** Apple's item defaults to `NSCommandKeyMask`; this tier's leaves
@@ -211,7 +211,7 @@ int main(void)
 
 			item = itemTitled(view, @"Show Toolbar Labels");
 			check(item != nil, "the View menu offers \"Show Toolbar Labels\"");
-			check(item != nil && [item action] == @selector(toggleToolbarLabels:),
+			check(item != nil && sel_isEqual([item action], @selector(toggleToolbarLabels:)),
 			      "whose action is the application's toggle");
 			check(item != nil && [[item keyEquivalent] length] == 0, "with no shortcut, as a preference row has none");
 			check(item != nil && indexTitled(view, @"Show Toolbar") < indexTitled(view, @"Show Toolbar Labels"),
@@ -232,7 +232,7 @@ int main(void)
 
 		/* **THE ONE ROW W2 LIGHTS.** It is the application's target, and the walk can see that it answers. */
 		item = itemTitled([itemTitled(bar, @"File") submenu], @"New Workspace Window");
-		check(item != nil && [item target] == target && [item action] == @selector(newWorkspaceWindow:),
+		check(item != nil && [item target] == target && sel_isEqual([item action], @selector(newWorkspaceWindow:)),
 		      "New Workspace Window is the application's own row");
 		check(item != nil && [item isEnabled], "and it is ENABLED, because the application answers it");
 
@@ -257,8 +257,8 @@ int main(void)
 					}
 					/* NEW WORKSPACE WINDOW IS W2'S AND PRINT IS THE PRINT SYSTEM'S; both are checked above, and
 					 * every other row here still waits for its stage and must be grey. */
-					if ([row action] == @selector(newWorkspaceWindow:)
-					    || [row action] == @selector(printSelection:)) {
+					if (sel_isEqual([row action], @selector(newWorkspaceWindow:))
+					    || sel_isEqual([row action], @selector(printSelection:))) {
 						continue;
 					}
 					inspected++;
@@ -321,7 +321,7 @@ int main(void)
 			NSWindow *window;
 
 			item = itemTitled(fileMenu, @"Print…");
-			check(item != nil && [item action] == @selector(printSelection:),
+			check(item != nil && sel_isEqual([item action], @selector(printSelection:)),
 			      "File > Print… names the file window's action, and carries no target of its own");
 			check(item != nil && [[item keyEquivalent] isEqual:@"p"], "and it carries Cmd-P");
 

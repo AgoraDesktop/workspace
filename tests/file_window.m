@@ -114,6 +114,16 @@ int main(void)
 	NSMenuItem *columnItem;
 
 	setvbuf(stdout, NULL, _IONBF, 0);
+	/* **THE DEFAULTS STORE IS A FILE, AND THIS PROBE NOW READS A PREFERENCE OUT OF IT.** It gets one of its own, created
+	 * before anything asks — so the check that a window "nobody has chosen for" shows its words is about a FRESH store
+	 * rather than about whatever this machine, or a previous run of this probe, happened to leave in the real one. */
+	{
+		NSString *config = [root stringByAppendingPathComponent:@"config"];
+
+		[[NSFileManager defaultManager] createDirectoryAtPath:config withIntermediateDirectories:YES
+							   attributes:nil error:NULL];
+		setenv("AGORA_CONFIG_ROOT", [config UTF8String], 1);
+	}
 	[application finishLaunching];
 
 	[[NSFileManager defaultManager] removeItemAtPath:root error:NULL];
@@ -447,6 +457,26 @@ int main(void)
 		[banded cg_applyToolbarLabels];
 		check([[[banded window] toolbar] displayMode] == NSToolbarDisplayModeIconOnly,
 		      "and a window applies it to the band it already has");
+
+		/* **AND THE BAND'S OWN ROW TICKS TOO, FROM THE WINDOW THAT OWNS THE BAND.** `Show Toolbar` sends
+		 * `-toggleToolbarShown:`, which is `NSWindow`'s door, so the WINDOW is the row's target and the window is what
+		 * validates it — the state is read from the band it owns, never remembered twice. A hidden band unticks the row and
+		 * a shown one ticks it back, which is the pair a person sees in the menu. */
+		{
+			NSMenuItem *showRow = [[NSMenuItem alloc] initWithTitle:@"Show Toolbar"
+									action:@selector(toggleToolbarShown:)
+								 keyEquivalent:@"t"];
+
+			check([[banded window] validateMenuItem:showRow] && [showRow state] == NSOnState,
+			      "the window ticks \"Show Toolbar\" while the band shows");
+			[[[banded window] toolbar] setVisible:NO];
+			check([[banded window] validateMenuItem:showRow] && [showRow state] == NSOffState,
+			      "and unticks it when the band is put away");
+			[[[banded window] toolbar] setVisible:YES];
+			check([[banded window] validateMenuItem:showRow] && [showRow state] == NSOnState,
+			      "with the tick back when it is shown again");
+			[showRow release];
+		}
 
 		[WSFileWindowController cg_showToolbarLabelsStateOn:row];
 		check([row state] == NSOffState, "the menu's tick says the words are off");
