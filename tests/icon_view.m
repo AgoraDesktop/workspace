@@ -13,6 +13,7 @@
  */
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
+#import "WSDesktopView.h"
 #import "WSIconView.h"
 #import "WSItemModel.h"
 #import "WSSelectionBand.h"
@@ -119,6 +120,12 @@ static NSInteger indexNamed(WSIconView *view, NSString *name)
 
 @interface WSIconView (AGIconBandProbe)
 - (NSRect)cg_bandRect;
+@end
+
+/* The desktop's own probe doors, declared as its test declares them. */
+@interface WSDesktopView (AGIconSelectionProbe)
+- (NSArray *)cg_selection;
+- (NSArray *)cg_positions;
 @end
 
 @interface NSApplication (APPKITIconProbe)
@@ -439,6 +446,77 @@ int main(void)
 		}
 		check([[view selectedIndexes] containsIndex:3] && [[view selectedIndexes] containsIndex:0],
 		      "a Shift-band keeps the item that was already selected and adds the ones it touches");
+	}
+
+	/* 1e. **ONE SELECTION FOR THE WHOLE WORKSPACE.** The desktop and every file window are separate views with
+	 * separate models, and their highlights were separate too — an icon could be chosen on the desktop and another in
+	 * each open window at once, which says "these are all chosen" about files in three different folders. Choosing in one
+	 * surface now takes the selection away from every other, and clearing one's own (a press in the empty space) is NOT
+	 * choosing, so the window next door keeps what it had. */
+	{
+		WSItemModel *otherModel = [[WSItemModel alloc] initWithDirectory:otherRoot];
+		WSIconView *second = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 400.0)
+								 model:otherModel];
+		NSWindow *secondWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 400.0)
+								     styleMask:NSBorderlessWindowMask
+								       backing:NSBackingStoreBuffered defer:NO];
+		WSDesktopView *desktop = [[WSDesktopView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 520.0, 400.0)
+								     directory:root];
+		NSWindow *desktopWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 520.0, 400.0)
+								      styleMask:NSBorderlessWindowMask
+									backing:NSBackingStoreBuffered defer:NO];
+
+		[secondWindow setContentView:second];
+		[desktopWindow setContentView:desktop];
+		[otherModel release];
+
+		/* A SELECTS: the other window and the desktop are empty. */
+		[view selectIndex:1];
+		check([[view selectedIndexes] count] == 1, "the window that chose holds the selection");
+		check([[second selectedIndexes] count] == 0, "the window next door lets go of its own");
+		check([[desktop cg_selection] count] == 0, "and so does the desktop");
+
+		/* B SELECTS: the first window is empty. */
+		[second selectIndex:0];
+		check([[second selectedIndexes] count] == 1, "choosing in the second window takes the selection");
+		check([[view selectedIndexes] count] == 0, "the first window lets go");
+
+		/* THE DESKTOP SELECTS — through the mouse, which is the only way it chooses: the first icon's cell. */
+		{
+			NSPoint position = [[[desktop cg_positions] objectAtIndex:0] pointValue];
+			NSRect bounds = [desktop bounds];
+			NSPoint windowPoint = NSMakePoint(position.x + 32.0, bounds.size.height - (position.y + 32.0));
+			NSEvent *down = mouse(NSLeftMouseDown, windowPoint);
+			NSEvent *up = mouse(NSLeftMouseUp, windowPoint);
+
+			[desktop mouseDown:down];
+			[desktop mouseUp:up];
+		}
+		check([[desktop cg_selection] count] == 1, "the desktop holds the selection after a click on one of its icons");
+		check([[view selectedIndexes] count] == 0 && [[second selectedIndexes] count] == 0,
+		      "and both windows let go of theirs");
+
+		/* AND BACK: a window choosing takes it off the desktop. */
+		[view selectIndex:0];
+		check([[view selectedIndexes] count] == 1 && [[desktop cg_selection] count] == 0,
+		      "a window choosing takes the selection off the desktop");
+
+		/* **CLEARING IS NOT CHOOSING.** A press in the empty space of the second window empties only itself, so the first
+		 * window keeps the icon it holds — which is what makes "the selection moved" different from "nothing was chosen
+		 * here". */
+		{
+			NSPoint empty = NSMakePoint(380.0, 380.0);	/* below the second window's items */
+
+			[second mouseDown:mouse(NSLeftMouseDown, [second convertPoint:empty toView:nil])];
+			[second mouseUp:mouse(NSLeftMouseUp, [second convertPoint:empty toView:nil])];
+		}
+		check([[second selectedIndexes] count] == 0, "the emptied window has nothing selected");
+		check([[view selectedIndexes] count] == 1, "and the window that held the selection still does");
+
+		[desktopWindow release];
+		[desktop release];
+		[secondWindow release];
+		[second release];
 	}
 
 	/* 2. THE KEYBOARD MOVES THE SELECTION IN THE GRID. */

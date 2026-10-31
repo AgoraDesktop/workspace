@@ -20,6 +20,7 @@
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
 #import "WSSelectionBand.h"
+#import "WSSelectionOwner.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
 
@@ -139,6 +140,11 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		_renameIndex = -1;
 		_iconSize = WSIconDefaultSize;
 		[self registerForDraggedTypes:[NSArray arrayWithObject:NSFilenamesPboardType]];
+		/* **AND THIS VIEW HEARS WHEN ANOTHER SURFACE TAKES THE SELECTION** — see `WSSelectionOwner.h`. */
+		[[NSNotificationCenter defaultCenter] addObserver:self
+							 selector:@selector(fn_selectionHeldElsewhere:)
+							     name:WSSelectionDidChangeNotification
+							   object:nil];
 		[self layoutItems];
 	}
 	return self;
@@ -146,6 +152,7 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 - (void)dealloc
 {
+	[[NSNotificationCenter defaultCenter] removeObserver:self name:WSSelectionDidChangeNotification object:nil];
 	if (_observedClip != nil) {
 		[[NSNotificationCenter defaultCenter] removeObserver:self
 			name:NSViewFrameDidChangeNotification object:_observedClip];
@@ -466,6 +473,30 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		[self invalidateItemAtIndex:(NSInteger)index];
 	}
 	[changed release];
+	/* **AND THE CLAIM GOES OUT FROM HERE, BECAUSE EVERY CHANGE PASSES THROUGH HERE.** `-selectIndex:`, `-selectIndexes:`,
+	 * Select All, a Shift-extension, a Command-click and a band's release all end in this method — so one post covers them
+	 * and a new way to select cannot forget to announce itself. A selection that became EMPTY announces nothing: only
+	 * choosing is a claim, and a view that cleared itself must not take the selection away from the window next door. */
+	if ([_selection count] > 0) {
+		[[NSNotificationCenter defaultCenter] postNotificationName:WSSelectionDidChangeNotification object:self];
+	}
+}
+
+/* **ANOTHER SURFACE TOOK THE SELECTION, SO THIS ONE LETS GO OF ITS OWN.** The anchor goes with it — a Shift-click after
+ * the claim moved away must not extend a range from an item that is no longer part of the selection. Nothing is announced
+ * from here: this view is giving up, not choosing, and a re-post would ping the claim back and forth between two views
+ * that are both now empty. */
+- (void)fn_selectionHeldElsewhere:(NSNotification *)note
+{
+	NSIndexSet *before;
+
+	if ([note object] == self || [_selection count] == 0) {
+		return;
+	}
+	before = [self snapshotSelection];
+	[_selection removeAllIndexes];
+	_anchorIndex = -1;
+	[self invalidateSelectionChangeFrom:before];
 }
 
 /* The view's own name for that rectangle, for the probe: the fill and the focus ring are the same rect. */

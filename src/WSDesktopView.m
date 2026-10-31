@@ -22,6 +22,7 @@
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
 #import "WSSelectionBand.h"
+#import "WSSelectionOwner.h"
 #import "WSItemModel.h"
 #import "WSMetadataStore.h"
 
@@ -71,6 +72,11 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		_positions = [[NSMutableArray alloc] init];
 		_icons = [[NSMutableArray alloc] init];
 		_selection = [[NSMutableArray alloc] init];
+		/* **AND THE DESKTOP HEARS WHEN A WINDOW TAKES THE SELECTION** — see `WSSelectionOwner.h`. */
+		[[NSNotificationCenter defaultCenter] addObserver:self
+							 selector:@selector(fn_selectionHeldElsewhere:)
+							     name:WSSelectionDidChangeNotification
+							   object:nil];
 		[self reload];
 	}
 	return self;
@@ -392,6 +398,21 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	for (s = 0; s < [_selection count]; s++)
 		if ([[_selection objectAtIndex:s] integerValue] == index) return;
 	[_selection addObject:[NSNumber numberWithInteger:index]];
+	/* **THE DESKTOP IS ONE OF THE SURFACES THAT SHARE THE SELECTION** — every press that chooses an icon comes through
+	 * here, so this is the one place the claim has to be made. A desktop that cleared itself (a press on the wallpaper)
+	 * comes through nothing and stays silent, which is what keeps the window next door's selection standing. */
+	[[NSNotificationCenter defaultCenter] postNotificationName:WSSelectionDidChangeNotification object:self];
+}
+
+/* **A WINDOW TOOK THE SELECTION, SO THE DESKTOP LETS GO.** Repaint everything: the whole surface is the highlight's, and
+ * one repaint per claim is cheaper than walking the icons the claim took. */
+- (void)fn_selectionHeldElsewhere:(NSNotification *)note
+{
+	if ([note object] == self || [_selection count] == 0) {
+		return;
+	}
+	[_selection removeAllObjects];
+	[self setNeedsDisplay:YES];
 }
 
 /* Snap what was dragged to the free cells nearest where it was left, then write the sidecar. */
@@ -448,6 +469,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 
 - (void)dealloc
 {
+	[[NSNotificationCenter defaultCenter] removeObserver:self name:WSSelectionDidChangeNotification object:nil];
 	[_model release];
 	[_store release];
 	[_positions release];
