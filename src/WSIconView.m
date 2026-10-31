@@ -23,6 +23,7 @@
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
 #import "WSItemIcons.h"
+#import "WSItemDrag.h"
 #import "WSItemModel.h"
 
 #import <AppKit/NSBezierPath.h>
@@ -63,55 +64,6 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 /* **THE LABEL'S BAND, THE WASH AND THE RING ARE `WSIconCell`'S NOW**, because the desktop draws the same cell and the two
  * had drifted apart — see that header. This file keeps the two things that are its own: the ink (black, because the
  * background is white) and the invalidation that follows a selection. */
-
-/* ---- the two facts a drop needs about the file system ------------------------------------------ */
-
-static BOOL fn_same_volume(NSArray *paths, NSString *directory)
-{
-	struct stat target;
-	NSUInteger i;
-
-	if (stat([directory UTF8String], &target) != 0) {
-		return YES;	/* can't tell: the local default is Move, and the operation will report its own failure */
-	}
-	for (i = 0; i < [paths count]; i++) {
-		struct stat source;
-		NSString *path = [paths objectAtIndex:i];
-
-		if (stat([path UTF8String], &source) == 0 && source.st_dev != target.st_dev) {
-			return NO;
-		}
-	}
-	return YES;
-}
-
-static BOOL fn_all_from_directory(NSArray *paths, NSString *directory)
-{
-	NSUInteger i;
-
-	for (i = 0; i < [paths count]; i++) {
-		NSString *parent = [[paths objectAtIndex:i] stringByDeletingLastPathComponent];
-
-		if (![parent isEqual:directory]) {
-			return NO;
-		}
-	}
-	return YES;
-}
-
-static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
-{
-	NSUInteger i;
-
-	for (i = 0; i < [paths count]; i++) {
-		NSString *path = [paths objectAtIndex:i];
-
-		if ([directory isEqual:path] || [directory hasPrefix:[path stringByAppendingString:@"/"]]) {
-			return YES;
-		}
-	}
-	return NO;
-}
 
 @implementation WSIconView
 
@@ -927,18 +879,12 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 {
 	NSArray *paths = [self cg_selectedPaths];
 	NSMutableArray *items;
-	NSPasteboard *pasteboard;
 	NSDraggingSession *session;
 	NSUInteger index;
 
 	if ([paths count] == 0) {
 		return nil;
 	}
-	pasteboard = [NSPasteboard pasteboardWithName:NSDragPboard];
-	[pasteboard clearContents];
-	[pasteboard declareTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
-	[pasteboard setPropertyList:paths forType:NSFilenamesPboardType];
-
 	items = [[NSMutableArray alloc] init];
 	for (index = [_selection firstIndex]; index != NSNotFound; index = [_selection indexGreaterThanIndex:index]) {
 		NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter:nil];
@@ -949,7 +895,7 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		[items addObject:item];
 		[item release];
 	}
-	session = [self beginDraggingSessionWithItems:items event:event source:self];
+	session = WSItemDragBegin(self, paths, items, event, self);
 	[items release];
 	_dragging = (session != nil);
 	return session;
@@ -973,13 +919,6 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 
 /* ---- THE DRAG DESTINATION -------------------------------------------------------------------- */
 
-static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
-{
-	id plist = [[info draggingPasteboard] propertyListForType:NSFilenamesPboardType];
-
-	return [plist isKindOfClass:[NSArray class]] ? plist : nil;
-}
-
 - (NSString *)dropDirectoryForIndex:(NSInteger)index
 {
 	if (index >= 0 && index < [self itemCount]) {
@@ -992,22 +931,9 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 
 - (NSDragOperation)cg_proposedOperationForSameVolume:(BOOL)sameVolume modifiers:(NSUInteger)modifiers
 {
-	BOOL option = (modifiers & NSAlternateKeyMask) != 0;
-	BOOL command = (modifiers & NSCommandKeyMask) != 0;
-
-	if (option && command) {
-		return NSDragOperationLink;
-	}
-	if (option) {
-		return NSDragOperationCopy;
-	}
-	if (sameVolume) {
-		return NSDragOperationMove;
-	}
-	if (command) {
-		return NSDragOperationMove;
-	}
-	return NSDragOperationCopy;
+	/* THE RULE IS `WSItemDrag`'s — the desktop asks the same question of the same files, and one answer is worth more
+	 * than two that agree today. The mask is every operation because this door is asked outside a drag as well. */
+	return WSItemDragOperationForVolume(sameVolume, NSDragOperationEvery, modifiers);
 }
 
 - (NSDragOperation)cg_updateDropWithInfo:(id <NSDraggingInfo>)info
@@ -1015,7 +941,7 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 	NSPoint point = [self convertPoint:[info draggingLocation] fromView:nil];
 	NSInteger index = [self indexAtPoint:point];
 	NSString *target = [self dropDirectoryForIndex:index];
-	NSArray *paths = fn_paths_from_info(info);
+	NSArray *paths = WSItemDragPaths(info);
 	NSDragOperation operation = NSDragOperationNone;
 
 	if (_sprungIndex >= 0 && index != _sprungIndex) {
@@ -1026,12 +952,9 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 	}
 	_dropIndex = -1;
 	_dropOperation = NSDragOperationNone;
-	if (target != nil && [paths count] > 0
-	    && !fn_all_from_directory(paths, target)
-	    && !fn_directory_is_inside_any(target, paths)) {
-		operation = [self cg_proposedOperationForSameVolume:fn_same_volume(paths, target)
-							  modifiers:[NSEvent modifierFlags]];
-		operation &= [info draggingSourceOperationMask];
+	if (target != nil && [paths count] > 0) {
+		operation = WSItemDragOperation(paths, target, [info draggingSourceOperationMask],
+						[NSEvent modifierFlags]);
 		if (operation != NSDragOperationNone) {
 			_dropIndex = (index >= 0) ? index : -1;
 			_dropOperation = operation;
@@ -1085,7 +1008,7 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
 {
-	NSArray *paths = fn_paths_from_info(sender);
+	NSArray *paths = WSItemDragPaths(sender);
 	NSString *target = [self dropDirectoryForIndex:_dropIndex];
 	NSDragOperation operation = _dropOperation;
 	BOOL performed = NO;
@@ -1095,8 +1018,8 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 	}
 	if (performed) {
 		[self reloadAfterChange];
-		if ([[sender draggingSource] isKindOfClass:[WSIconView class]]) {
-			[(WSIconView *)[sender draggingSource] reloadAfterChange];
+		if ([[sender draggingSource] respondsToSelector:@selector(reloadAfterChange)]) {
+			[(id <WSItemDragSourceReloading>)[sender draggingSource] reloadAfterChange];
 		}
 	}
 	[self cancelSpring];
@@ -1120,44 +1043,7 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 - (BOOL)cg_performDropOfPaths:(NSArray *)paths intoDirectory:(NSString *)directory
 		    operation:(NSDragOperation)operation
 {
-	NSFileManager *manager = [NSFileManager defaultManager];
-	NSUInteger i;
-
-	if ([paths count] == 0 || directory == nil) {
-		return NO;
-	}
-	/* PREFLIGHT EVERY DESTINATION BEFORE MOVING ANYTHING: a conflict halfway through a multi-file drag is a partial
-	 * result nobody asked for. W6's conflict sheet is what will make this a question rather than a refusal. */
-	for (i = 0; i < [paths count]; i++) {
-		NSString *source = [paths objectAtIndex:i];
-		NSString *destination = [directory stringByAppendingPathComponent:[source lastPathComponent]];
-
-		if (![manager fileExistsAtPath:source] || [manager fileExistsAtPath:destination]) {
-			return NO;
-		}
-		if ([directory isEqual:source] || [directory hasPrefix:[source stringByAppendingString:@"/"]]) {
-			return NO;
-		}
-	}
-	for (i = 0; i < [paths count]; i++) {
-		NSString *source = [paths objectAtIndex:i];
-		NSString *destination = [directory stringByAppendingPathComponent:[source lastPathComponent]];
-		BOOL ok = NO;
-
-		if (operation == NSDragOperationMove) {
-			ok = [manager moveItemAtPath:source toPath:destination error:NULL];
-		} else if (operation == NSDragOperationCopy) {
-			ok = [manager copyItemAtPath:source toPath:destination error:NULL];
-		} else if (operation == NSDragOperationLink) {
-			/* A SYMBOLIC LINK, NOT A CARBON ALIAS: the bookmark record is `WSAlias` (W6), and this is the link
-			 * operation that exists today. The header says so where the modifier is described. */
-			ok = [manager createSymbolicLinkAtPath:destination withDestinationPath:source error:NULL];
-		}
-		if (!ok) {
-			return NO;
-		}
-	}
-	return YES;
+	return WSItemDragPerform(paths, directory, operation);
 }
 
 /* ---- SPRING-LOADED FOLDERS ------------------------------------------------------------------- */

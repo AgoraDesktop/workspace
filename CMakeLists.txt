@@ -57,6 +57,7 @@ add_executable(Workspace
     src/WSItemIcons.m
     src/WSItemKind.m
     src/WSItemModel.m
+    src/WSItemDrag.m
     src/WSItemSort.m
     src/WSMainMenu.m
     src/WSMenuBarClock.m

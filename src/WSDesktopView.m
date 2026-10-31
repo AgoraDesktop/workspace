@@ -25,6 +25,7 @@
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
 #import "WSItemIcons.h"
+#import "WSItemDrag.h"
 #import "WSItemModel.h"
 #import "WSMetadataStore.h"
 
@@ -39,8 +40,10 @@
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSStatusBar.h>
 #import <Foundation/NSArray.h>
@@ -59,6 +62,9 @@
 NSString *WSDesktopViewOpenFolderNotification = @"WSDesktopViewOpenFolderNotification";
 NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 
+/* **HOW FAR THE POINTER MOVES BEFORE A PRESS BECOMES A DRAG**, the same figure the file window's grid uses. */
+#define WS_DESKTOP_DRAG_THRESHOLD 4.0
+
 @implementation WSDesktopView
 
 /* NOT OPAQUE: the window is transparent and this view draws only the icons, so the wallpaper has to show
@@ -74,6 +80,9 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		_positions = [[NSMutableArray alloc] init];
 		_icons = [[NSMutableArray alloc] init];
 		_selection = [[NSMutableArray alloc] init];
+		/* **AND IT TAKES DROPS**, the same type a file window's icon view takes: a drag out of a window and onto the
+		 * desktop is a move into the desktop's own directory. */
+		[self registerForDraggedTypes:[NSArray arrayWithObject:NSFilenamesPboardType]];
 		/* **AND THE DESKTOP HEARS WHEN A WINDOW TAKES THE SELECTION** — see `WSSelectionOwner.h`. */
 		[[NSNotificationCenter defaultCenter] addObserver:self
 							 selector:@selector(fn_selectionHeldElsewhere:)
@@ -85,6 +94,8 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 }
 
 - (NSString *)directory { return [_model directory]; }
+
+- (WSItemModel *)model { return _model; }
 
 /* **THE DESKTOP'S TOP PADDING: THE MENU BAR'S HEIGHT PLUS TEN POINTS.** The bar is a window the SERVER draws at its
  * own level, OVER the desktop, so an icon placed at the view's top edge goes UNDER it. The height comes from the
@@ -106,6 +117,11 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 }
 
 /* Give every item a place: the one the store remembers, or the next free grid cell. */
+- (void)reloadAfterChange
+{
+	[self reload];
+}
+
 - (void)reload
 {
 	NSArray *items;
@@ -160,11 +176,16 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 			  size.width, size.height);
 }
 
-- (NSPoint)topLeftPointForEvent:(NSEvent *)event
+- (NSPoint)topLeftPointForWindowPoint:(NSPoint)windowPoint
 {
-	NSPoint cocoa = [self convertPoint:[event locationInWindow] fromView:nil];
+	NSPoint cocoa = [self convertPoint:windowPoint fromView:nil];
 
 	return NSMakePoint(cocoa.x, [self bounds].size.height - cocoa.y);
+}
+
+- (NSPoint)topLeftPointForEvent:(NSEvent *)event
+{
+	return [self topLeftPointForWindowPoint:[event locationInWindow]];
 }
 
 /* THE ICON, MADE ONCE. `NSNull` while it has not been needed.
@@ -225,6 +246,11 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 				selected = YES;
 				break;
 			}
+		}
+		/* **A CELL A DRAG IS OVER WEARS THE SAME WASH, WHICH IS HOW A FOLDER SAYS "IN HERE".** The file window's grid
+		 * paints its drop target this way; a desktop that stayed still would give a hand no answer at all. */
+		if (_dropOperation != NSDragOperationNone && (NSInteger)i == _dropIndex) {
+			selected = YES;
 		}
 		attributes = [NSDictionary dictionaryWithObjectsAndKeys:[NSColor whiteColor],
 							  NSForegroundColorAttributeName, nil];
@@ -326,12 +352,15 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	}
 	[self addToSelection:index];
 	_dragging = YES;
+	_dragSessionBegan = NO;
+	_pressPoint = point;
 	[self setNeedsDisplay:YES];
 }
 
 - (void)mouseDragged:(NSEvent *)event
 {
 	NSPoint point = [self topLeftPointForEvent:event];
+	NSUInteger s;
 
 	if (_rubberBanding) {
 		_rubberRect = NSMakeRect(point.x < _rubberStart.x ? point.x : _rubberStart.x,
@@ -341,12 +370,29 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		[self setNeedsDisplay:YES];
 		return;
 	}
-	if (_dragging) {
+	if (!_dragging) {
+		return;
+	}
+	/* **PAST THE THRESHOLD THE GESTURE IS THE TIER'S, AND THE SESSION OWNS THE POINTER.** Below it the icons follow the
+	 * pointer, which is how an icon has always been put somewhere else on the desktop; at it a drag session begins, so
+	 * the same gesture can be dropped in a file window. A session that ends over the desktop puts the icons where the
+	 * pointer let go, so the two are one gesture with one fallback. */
+	if (!_dragSessionBegan
+	    && (fabs((double)(point.x - _pressPoint.x)) >= WS_DESKTOP_DRAG_THRESHOLD
+		|| fabs((double)(point.y - _pressPoint.y)) >= WS_DESKTOP_DRAG_THRESHOLD)) {
+		_dragSessionBegan = YES;
+		if ([self cg_beginDragWithEvent:event] != nil) {
+			return;
+		}
+	}
+	if (_dragSessionBegan) {
+		return;
+	}
+	{
+		/* Every SELECTED icon moves together, which is what makes a drag of a group one gesture. */
 		CGFloat dx = point.x - _dragLast.x;
 		CGFloat dy = point.y - _dragLast.y;
-		NSUInteger s;
 
-		/* Every SELECTED icon moves together, which is what makes a drag of a group one gesture. */
 		for (s = 0; s < [_selection count]; s++) {
 			NSInteger index = [[_selection objectAtIndex:s] integerValue];
 			NSPoint position = [[_positions objectAtIndex:(NSUInteger)index] pointValue];
@@ -406,6 +452,189 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	}
 	[_selection removeAllObjects];
 	[self setNeedsDisplay:YES];
+}
+
+/* ---- THE DRAG, OUT AND IN --------------------------------------------------------------------- */
+
+/* **THE SAME PASTEBOARD A FILE WINDOW FILLS.** The paths go on `NSFilenamesPboardType` and one dragging item per selected
+ * icon carries the picture that moves with the pointer, so a drag out of the desktop is a drag another window already
+ * knows how to accept. */
+- (NSArray *)cg_selectedPaths
+{
+	NSArray *items = [_model items];
+	NSMutableArray *paths = [[[NSMutableArray alloc] init] autorelease];
+	NSUInteger s;
+
+	for (s = 0; s < [_selection count]; s++) {
+		NSInteger index = [[_selection objectAtIndex:s] integerValue];
+
+		if (index >= 0 && index < (NSInteger)[items count]) {
+			[paths addObject:[[items objectAtIndex:(NSUInteger)index] path]];
+		}
+	}
+	return paths;
+}
+
+- (NSDraggingSession *)cg_beginDragWithEvent:(NSEvent *)event
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSMutableArray *items = [[[NSMutableArray alloc] init] autorelease];
+	NSDraggingSession *session;
+	NSUInteger s;
+
+	if ([paths count] == 0) {
+		return nil;
+	}
+	for (s = 0; s < [_selection count]; s++) {
+		NSInteger index = [[_selection objectAtIndex:s] integerValue];
+		NSPoint position = [[_positions objectAtIndex:(NSUInteger)index] pointValue];
+		NSDraggingItem *item;
+		NSImage *icon;
+
+		if (index < 0 || index >= (NSInteger)[_positions count]) {
+			continue;
+		}
+		item = [[NSDraggingItem alloc] initWithPasteboardWriter:nil];
+		icon = [self iconRepForItemAtIndex:(NSUInteger)index];
+		[item setDraggingFrame:[self cocoaRectForPosition:position
+							    size:NSMakeSize((CGFloat)[self iconSize],
+									    (CGFloat)[self iconSize])]
+			      contents:icon];
+		[items addObject:item];
+		[item release];
+	}
+	/* **WHERE THE POINTER WAS WHEN THE SESSION BEGAN, IN THE WINDOW'S OWN SPACE.** The session owns the pointer from
+	 * here, so the release is reported in screen coordinates; recording the start in the same space as the release's is
+	 * what lets the difference — the travel — be applied to positions that are in top-left coordinates. */
+	_dragStartWindow = [event locationInWindow];
+	session = WSItemDragBegin(self, paths, items, event, self);
+	_dragging = (session != nil);
+	return session;
+}
+
+- (NSDragOperation)draggingSourceOperationMaskForLocal:(BOOL)isLocal
+{
+	return isLocal ? (NSDragOperationMove | NSDragOperationCopy | NSDragOperationLink) : NSDragOperationCopy;
+}
+
+/* **WHERE THE SESSION LETS GO IS WHERE THE ICONS GO**, when nothing else took the drop. The delta is the pointer's whole
+ * travel, in the window's own space: a translation is the same in top-left coordinates except for its sign, so nothing is
+ * converted and nothing can round. */
+- (void)cg_dropSessionDidEnd:(NSPoint)screenPoint operation:(NSDragOperation)operation
+{
+	_dragging = NO;
+	_dragSessionBegan = NO;
+	if (operation == NSDragOperationNone) {
+		NSRect frame = [[self window] frame];
+		CGFloat dx = (screenPoint.x - frame.origin.x) - _dragStartWindow.x;
+		CGFloat dy = -((screenPoint.y - frame.origin.y) - _dragStartWindow.y);
+		NSUInteger s;
+
+		for (s = 0; s < [_selection count]; s++) {
+			NSInteger index = [[_selection objectAtIndex:s] integerValue];
+			NSPoint position = [[_positions objectAtIndex:(NSUInteger)index] pointValue];
+
+			position.x += dx;
+			position.y += dy;
+			[_positions replaceObjectAtIndex:(NSUInteger)index withObject:[NSValue valueWithPoint:position]];
+		}
+		_moved = YES;
+		[self snapSelectionToGridAndPersist];
+	}
+	[self reload];
+}
+
+- (void)draggingSession:(NSDraggingSession *)session endedAtPoint:(NSPoint)screenPoint
+	      operation:(NSDragOperation)operation
+{
+	(void)session;
+	[self cg_dropSessionDidEnd:screenPoint operation:operation];
+}
+
+/* ---- THE DROP DESTINATION -------------------------------------------------------------------- */
+
+/* The directory a drop at `index` lands in: the folder under it, or the desktop's own directory for empty space or for a
+ * file. The file window's grid answers this the same way, and the rule that reads it is `WSItemDrag`'s. */
+- (NSString *)dropDirectoryForIndex:(NSInteger)index
+{
+	if (index >= 0 && index < (NSInteger)[[_model items] count]) {
+		WSItem *item = [[_model items] objectAtIndex:(NSUInteger)index];
+
+		return [item isDirectory] ? [item path] : nil;
+	}
+	return (_model != nil) ? [_model directory] : nil;
+}
+
+- (NSDragOperation)cg_updateDropWithInfo:(id <NSDraggingInfo>)info
+{
+	NSPoint point = [self topLeftPointForWindowPoint:[info draggingLocation]];
+	NSInteger index = [WSIconLayout indexOfPosition:point among:_positions iconSize:[self iconSize]];
+	NSString *target = [self dropDirectoryForIndex:index];
+	NSArray *paths = WSItemDragPaths(info);
+	NSDragOperation operation = WSItemDragOperation(paths, target, [info draggingSourceOperationMask],
+						       [NSEvent modifierFlags]);
+
+	_dropIndex = (operation != NSDragOperationNone) ? index : -1;
+	_dropOperation = operation;
+	[self setNeedsDisplay:YES];
+	return operation;
+}
+
+- (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
+{
+	return [self cg_updateDropWithInfo:sender];
+}
+
+- (NSDragOperation)draggingUpdated:(id <NSDraggingInfo>)sender
+{
+	return [self cg_updateDropWithInfo:sender];
+}
+
+- (void)draggingExited:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+	_dropIndex = -1;
+	_dropOperation = NSDragOperationNone;
+	[self setNeedsDisplay:YES];
+}
+
+- (void)draggingEnded:(id <NSDraggingInfo>)sender
+{
+	[self draggingExited:sender];
+}
+
+- (BOOL)prepareForDragOperation:(id <NSDraggingInfo>)sender
+{
+	(void)sender;
+	return _dropOperation != NSDragOperationNone;
+}
+
+- (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
+{
+	NSArray *paths = WSItemDragPaths(sender);
+	NSString *target = [self dropDirectoryForIndex:_dropIndex];
+	NSDragOperation operation = _dropOperation;
+	id source = [sender draggingSource];
+	BOOL performed = WSItemDragPerform(paths, target, operation);
+
+	if (performed) {
+		/* THE SOURCE IS TOLD ITS ITEMS MOVED. A drag within this application has a view at the other end, and it holds a
+		 * model that is now wrong; a drag from another application has none and the notification is the file
+		 * watcher's business. */
+		if ([source respondsToSelector:@selector(reloadAfterChange)]) {
+			[(id <WSItemDragSourceReloading>)source reloadAfterChange];
+		}
+		[self reload];
+	}
+	_dropIndex = -1;
+	_dropOperation = NSDragOperationNone;
+	[self setNeedsDisplay:YES];
+	return performed;
+}
+
+- (void)concludeDragOperation:(id <NSDraggingInfo>)sender
+{
+	[self draggingExited:sender];
 }
 
 /* Snap what was dragged to the free cells nearest where it was left, then write the sidecar. */

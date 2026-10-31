@@ -24,11 +24,39 @@ add_test(NAME workspace-desktop-layout COMMAND desktop_layout)
 set_tests_properties(workspace-desktop-layout PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
 
+
+# **THE DESKTOP AS A DRAG SOURCE AND A DROP DESTINATION.** The gesture was the desktop's own and could not leave the
+# view, so a file could not be dragged out of it or into it. Both directions are driven here the way a person drives
+# them — a real session between two registered windows — plus the destination's own doors for the two cases a session
+# cannot express: a drop of a file that already lives there, and a drop released on a folder's icon.
+add_executable(desktop_drag desktop_drag.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionOwner.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+target_include_directories(desktop_drag PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(desktop_drag PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-desktop-drag COMMAND desktop_drag)
+set_tests_properties(workspace-desktop-drag PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
 # **THE DESKTOP'S OWN BAND, PAINTED.** The rectangle was computed and never drawn, so the gesture left no trace on the
 # screen; this paints the view into a bitmap and samples the wash, the darker edge and the background outside it. The
 # view makes its own model and metadata store from a directory, so the fixture is three files in /tmp.
 add_executable(desktop_band desktop_band.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
@@ -146,6 +174,7 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionOwner.m"
@@ -174,6 +203,7 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionOwner.m"
@@ -207,7 +237,9 @@ set_tests_properties(workspace-file-window PROPERTIES ENVIRONMENT
 # drop policies — with a second root on /dev/shm so "across a volume" is measured rather than asserted.
 add_executable(icon_view icon_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
@@ -298,6 +330,7 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSAboutPanel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
@@ -307,6 +340,7 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionOwner.m"
