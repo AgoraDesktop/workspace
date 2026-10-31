@@ -143,6 +143,19 @@ int main(void)
 	}
 	check([[first cg_viewSwitcher] segmentCount] == 3, "the switcher has three segments");
 	check([[first cg_viewSwitcher] selectedSegment] == 0, "with Icon selected");
+	/* **AND ITS THREE SEGMENTS ARE PICTURES, NOT WORDS.** A file window's views are a MODE, and three words in a band of
+	 * verbs read as three commands; each segment wears the symbol of the view it selects, so the image is what the
+	 * switch says and the toolbar ITEM's label under it is the one place a word belongs. The names are the theme's own
+	 * (`toolbar:` asks the theme that holds the UI's symbols), so a missing one would be a blank chip rather than a
+	 * wrong word — which is why the pictures are checked for. */
+	check([[first cg_viewSwitcher] imageForSegment:0] != nil
+	      && [[first cg_viewSwitcher] imageForSegment:1] != nil
+	      && [[first cg_viewSwitcher] imageForSegment:2] != nil,
+	      "each segment wears a picture of its view");
+	check([[first cg_viewSwitcher] labelForSegment:0] == nil
+	      && [[first cg_viewSwitcher] labelForSegment:1] == nil
+	      && [[first cg_viewSwitcher] labelForSegment:2] == nil,
+	      "and no segment carries a word");
 	check([[first cg_viewSwitcher] isEnabledForSegment:0]
 	      && [[first cg_viewSwitcher] isEnabledForSegment:1]
 	      && [[first cg_viewSwitcher] isEnabledForSegment:2],

@@ -718,15 +718,34 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	}
 	if ([identifier isEqualToString:WSViewSwitcherItemIdentifier]) {
 		NSInteger i;
-		NSArray *labels = [NSArray arrayWithObjects:@"Icon", @"List", @"Column", nil];
+		/* **THREE PICTURES, NOT THREE WORDS — THE SAME PAIR OF PICTURES FOR A PAIR OF PANES THAT THE DETAIL SWITCH USES.**
+		 * A file window's three views are a MODE, and a mode switch is what a segmented control is for: `Icon`, `List`
+		 * and `Column` were three words in a band of verbs, which read as three commands rather than as one three-way
+		 * choice. Each segment wears the symbol of the view it selects — `grid-dots` for icons, `menu-2` for a list,
+		 * `columns-3` for columns — and the words survive where a name belongs: the toolbar ITEM's label under the
+		 * switch.
+		 *
+		 * **AND THE PICTURES ARE ASKED FOR AS `toolbar:` AND NOT AS A BARE NAME.** `toolbar:` means "the theme that holds
+		 * the UI's symbols", so the band asks for the 24-point outline the rest of this desktop draws and a machine with
+		 * another icon theme still gets its own. A bare `grid-dots` would be answered by whichever theme is in charge,
+		 * which for `Frost` is a FILLED folder-shaped set and not this outline at all. */
+		NSArray *symbols = [NSArray arrayWithObjects:@"toolbar:grid-dots", @"toolbar:menu-2",
+							     @"toolbar:columns-3", nil];
 
 		_viewSwitcher = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(0.0, 0.0, 300.0, 24.0)];
 		[_viewSwitcher setSegmentCount:3];
 		for (i = 0; i < 3; i++) {
-			[_viewSwitcher setLabel:[labels objectAtIndex:(NSUInteger)i] forSegment:i];
-			[_viewSwitcher setWidth:70.0 forSegment:i];
+			NSImage *symbol = [NSImage imageNamed:[symbols objectAtIndex:(NSUInteger)i]];
+
+			[_viewSwitcher setImage:symbol forSegment:i];
+			/* A WIDTH OF ZERO IS "AS WIDE AS THE CONTENT NEEDS", which for a sixteen-point picture is a chip of the
+			 * band's own height rather than the seventy points three words needed. */
+			[_viewSwitcher setWidth:0.0 forSegment:i];
 			[_viewSwitcher setEnabled:YES forSegment:i];
 		}
+		/* AND THE WHOLE SWITCH SAYS WHAT IT IS, because a segment has no room for a word of its own — the same sentence
+		 * the three labels carried, said once. */
+		[_viewSwitcher setToolTip:@"Icon, list or column view"];
 		[_viewSwitcher setSelectedSegment:0];
 		[_viewSwitcher setTarget:self];
 		[_viewSwitcher setAction:@selector(viewSwitcherChanged:)];
