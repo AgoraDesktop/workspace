@@ -65,30 +65,24 @@ void WSIconCellDraw(WSIconCell cell)
 	NSRect highlight = WSIconCellHighlightRect(cell.iconRect, cell.cellWidth, cell.labelBelow);
 
 	if (cell.selected) {
-		NSBezierPath *shape = [NSBezierPath bezierPathWithRoundedRect:highlight
-								      xRadius:(CGFloat)WSIconHighlightRadius
-								      yRadius:(CGFloat)WSIconHighlightRadius];
-
-		/* **A SELECTED CELL IS A PLATE, NOT A TINT ON WHATEVER IS BEHIND IT.** A thirty-five percent wash says "this one"
-		 * over a white page and disappears over a dark wallpaper, so the same selection looked like two different things on
-		 * two surfaces — which is exactly the report this answers. The white is laid down FIRST and the wash over it, so a
-		 * selected desktop icon has the SAME pixels as a selected icon in a file window, whatever is behind the desktop. */
-		[[NSColor whiteColor] setFill];
-		[shape fill];
+		/* **THE HIGHLIGHT IS SEMITRANSPARENT AND STAYS THAT WAY.** One fill of the selection's colour at its own alpha:
+		 * whatever is behind the cell — a white page, a photograph, another window — shows through it, which is what makes
+		 * the wash a wash rather than a plate. Nothing is laid beneath it, so the SAME colour covers the same pixels on
+		 * every surface and the background is the only thing that differs. */
 		[WSIconCellSelectionColor() setFill];
-		[shape fill];
+		[[NSBezierPath bezierPathWithRoundedRect:highlight
+						 xRadius:(CGFloat)WSIconHighlightRadius
+						 yRadius:(CGFloat)WSIconHighlightRadius] fill];
 	}
 	if (cell.icon != nil) {
 		[cell.icon drawInRect:cell.iconRect];
 	}
 	if (cell.label != nil) {
-		/* **THE INK ON A SELECTED CELL IS THE PLATE'S, NOT THE SURFACE'S.** With the plate beneath it, black is the ink that
-		 * reads on both surfaces — so a selected name is black on a desktop and in a file window alike, while an UNSELECTED
-		 * desktop name stays white because what is behind it is a wallpaper. */
-		NSDictionary *attributes = cell.selected
-			? [NSDictionary dictionaryWithObjectsAndKeys:[NSColor blackColor],
-					   NSForegroundColorAttributeName, nil]
-			: cell.attributes;
+		/* **THE INK IS THE SURFACE'S, SELECTED OR NOT, BECAUSE THE WASH IS SEMITRANSPARENT.** A wash lets the background
+		 * through, so what a name is read against does not change when the cell is chosen: black on a file window's page,
+		 * white on a wallpaper. The colour is the one thing the two surfaces legitimately disagree about, and it is about
+		 * what is BEHIND the text. */
+		NSDictionary *attributes = cell.attributes;
 		NSSize size = [cell.label sizeWithAttributes:attributes];
 		/* **THE BOX IS THE TEXT'S OWN HEIGHT, NOT A BAND OF SIXTEEN.** A fixed band leaves the space between the icon and
 		 * the first row of ink up to whatever the drawing engine does inside it — and that answer differs by a point or two

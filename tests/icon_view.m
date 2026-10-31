@@ -643,19 +643,40 @@ int main(void)
 			[desktop mouseDown:mouse(NSLeftMouseDown, windowPoint)];
 			[desktop mouseUp:mouse(NSLeftMouseUp, windowPoint)];
 		}
-		/* **OVER A WALLPAPER, WHICH IS WHAT A DESKTOP IS.** Painting it over white would let a wash with no plate of its
-		 * own pass, because white is what the plate is; over a dark green, only a cell that lays its own plate down shows
-		 * the file window's colour at all. */
-		desktopWash = wash_bounds(draw_view_over(desktop, 520, 400,
-							 [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0]),
-					  520, 400);
-		/* **AND THE SAME PIXELS, NOT JUST THE SAME RECTANGLE.** The wash is measured as its own colour composited over white,
-		 * which is only what the desktop shows because the cell lays a white plate down first: without it the wash would be
-		 * tinted by the wallpaper and none of these pixels would be found. */
+		/* Over the white a file window paints, so the SHAPE can be compared: the wash is semitransparent, so its colour
+		 * depends on the background and only this page makes the two surfaces' pixels comparable. */
+		desktopWash = wash_bounds(draw_view(desktop, 520, 400), 520, 400);
+		/* **AND THE WASH IS SEMITRANSPARENT ON BOTH.** The accent is a fill with an alpha, so what a person sees is it
+		 * composited over whatever is behind the cell — a white page, a wallpaper, another window. So the desktop is
+		 * painted over TWO backgrounds, and the same point inside the highlight must be two different colours, each of
+		 * them the same blend: that is what "semitransparent" means, and a plate of white under the wash would fail it. */
 		check(near(NSWidth(desktopWash), NSWidth(iconWash)) && near(NSHeight(desktopWash), NSHeight(iconWash)),
-		      "and the desktop paints the SAME wash as a file window — the same rectangle, of the same colour");
-		check(NSWidth(desktopWash) > (CGFloat)[desktop iconSize] + 4.0,
-		      "which is wider than the four-point square the desktop used to fill");
+		      "and the desktop paints the SAME wash rectangle as a file window");
+		{
+			NSColor *dark = [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0];
+			NSBitmapImageRep *overGreen = draw_view_over(desktop, 520, 400, dark);
+			NSBitmapImageRep *overWhite = draw_view(desktop, 520, 400);
+			NSRect highlight = [desktop cg_highlightRectAtIndex:0];
+			NSInteger sx = (NSInteger)NSMinX(highlight) + 3;
+			NSInteger syTop = (NSInteger)(400.0 - NSMidY(highlight));	/* this rep counts its rows from the top */
+			NSColor *onGreen = [overGreen colorAtX:sx y:syTop];
+			NSColor *onWhite = [overWhite colorAtX:sx y:syTop];
+			NSColor *wash = WSIconCellSelectionColor();
+			CGFloat a = [wash alphaComponent];
+			CGFloat wantR = a * [wash redComponent] + (1.0 - a) * [dark redComponent];
+			CGFloat wantG = a * [wash greenComponent] + (1.0 - a) * [dark greenComponent];
+			CGFloat wantB = a * [wash blueComponent] + (1.0 - a) * [dark blueComponent];
+
+			check(onGreen != nil && near([onGreen redComponent], wantR) && near([onGreen greenComponent], wantG)
+			      && near([onGreen blueComponent], wantB),
+			      "the wash over a wallpaper is the accent at its own alpha, not a plate");
+			check(onWhite != nil && near([onWhite redComponent], a * [wash redComponent] + (1.0 - a))
+			      && near([onWhite blueComponent], a * [wash blueComponent] + (1.0 - a)),
+			      "and over a white page it is the same alpha over that page");
+			check(onGreen != nil && onWhite != nil
+			      && (fabs([onGreen redComponent] - [onWhite redComponent]) > 0.2),
+			      "so the background shows THROUGH the selection");
+		}
 
 		/* **AND THE RECTANGLES ARE THE SAME SHAPE**, which the pixels cannot say — the desktop's first icon sits against
 		 * the edge of its view, so its wash is clipped. Each view answers the rectangle it fills; what is compared is its
