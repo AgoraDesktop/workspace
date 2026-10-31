@@ -17,6 +17,8 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSString.h>
 
+#include <CoreGraphics/CGContext.h>
+
 #include <math.h>
 
 NSColor *WSIconCellSelectionColor(void)
@@ -94,16 +96,27 @@ void WSIconCellDraw(WSIconCell cell)
 		 * already made it fit the cell; the clip is what keeps a rounding error or a kern pair inside. */
 		[NSGraphicsContext saveGraphicsState];
 		[[NSBezierPath bezierPathWithRect:highlight] addClip];
+		/* **A NAME IS LAID OUT IN A MIRRORED FRAME ON BOTH SURFACES.** The engine places a line from ONE edge of the box
+		 * it is handed — measured, a flipped view's name starts at the edge nearest the icon and an unflipped view's a
+		 * few points further in — so the same constant put the same name at two different distances on the desktop and
+		 * in a file window. Mirroring the CTM about the label's own rectangle (which maps the rectangle onto itself)
+		 * makes the unflipped case lay the line out the way the flipped one already does; the glyphs stay upright, since
+		 * this Core Graphics' show-glyphs takes the pen from the CTM and draws the face in its own direction. */
+		if (!cell.labelBelow) {
+			CGContextRef context = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
+
+			CGContextTranslateCTM(context, 0.0, NSMinY(rect) + NSMaxY(rect));
+			CGContextScaleCTM(context, 1.0, -1.0);
+		}
 		if (cell.labelShadow) {
 			/* **A WHITE NAME OVER A WALLPAPER GETS A BLACK SHADOW; A BLACK NAME ON A PAGE DOES NOT.** The shadow is one
 			 * more draw of the same name in black, one point down and right, so the ink keeps its shape and gains an
 			 * edge whatever it is over instead of a second font or a plate.
 			 * shortcut: a hard one-point shadow, not a blur; upgrade if a screenshot asks for softness. */
 			NSMutableDictionary *shadowInk = [[NSMutableDictionary alloc] initWithDictionary:attributes];
-			CGFloat dy = cell.labelBelow ? 1.0 : -1.0;	/* "down" is the flipped view's +y */
 
 			[shadowInk setObject:[NSColor blackColor] forKey:NSForegroundColorAttributeName];
-			[cell.label drawInRect:NSOffsetRect(rect, 1.0, dy) withAttributes:shadowInk];
+			[cell.label drawInRect:NSOffsetRect(rect, 1.0, 1.0) withAttributes:shadowInk];
 			[shadowInk release];
 		}
 		[cell.label drawInRect:rect withAttributes:attributes];

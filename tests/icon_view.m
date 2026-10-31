@@ -33,6 +33,8 @@
 #import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
 
+#include <CoreGraphics/CGContext.h>
+
 #include <math.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -87,7 +89,18 @@ static NSBitmapImageRep *draw_view_over(NSView *view, int width, int height, NSC
 {
 	NSBitmapImageRep *rep = new_rep(width, height);
 
-	[NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
+	NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+	CGContextRef cg;
+
+	[NSGraphicsContext setCurrentContext:context];
+	/* **A FLIPPED VIEW IS ENTERED MIRRORED, WHICH IS HOW APPKIT DRAWS IT.** `-displayRect:`'s child branch mirrors a view
+	 * whose direction differs from its parent's, and a flipped view drawn into an unmirrored rep is a picture no surface
+	 * ever shows — every row upside down, and a line of text placed from the wrong edge of its box. */
+	cg = (CGContextRef)[context graphicsPort];
+	if ([view isFlipped]) {
+		CGContextTranslateCTM(cg, 0.0, (CGFloat)height);
+		CGContextScaleCTM(cg, 1.0, -1.0);
+	}
 	[background setFill];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, (CGFloat)width, (CGFloat)height)] fill];
 	[view drawRect:[view bounds]];
@@ -554,22 +567,23 @@ int main(void)
 		check([[second selectedIndexes] count] == 0, "the emptied window has nothing selected");
 		check([[view selectedIndexes] count] == 1, "and the window that held the selection still does");
 
-		/* **AND THE SPACE BETWEEN AN ICON AND ITS NAME IS ONE NUMBER, MEASURED ON BOTH.** A rep's rows run from its own
-		 * first one and the two views disagree about which end that is, so each gap is taken in VISUAL terms: away from the
-		 * icon, downward on the screen. What is asserted is that the two agree — the first row of ink is the same distance
-		 * below the icon on a desktop and in a file window — and that the distance is a sane one rather than a number that
-		 * happens to match because both surfaces stopped drawing. */
+		/* **AND THE SPACE BETWEEN AN ICON AND ITS NAME IS ONE NUMBER, MEASURED ON BOTH.** The desktop's rep is read from
+		 * its bottom and a flipped view's from the top, so each gap is taken in VISUAL terms: away from the icon, downward
+		 * on the screen. What is asserted is that the two agree — the first row of ink is the same distance below the icon
+		 * on a desktop and in a file window — and that the distance is a gap rather than a number that happens to match
+		 * because both surfaces stopped drawing. */
 		{
 			NSBitmapImageRep *viewRep = draw_view(view, 400, 400);
 			NSBitmapImageRep *deskRep = draw_view_over(desktop, 520, 400,
 								   [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0]);
 			NSPoint dp = [[[desktop cg_positions] objectAtIndex:0] pointValue];
 			int deskIconBottomRow = (int)dp.y + (int)[desktop iconSize];
-			int viewIconBottomRow = 400 - ((int)[desktop iconSize] + 16);	/* view y 80, and this rep counts from the top */
+			int viewIconBottomRow = (int)[[[view cg_positions] objectAtIndex:0] pointValue].y
+				+ (int)WSIconDefaultSize;
 			int y, x, viewFirst = -1, deskFirst = -1;
 			int viewGap, deskGap;
 
-			for (y = viewIconBottomRow; y > viewIconBottomRow - 40 && viewFirst < 0; y--) {
+			for (y = viewIconBottomRow; y < viewIconBottomRow + 40 && viewFirst < 0; y++) {
 				for (x = 16; x < 96; x++) {
 					NSColor *c = [viewRep colorAtX:x y:y];
 
@@ -590,13 +604,15 @@ int main(void)
 					}
 				}
 			}
-			viewGap = viewIconBottomRow - viewFirst;
+			viewGap = viewFirst - viewIconBottomRow;
 			deskGap = deskFirst - deskIconBottomRow;
 			check(viewFirst >= 0 && deskFirst >= 0, "both surfaces draw a name under their icon");
 			check(viewGap == deskGap,
 			      "and the space between the icon and the first row of ink is the SAME on both");
-			check(viewGap >= 2 && viewGap <= 8,
-			      "which is a gap rather than the icon touching its name, and not a margin");
+			/* The box is the line's own height and the ink sits inside it, so the air a person sees is this number
+			 * plus the ink's own bearing: a row or two, and never a blank band. */
+			check(viewGap >= 0 && viewGap <= 6,
+			      "which is the ink's own bearing rather than a margin, or the icon touching its name");
 		}
 
 		/* THE VIEWS STAY: they registered for the shared selection, and the tier's centre holds them WEAKLY — a view
