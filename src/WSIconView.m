@@ -956,7 +956,10 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 		if (operation != NSDragOperationNone) {
 			_dropIndex = (index >= 0) ? index : -1;
 			_dropOperation = operation;
-			if (index >= 0 && [[[_model items] objectAtIndex:(NSUInteger)index] isDirectory]) {
+			/* **A PACKAGE IS NOT A PLACE TO SPRING OPEN.** Spring-loading is "hold the pointer over a folder and it
+			 * opens so the drop can go inside"; a bundle is one thing, and a drop onto it is a drop onto the item — the
+			 * same distinction a double-click makes between navigating and launching. */
+			if (index >= 0 && [[[_model items] objectAtIndex:(NSUInteger)index] isBrowsable]) {
 				[self scheduleSpringForIndex:index];
 			}
 		}
@@ -1179,7 +1182,10 @@ static NSArray *fn_paths_from_info(id <NSDraggingInfo> info)
 	/* **THE EXTENSION IS NOT SELECTED, WHICH IS THE ONE PART OF THE RENAME A PERSON NOTICES FIRST.** A file's base
 	 * name is what is being edited; its extension is a fact about the file and is left alone. A directory has no
 	 * extension to preserve, so its whole name is selected. */
-	if (![item isDirectory]) {
+	/* **AND A BUNDLE'S EXTENSION IS LEFT ALONE TOO.** The rule is "the name a person edits, and not the fact about the
+	 * file": a directory has no extension to preserve, so its whole name is selected — EXCEPT a package, whose `.app`
+	 * is the thing that makes it a package, and renaming it away is renaming an application into a folder. */
+	if (![item isDirectory] || [item isPackage]) {
 		NSText *editor = [field currentEditor];
 		NSRange dot = [[item name] rangeOfString:@"." options:NSBackwardsSearch];
 

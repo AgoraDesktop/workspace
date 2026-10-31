@@ -141,6 +141,35 @@ target_link_libraries(file_window PRIVATE
     Foundation::Foundation
     ZLIB::ZLIB
     objc)
+add_executable(app_bundle app_bundle.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+target_include_directories(app_bundle PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(app_bundle PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices
+    Foundation::Foundation
+    ZLIB::ZLIB
+    objc)
+add_test(NAME workspace-app-bundle COMMAND app_bundle)
+set_tests_properties(workspace-app-bundle PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
+
 add_test(NAME workspace-file-window COMMAND file_window)
 set_tests_properties(workspace-file-window PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
