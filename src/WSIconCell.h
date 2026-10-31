@@ -34,8 +34,6 @@
 @class NSImage;
 @class NSString;
 
-/* The air between the icon and its name — the rename field must land exactly on the label, so it is public. */
-extern const NSInteger WSIconLabelGap;
 /* The air between a selection's edge and what it contains. */
 extern const NSInteger WSIconHighlightInset;
 /* The corner the wash and the ring are both rounded by. */

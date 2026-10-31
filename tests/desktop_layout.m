@@ -9,6 +9,7 @@
  * taken, an arrange order and a hit test. These are the numbers a desktop and a file window's icon view will
  * both be built from, so they are checked where they live rather than through a screenshot.
  */
+#import "WSIconCell.h"
 #import "WSIconLayout.h"
 
 #import <Foundation/Foundation.h>
@@ -41,7 +42,8 @@ int main(void)
 		NSRect iconRect;
 
 		check(cell.width == (CGFloat)(size + 2 * WSIconPadding), "the cell is the icon plus its padding");
-		check(cell.height == (CGFloat)(size + WSIconLabelHeight + WSIconPadding), "and the label's height");
+		check(cell.height == (CGFloat)(size + WSIconLabelGap + WSIconLabelHeight + WSIconPadding),
+		      "and the label's height, with the air the drawing puts between the icon and the name");
 		check(rows == (NSInteger)floor((566.0 - (CGFloat)WSIconGridMargin) / cell.height),
 		      "the rows fit the area, less the bottom margin (the top is the origin)");
 		check(rows >= 1, "and there is always at least one row, so a tiny view cannot divide by zero");

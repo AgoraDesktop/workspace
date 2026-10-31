@@ -13,6 +13,7 @@
 
 #include <math.h>
 
+const NSInteger WSIconLabelGap = 6;
 const NSInteger WSIconDefaultSize = 64;
 const NSInteger WSIconGridMargin = 16;
 const NSInteger WSIconLabelHeight = 16;
@@ -22,8 +23,11 @@ const NSInteger WSIconPadding = 8;
 
 + (NSSize)cellSizeForIconSize:(NSInteger)iconSize
 {
+	/* **THE AIR BETWEEN AN ICON AND ITS NAME IS PART OF THE CELL, NOT AN EXTRA INSIDE IT.** The highlight is the cell's
+	 * width and tall enough for the icon, the gap and the name, so a gap the grid does not know about makes one cell's
+	 * highlight overlap the next row's — MEASURED as a selection that repainted the row below it. */
 	return NSMakeSize((CGFloat)(iconSize + 2 * WSIconPadding),
-			  (CGFloat)(iconSize + WSIconLabelHeight + WSIconPadding));
+			  (CGFloat)(iconSize + WSIconLabelGap + WSIconLabelHeight + WSIconPadding));
 }
 
 + (NSInteger)rowsPerColumnInBounds:(NSRect)bounds iconSize:(NSInteger)iconSize

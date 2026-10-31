@@ -28,9 +28,6 @@ NSColor *WSIconCellSelectionColor(void)
 	return [NSColor colorWithCalibratedRed:0.30 green:0.50 blue:0.90 alpha:0.35];
 }
 
-/* **THE AIR BETWEEN AN ICON AND ITS NAME, AS ONE NUMBER FOR BOTH SURFACES.** Two points, and a line's own leading adds
- * the rest, so the first row of ink lands a few rows below the icon box. */
-const NSInteger WSIconLabelGap = 2;
 const NSInteger WSIconHighlightInset = 2;
 const NSInteger WSIconHighlightRadius = 4;
 const NSInteger WSIconHighlightSlop = 2;
@@ -95,13 +92,13 @@ void WSIconCellDraw(WSIconCell cell)
 		 * already made it fit the cell; the clip is what keeps a rounding error or a kern pair inside. */
 		[NSGraphicsContext saveGraphicsState];
 		[[NSBezierPath bezierPathWithRect:highlight] addClip];
-		/* **A NAME IS LAID OUT IN A MIRRORED FRAME ON BOTH SURFACES.** The engine places a line from ONE edge of the box
-		 * it is handed — measured, a flipped view's name starts at the edge nearest the icon and an unflipped view's a
-		 * few points further in — so the same constant put the same name at two different distances on the desktop and
-		 * in a file window. Mirroring the CTM about the label's own rectangle (which maps the rectangle onto itself)
-		 * makes the unflipped case lay the line out the way the flipped one already does; the glyphs stay upright, since
-		 * this Core Graphics' show-glyphs takes the pen from the CTM and draws the face in its own direction. */
-		if (!cell.labelBelow) {
+		/* **A NAME IS LAID OUT IN AN UNMIRRORED FRAME ON BOTH SURFACES.** AppKit enters a flipped view with its CTM
+		 * mirrored, so the engine saw a different frame on a desktop and in a file window and put the same name at two
+		 * different distances from the same icon — MEASURED, the flipped one four points nearer and the unflipped one five
+		 * further. Mirroring back about the label's own rectangle (it maps onto itself) gives both the unmirrored frame,
+		 * which is the one whose answer the gap constant describes. The glyphs stay upright: this Core Graphics takes the
+		 * pen from the CTM and draws the face in its own direction. */
+		if (cell.labelBelow) {
 			CGContextRef context = (CGContextRef)[[NSGraphicsContext currentContext] graphicsPort];
 
 			CGContextTranslateCTM(context, 0.0, NSMinY(rect) + NSMaxY(rect));

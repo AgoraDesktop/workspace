@@ -33,6 +33,11 @@ typedef enum {
 	WSIconOrderLeftToRightRows = 1
 } WSIconOrder;
 
+/* **THE AIR BETWEEN AN ICON AND ITS NAME, AS ONE NUMBER FOR BOTH THE GRID AND THE DRAWING.** The grid's cell has to be
+ * tall enough for it and the highlight fills the cell, so a gap the layout does not know about makes one cell's
+ * highlight overlap the next row's. It is here rather than beside the drawing because the cell is what must hold it;
+ * the rename field also lands on the label, so it is public. */
+extern const NSInteger WSIconLabelGap;
 extern const NSInteger WSIconDefaultSize;
 extern const NSInteger WSIconGridMargin;
 extern const NSInteger WSIconLabelHeight;

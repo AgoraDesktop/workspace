@@ -49,6 +49,19 @@ static void check(int ok, const char *name)
 	}
 }
 
+/* **INK IS A PIXEL FAR FROM THE BACKGROUND THE SURFACE PAINTS.** A threshold on brightness alone measures a black name
+ * on white and a white name on a wallpaper at different rows, because the antialiased first row of ink is dark ink over
+ * one surface and bright ink over the other. */
+static int ink_at(NSColor *colour, NSColor *background)
+{
+	if (colour == nil) {
+		return 0;
+	}
+	return fabs([colour redComponent] - [background redComponent]) > 0.5
+		|| fabs([colour greenComponent] - [background greenComponent]) > 0.5
+		|| fabs([colour blueComponent] - [background blueComponent]) > 0.5;
+}
+
 static int near(double a, double b)
 {
 	return a > b - 0.01 && a < b + 0.01;
@@ -360,10 +373,17 @@ int main(void)
 	check(near([[[view cg_positions] objectAtIndex:1] pointValue].x, 96.0)
 	      && near([[[view cg_positions] objectAtIndex:1] pointValue].y, 16.0),
 	      "the second item is one cell to the RIGHT, in the same row");
-	check(near([[[view cg_positions] objectAtIndex:4] pointValue].x, 16.0)
-	      && near([[[view cg_positions] objectAtIndex:4] pointValue].y, 104.0),
-	      "and the fifth wraps to the next ROW at the left edge");
-	check(near([view contentHeightForWidth:400.0], 192.0), "two rows make a 192-point document");
+	{
+		/* **THE PITCH IS THE CELL, NOT A NUMBER.** The cell's height is the icon, the air between it and the name, and
+		 * the name, so a gap that is asked for twice as large moves the second row down with it. */
+		NSSize cell = [WSIconLayout cellSizeForIconSize:WSIconDefaultSize];
+
+		check(near([[[view cg_positions] objectAtIndex:4] pointValue].x, 16.0)
+		      && near([[[view cg_positions] objectAtIndex:4] pointValue].y, 16.0 + cell.height),
+		      "and the fifth wraps to the next ROW at the left edge");
+		check(near([view contentHeightForWidth:400.0], 16.0 + 2.0 * cell.height),
+		      "and two rows make a document that is two cells tall plus the margin");
+	}
 
 	/* 1b. **ONE RECTANGLE WEARS BOTH THE WASH AND THE RING, CENTRED ON THE ICON AND CLEAR OF THE NAME.** The wash used
 	 * to be the cell's — which carries its padding to the right and above, so it sat off-centre on the folder — while the
@@ -573,9 +593,9 @@ int main(void)
 		 * on a desktop and in a file window — and that the distance is a gap rather than a number that happens to match
 		 * because both surfaces stopped drawing. */
 		{
+			NSColor *inkBackground = [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0];
 			NSBitmapImageRep *viewRep = draw_view(view, 400, 400);
-			NSBitmapImageRep *deskRep = draw_view_over(desktop, 520, 400,
-								   [NSColor colorWithCalibratedRed:0.10 green:0.20 blue:0.09 alpha:1.0]);
+			NSBitmapImageRep *deskRep = draw_view_over(desktop, 520, 400, inkBackground);
 			NSPoint dp = [[[desktop cg_positions] objectAtIndex:0] pointValue];
 			int deskIconBottomRow = (int)dp.y + (int)[desktop iconSize];
 			int viewIconBottomRow = (int)[[[view cg_positions] objectAtIndex:0] pointValue].y
@@ -583,11 +603,11 @@ int main(void)
 			int y, x, viewFirst = -1, deskFirst = -1;
 			int viewGap, deskGap;
 
+			/* **THE SAME RULE ON BOTH**: a row is the ink's when a pixel is far from the background that surface
+			 * paints, so a black name on white and a white name on a wallpaper are measured the same way. */
 			for (y = viewIconBottomRow; y < viewIconBottomRow + 40 && viewFirst < 0; y++) {
-				for (x = 16; x < 96; x++) {
-					NSColor *c = [viewRep colorAtX:x y:y];
-
-					if (c != nil && [c redComponent] < 0.45 && [c greenComponent] < 0.45) {
+				for (x = (int)[[[view cg_positions] objectAtIndex:0] pointValue].x; x < 96; x++) {
+					if (ink_at([viewRep colorAtX:x y:y], [NSColor whiteColor])) {
 						viewFirst = y;
 						break;
 					}
@@ -595,10 +615,7 @@ int main(void)
 			}
 			for (y = deskIconBottomRow; y < deskIconBottomRow + 40 && y < 400 && deskFirst < 0; y++) {
 				for (x = (int)dp.x; x < (int)dp.x + 80; x++) {
-					NSColor *c = [deskRep colorAtX:x y:y];
-
-					if (c != nil && [c redComponent] > 0.85 && [c greenComponent] > 0.85
-					    && [c blueComponent] > 0.85) {
+					if (ink_at([deskRep colorAtX:x y:y], inkBackground)) {
 						deskFirst = y;
 						break;
 					}
@@ -610,9 +627,9 @@ int main(void)
 			check(viewGap == deskGap,
 			      "and the space between the icon and the first row of ink is the SAME on both");
 			/* The box is the line's own height and the ink sits inside it, so the air a person sees is this number
-			 * plus the ink's own bearing: a row or two, and never a blank band. */
-			check(viewGap >= 0 && viewGap <= 6,
-			      "which is the ink's own bearing rather than a margin, or the icon touching its name");
+			 * plus the ink's own bearing: the gap, and never a blank band. */
+			check(viewGap >= (int)WSIconLabelGap && viewGap <= (int)WSIconLabelGap + 6,
+			      "which is the air the grid reserves, plus the line's own bearing");
 		}
 
 		/* THE VIEWS STAY: they registered for the shared selection, and the tier's centre holds them WEAKLY — a view
