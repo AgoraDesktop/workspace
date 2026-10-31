@@ -28,10 +28,9 @@ NSColor *WSIconCellSelectionColor(void)
 	return [NSColor colorWithCalibratedRed:0.30 green:0.50 blue:0.90 alpha:0.35];
 }
 
-/* **THE AIR BETWEEN AN ICON AND ITS NAME, AS ONE NUMBER FOR BOTH SURFACES.** Two points put the first row of ink about
- * six below the icon (a line's own leading accounts for the rest) — a little more than the desktop's old band showed and a
- * little less than the file window's, which is the middle the design owner asked for. */
-const NSInteger WSIconLabelGap = 1;
+/* **THE AIR BETWEEN AN ICON AND ITS NAME, AS ONE NUMBER FOR BOTH SURFACES.** Two points, and a line's own leading adds
+ * the rest, so the first row of ink lands a few rows below the icon box. */
+const NSInteger WSIconLabelGap = 2;
 const NSInteger WSIconHighlightInset = 2;
 const NSInteger WSIconHighlightRadius = 4;
 const NSInteger WSIconHighlightSlop = 2;
