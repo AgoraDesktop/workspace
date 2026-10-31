@@ -17,7 +17,9 @@
  *
  * **THE INK IS THE CALLER'S, BECAUSE THE BACKGROUND IS.** A file window's background is white and its names are black; the
  * desktop's is a wallpaper, so its names are white. That difference is about what is BEHIND the text, not about the
- * selection, and a white wash of accent over a photograph cannot make black text readable. Everything else — the wash's
+ * selection, and a white wash of accent over a photograph cannot make black text readable. **AND THE SHADOW GOES WITH THE
+ * INK**, for the same reason: a white name over a wallpaper gets a black one, a black name on a page gets none.
+ * Everything else — the wash's
  * colour and alpha, the corner radius, the ring, the label's position and cut — is shared, so a desktop selection and a
  * file window's selection are the same object drawn over different backgrounds.
  */
@@ -62,6 +64,7 @@ typedef struct WSIconCell {
 	NSImage *icon;			/* NOT RETAINED; nil draws no icon and still paints the cell */
 	NSString *label;		/* NOT RETAINED; nil draws no name */
 	NSDictionary *attributes;	/* the ink the name is drawn in */
+	BOOL labelShadow;	/* a black shadow under the name: white ink over a wallpaper needs one, black ink on a page does not */
 	BOOL labelBelow;		/* YES in a flipped view, NO in an unflipped one — see the highlight's doc */
 	BOOL selected;
 	BOOL focused;			/* the view's window has the keyboard: a selected cell wears the ring */

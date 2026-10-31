@@ -94,6 +94,18 @@ void WSIconCellDraw(WSIconCell cell)
 		 * already made it fit the cell; the clip is what keeps a rounding error or a kern pair inside. */
 		[NSGraphicsContext saveGraphicsState];
 		[[NSBezierPath bezierPathWithRect:highlight] addClip];
+		if (cell.labelShadow) {
+			/* **A WHITE NAME OVER A WALLPAPER GETS A BLACK SHADOW; A BLACK NAME ON A PAGE DOES NOT.** The shadow is one
+			 * more draw of the same name in black, one point down and right, so the ink keeps its shape and gains an
+			 * edge whatever it is over instead of a second font or a plate.
+			 * shortcut: a hard one-point shadow, not a blur; upgrade if a screenshot asks for softness. */
+			NSMutableDictionary *shadowInk = [[NSMutableDictionary alloc] initWithDictionary:attributes];
+			CGFloat dy = cell.labelBelow ? 1.0 : -1.0;	/* "down" is the flipped view's +y */
+
+			[shadowInk setObject:[NSColor blackColor] forKey:NSForegroundColorAttributeName];
+			[cell.label drawInRect:NSOffsetRect(rect, 1.0, dy) withAttributes:shadowInk];
+			[shadowInk release];
+		}
 		[cell.label drawInRect:rect withAttributes:attributes];
 		[NSGraphicsContext restoreGraphicsState];
 	}

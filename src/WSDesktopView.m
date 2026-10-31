@@ -235,6 +235,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		cell.icon = [self iconRepForItemAtIndex:(NSUInteger)i];
 		cell.label = WSIconLabelText([[items objectAtIndex:i] name], cellSize.width - 4.0, attributes);
 		cell.attributes = attributes;
+		cell.labelShadow = YES;	/* white ink over a wallpaper: see `WSIconCell.h` */
 		cell.selected = selected;
 		/* **THE DESKTOP WEARS THE RING TOO, AND IT HAS TO EARN IT**: this view had no `-acceptsFirstResponder` and its
 		 * press never made it first responder, so a click on an icon left the keyboard with another window and the

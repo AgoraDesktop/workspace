@@ -677,6 +677,30 @@ int main(void)
 			      && (fabs([onGreen redComponent] - [onWhite redComponent]) > 0.2),
 			      "so the background shows THROUGH the selection");
 		}
+		/* **AND THE DESKTOP'S NAME IS WHITE WITH A BLACK SHADOW; A FILE WINDOW'S IS BLACK WITH NONE.** White ink over a
+		 * wallpaper needs an edge a white page never asks for, so the desktop draws the same name once in black, one
+		 * point down and right, before the white. Painted over a WHITE page — where white ink is invisible — the only
+		 * thing that can leave a dark pixel under the icon is that shadow. */
+		{
+			NSBitmapImageRep *page = draw_view(desktop, 520, 400);
+			NSRect highlight = [desktop cg_highlightRectAtIndex:0];
+			int yTop = (int)(400.0 - NSMidY(highlight));	/* the name hangs below the icon */
+			int yBottom = (int)(400.0 - NSMinY(highlight));
+			int dark = 0, x, y;
+
+			for (y = yTop; y < yBottom; y++) {
+				for (x = (int)NSMinX(highlight); x < (int)NSMaxX(highlight); x++) {
+					NSColor *c = [page colorAtX:x y:y];
+
+					if (c != nil && [c redComponent] < 0.25 && [c greenComponent] < 0.25
+					    && [c blueComponent] < 0.25) {
+						dark++;
+					}
+				}
+			}
+			check(dark > 4,
+			      "and a desktop name is white with a BLACK SHADOW — over a white page its ink is invisible, its shadow is not");
+		}
 
 		/* **AND THE RECTANGLES ARE THE SAME SHAPE**, which the pixels cannot say — the desktop's first icon sits against
 		 * the edge of its view, so its wash is clipped. Each view answers the rectangle it fills; what is compared is its

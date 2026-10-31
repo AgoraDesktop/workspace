@@ -571,6 +571,7 @@ static BOOL fn_directory_is_inside_any(NSString *directory, NSArray *paths)
 		cell.icon = [self iconForIndex:i];
 		cell.label = label;
 		cell.attributes = attributes;
+		cell.labelShadow = NO;	/* a page, not a photograph: black ink needs nothing under it */
 		cell.selected = [_selection containsIndex:(NSUInteger)i];
 		/* **THE RING IS THE FIRST SELECTED CELL'S**, not every selected one's: a band that takes six icons draws one
 		 * outline, which is where the keyboard's focus is. */
