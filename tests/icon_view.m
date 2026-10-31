@@ -397,8 +397,12 @@ int main(void)
 
 		check(near(NSMidX(highlight), NSMidX(icon)),
 		      "the selection's rectangle is centred on the icon, not on the cell's padding");
-		check(near(highlight.size.width, 80.0),
-		      "it is one cell wide, so neighbours never share a wash");
+		/* **THE CELL'S WIDTH LESS ITS AIR, SO NEIGHBOURS NEVER MEET.** A wash the width of the cell left nothing between
+		 * a run of selected icons — the rows stayed apart but the columns were one slab — so the highlight is inset by
+		 * the same figure at each end that it keeps above and below. */
+		check(near(highlight.size.width,
+			   [WSIconLayout cellSizeForIconSize:WSIconDefaultSize].width - 2.0 * (CGFloat)WSIconHighlightInset),
+		      "it is the cell's width less its own air, so neighbours never share a wash");
 		check(NSMinY(highlight) < NSMinY(icon) && NSMaxY(highlight) > labelTop,
 		      "and it encloses the icon and the whole label band");
 	}
@@ -652,7 +656,7 @@ int main(void)
 								      styleMask:NSBorderlessWindowMask
 									backing:NSBackingStoreBuffered defer:NO];
 		NSSize cell = [WSIconLayout cellSizeForIconSize:[desktop iconSize]];
-		CGFloat wantWidth = cell.width;
+		CGFloat wantWidth = cell.width - 2.0 * (CGFloat)WSIconHighlightInset;
 		CGFloat wantHeight = (CGFloat)[desktop iconSize] + (CGFloat)WSIconLabelGap
 			+ (CGFloat)WSIconLabelHeight + 2.0 * (CGFloat)WSIconHighlightInset;
 		NSRect iconWash;
@@ -772,7 +776,7 @@ int main(void)
 				      "and the same room below it for the name");
 			}
 			check(near(NSWidth(inView), wantWidth) && near(NSHeight(inView), wantHeight),
-			      "which is the cell's width and tall enough for the icon and the name");
+			      "which is the cell's width less its air, and tall enough for the icon and the name");
 		}
 
 		/* THE VIEWS STAY: they registered for the shared selection, and a released observer is not this probe's business

@@ -11,9 +11,10 @@
  * the desktop filled a square four points outside the ICON, unrounded and stopping above the name, so a desktop selection
  * was a blue blob that did not look like the same gesture as a file window's.
  *
- * The rule the rectangle follows is `WSIconLayout`'s cell: **the highlight is the cell's WIDTH, centred on the icon, and
- * tall enough to hold the icon, the label and `WSIconHighlightInset` points of air** — which is why a fill, a clip and a
- * ring can all be the same shape.
+ * The rule the rectangle follows is `WSIconLayout`'s cell: **the highlight is the cell's width less
+ * `WSIconHighlightInset` at each end, centred on the icon, and tall enough to hold the icon, the label and the same
+ * inset of air** — which is why a fill, a clip and a ring can all be the same shape, and why a run of selected cells
+ * is a row of plates with air between them rather than one slab.
  *
  * **THE INK IS THE CALLER'S, BECAUSE THE BACKGROUND IS.** A file window's background is white and its names are black; the
  * desktop's is a wallpaper, so its names are white. That difference is about what is BEHIND the text, not about the

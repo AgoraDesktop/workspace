@@ -13,7 +13,7 @@
 
 #include <math.h>
 
-const NSInteger WSIconLabelGap = 6;
+const NSInteger WSIconLabelGap = 2;
 const NSInteger WSIconDefaultSize = 64;
 const NSInteger WSIconGridMargin = 16;
 const NSInteger WSIconLabelHeight = 16;

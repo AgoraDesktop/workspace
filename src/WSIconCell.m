@@ -45,15 +45,18 @@ static NSRect fn_label_rect(NSRect iconRect, BOOL labelBelow, CGFloat labelWidth
 NSRect WSIconCellHighlightRect(NSRect iconRect, CGFloat cellWidth, BOOL labelBelow)
 {
 	CGFloat side = (cellWidth - iconRect.size.width) / 2.0;
-
-	return NSMakeRect(iconRect.origin.x - side,
+	CGFloat inset = (CGFloat)WSIconHighlightInset;
+	/* **THE HIGHLIGHT KEEPS THE SAME AIR ON ITS SIDES AS IT DOES ABOVE AND BELOW.** Vertical air is what the cell has
+	 * over the highlight — the cell's padding less the two insets — and horizontally the highlight took the WHOLE cell,
+	 * so a run of selected cells was one continuous blue slab across the row while the rows stayed apart. It is now the
+	 * cell's width less one inset at each end, which is the same figure: the wash is centred on the icon and neighbouring
+	 * washes no longer meet. */
+	return NSMakeRect(iconRect.origin.x - side + inset,
 			  labelBelow
-				? iconRect.origin.y - (CGFloat)WSIconHighlightInset
-				: NSMinY(iconRect) - (CGFloat)WSIconLabelGap - (CGFloat)WSIconLabelHeight
-				  - (CGFloat)WSIconHighlightInset,
-			  cellWidth,
-			  iconRect.size.height + (CGFloat)WSIconLabelGap + (CGFloat)WSIconLabelHeight +
-			  2.0 * (CGFloat)WSIconHighlightInset);
+				? iconRect.origin.y - inset
+				: NSMinY(iconRect) - (CGFloat)WSIconLabelGap - (CGFloat)WSIconLabelHeight - inset,
+			  cellWidth - 2.0 * inset,
+			  iconRect.size.height + (CGFloat)WSIconLabelGap + (CGFloat)WSIconLabelHeight + 2.0 * inset);
 }
 
 void WSIconCellDraw(WSIconCell cell)
