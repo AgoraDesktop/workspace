@@ -382,7 +382,11 @@ int main(void)
 	/* 5. THE SOURCE PUTS THE SELECTED PATHS ON THE DRAG PASTEBOARD. */
 	[view selectIndex:indexNamed(view, @"notes.txt")];
 	{
-		NSEvent *drag = mouse(NSLeftMouseDragged, centerOfIndex(view, [view selectedIndex]));
+		/* **THE EVENT'S LOCATION IS IN THE WINDOW'S SPACE, WHICH IS NOT THE VIEW'S** — this grid is flipped, so handing
+		 * a view point over as a window point is a mirror, not an identity. The session converts from the window (see
+		 * `NSDragging.m`), so the probe says what a real event says. */
+		NSPoint iconPoint = centerOfIndex(view, [view selectedIndex]);
+		NSEvent *drag = mouse(NSLeftMouseDragged, [view convertPoint:iconPoint toView:nil]);
 		NSDraggingSession *session = [view cg_beginDragWithEvent:drag];
 		id plist;
 
@@ -392,7 +396,7 @@ int main(void)
 		check([plist isKindOfClass:[NSArray class]] && [plist count] == 1
 		      && [[plist objectAtIndex:0] isEqual:[root stringByAppendingPathComponent:@"notes.txt"]],
 		      "with the selected path on NSFilenamesPboardType");
-		[window sendEvent:mouse(NSLeftMouseUp, centerOfIndex(view, [view selectedIndex]))];
+		[window sendEvent:mouse(NSLeftMouseUp, [view convertPoint:iconPoint toView:nil])];
 		check([NSDraggingSession cg_activeSession] == nil, "and the release ends it");
 	}
 
