@@ -134,6 +134,9 @@ int main(void)
 	makeFile([root stringByAppendingPathComponent:@"b.txt"]);
 	makeFile([root stringByAppendingPathComponent:@".hidden"]);
 	makeFile([subOne stringByAppendingPathComponent:@"c.txt"]);
+	/* **AND A TRASH, MADE HERE RATHER THAN FOUND.** `~/.Trash` is the real one and a probe has no business emptying it; a
+	 * directory NAMED like one is what the rule reads, so the fixture is a `.Trash` of its own. */
+	makeDirectory([root stringByAppendingPathComponent:@".Trash"]);
 
 	first = [[WSFileWindowController alloc] initWithDirectory:root];
 	check(first != nil && [first window] != nil, "a directory makes a window");
@@ -143,6 +146,17 @@ int main(void)
 	check([[[[first cg_pathControl] URL] path] isEqual:root], "the path bar holds the same folder");
 	check([[[first window] title] isEqual:[root lastPathComponent]],
 	      "the title is the folder's own name");
+	{
+		/* **THE TRASH IS A PLACE AND NOT A PATH.** A window on it says `Trash` and its path bar shows nothing: where the
+		 * directory sits is the file manager's business, and `.Trash` under somebody's home says nothing true. */
+		NSString *trash = [root stringByAppendingPathComponent:@".Trash"];
+		WSFileWindowController *inTrash = [[WSFileWindowController alloc] initWithDirectory:trash];
+
+		check([[[inTrash window] title] isEqual:@"Trash"],
+		      "a window on the trash is titled Trash rather than the directory's own name");
+		check([[inTrash cg_pathControl] URL] == nil, "and its path bar shows no path at all");
+		(void)inTrash;	/* the probe leaks it: the application owns its windows */
+	}
 	check([first cg_iconView] != nil, "the icon view exists");
 	check([[first cg_iconView] itemCount] == 4, "the icon view shows the model's items");
 	{

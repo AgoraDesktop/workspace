@@ -194,6 +194,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[window setContentView:content];
 	[content release];
 
+	_isTrashDirectory = [self fn_isTrashDirectory:_directory];
 	[self buildPathBar];
 	[self buildContentAndSidebar];
 	[self buildStatusBar];
@@ -297,7 +298,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_split adjustSubviews];
 	[_split setPosition:WS_SIDEBAR_WIDTH ofDividerAtIndex:0];
 
-	[[window contentView] addSubview:_pathBar];
+	if (!_isTrashDirectory) {
+		[[window contentView] addSubview:_pathBar];
+	}
 	[[window contentView] addSubview:_split];
 }
 
@@ -329,15 +332,22 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_split setTranslatesAutoresizingMaskIntoConstraints:NO];
 	[_status setTranslatesAutoresizingMaskIntoConstraints:NO];
 
-	[NSLayoutConstraint activateConstraints:[NSArray arrayWithObjects:
-		[[_pathBar leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
-		[[_pathBar trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
-		[[_pathBar topAnchor] constraintEqualToAnchor:[content topAnchor]],
-		[[_pathBar heightAnchor] constraintEqualToConstant:WS_PATH_BAR_HEIGHT],
+	NSMutableArray *constraints = [NSMutableArray array];
 
+	if (!_isTrashDirectory) {
+		[constraints addObjectsFromArray:[NSArray arrayWithObjects:
+			[[_pathBar leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
+			[[_pathBar trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
+			[[_pathBar topAnchor] constraintEqualToAnchor:[content topAnchor]],
+			[[_pathBar heightAnchor] constraintEqualToConstant:WS_PATH_BAR_HEIGHT],
+			nil]];
+	}
+	[constraints addObjectsFromArray:[NSArray arrayWithObjects:
 		[[_split leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
 		[[_split trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
-		[[_split topAnchor] constraintEqualToAnchor:[_pathBar bottomAnchor]],
+		_isTrashDirectory
+			? [[_split topAnchor] constraintEqualToAnchor:[content topAnchor]]
+			: [[_split topAnchor] constraintEqualToAnchor:[_pathBar bottomAnchor]],
 		[[_split bottomAnchor] constraintEqualToAnchor:[_status topAnchor]],
 
 		[[_status leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
@@ -345,6 +355,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		[[_status bottomAnchor] constraintEqualToAnchor:[content bottomAnchor]],
 		[[_status heightAnchor] constraintEqualToConstant:WS_STATUS_BAR_HEIGHT],
 		nil]];
+	[NSLayoutConstraint activateConstraints:constraints];
 }
 
 /* **THE DOCUMENT VIEW'S SIZE IS STILL THE SHELL'S, BECAUSE A SCROLL VIEW'S DOCUMENT IS NOT A STRIP.** The split
@@ -392,6 +403,19 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_iconView setFrameSize:NSMakeSize(width, height)];
 }
 
+/* **WHICH FOLDERS ARE TRASHES, BY THE RULE THIS TIER ALREADY MOVES BY**: the home Trash for the home volume, and a
+ * `.Trash-<uid>` on any other. Both are named that way by `WSTrash`'s own rule (`WSTrash.h`), so the test is the name
+ * and not a second table of directories — a volume mounted tomorrow has a Trash the moment it has one of those. */
+- (BOOL)fn_isTrashDirectory:(NSString *)directory
+{
+	NSString *name = [directory lastPathComponent];
+
+	if ([name isEqual:@".Trash"]) {
+		return YES;
+	}
+	return [name hasPrefix:@".Trash-"];
+}
+
 - (void)refresh
 {
 	NSInteger count = [self itemCount];
@@ -414,11 +438,26 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		}
 		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
 	}
-	[_pathBar setURL:[NSURL fileURLWithPath:_directory]];
+	/* **THE TRASH IS A PLACE, NOT A PATH.** `~/.Trash` is where it lives, and a breadcrumb ending in `.Trash` under
+	 * somebody's home directory says nothing true about it: a person is looking at the Trash and can empty it, put things
+	 * back or open them, and where the directory sits is the file manager's business. So the title is `Trash` and the
+	 * path bar is not there at all — the same way the Mac's Trash window shows no path. Everywhere else is unchanged. */
+	/* **THE TRASH HAS NO PATH BAR AT ALL.** A breadcrumb ending in `.Trash` under somebody's home directory says nothing
+	 * true about the place: a person is looking at the Trash, where things can be put back, opened or emptied, and where
+	 * the directory sits is the file manager's business. So the strip is not there — the same way the Mac's Trash window
+	 * shows no path — and everywhere else is unchanged. */
+	/* **THE TRASH SHOWS NO PATH, BECAUSE ITS WINDOW HAS NO BAR.** The strip is not built for one (see
+	 * `installStripConstraints`), so there is nothing here to empty. */
+	if (!_isTrashDirectory) {
+		[_pathBar setURL:[NSURL fileURLWithPath:_directory]];
+	}
 	[_status setStringValue:[NSString stringWithFormat:@"%ld %@", (long)count,
 				  (count == 1) ? @"item" : @"items"]];
 	if (title == nil || [title length] == 0) {
 		title = _directory;
+	}
+	if (_isTrashDirectory) {
+		title = @"Trash";
 	}
 	[[self window] setTitle:title];
 	[self refreshIconFrame];

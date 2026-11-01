@@ -52,6 +52,9 @@
 	NSArray *_placeSections;		/* RETAINED: WSPlaceSection */
 
 	NSPathControl *_pathBar;		/* RETAINED by the content view */
+	/* **THE TRASH HAS NO PATH BAR AT ALL**, decided once when the window is built: a strip whose only content would be
+	 * a breadcrumb ending in `.Trash` is a strip that says something untrue about the place. */
+	BOOL _isTrashDirectory;
 	NSSplitView *_split;			/* RETAINED by the content view */
 	NSOutlineView *_sidebar;		/* RETAINED by its scroll view */
 	NSScrollView *_sidebarScroll;		/* RETAINED by the split view */
