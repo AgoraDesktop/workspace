@@ -45,12 +45,15 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSStringDrawing.h>
+#import <AppKit/NSFont.h>
+#import <AppKit/NSScreen.h>
 #import <AppKit/NSStatusBar.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSTimer.h>
 #import <Foundation/NSValue.h>
 
 #import <LaunchServices/LSOpen.h>
@@ -89,11 +92,32 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 							     name:WSSelectionDidChangeNotification
 							   object:nil];
 		[self reload];
+		_workAreaTimer = [[NSTimer scheduledTimerWithTimeInterval:1.0
+								   target:self
+								 selector:@selector(fn_workAreaTick:)
+								 userInfo:nil
+								  repeats:YES] retain];
 	}
 	return self;
 }
 
 - (NSString *)directory { return [_model directory]; }
+
+/* **A DESKTOP NAME IS BOLD, AND THE WINDOW'S IS NOT.** A white name over a photograph has no page to hold it up, and the
+ * weight is what makes it read at a glance where a black name on white already does. The font is the tier's emphasized
+ * system face, which `NSFont` answers as nil on a host whose font service has nothing to give — so the attribute is
+ * added only when there is a font, and a desktop with no face falls back to the plain ink rather than to an exception. */
+- (NSDictionary *)labelAttributes
+{
+	NSMutableDictionary *attributes = [NSMutableDictionary dictionaryWithObject:[NSColor whiteColor]
+									    forKey:NSForegroundColorAttributeName];
+	NSFont *font = [NSFont boldSystemFontOfSize:12.0];
+
+	if (font != nil) {
+		[attributes setObject:font forKey:NSFontAttributeName];
+	}
+	return attributes;
+}
 
 - (WSItemModel *)model { return _model; }
 
@@ -106,14 +130,34 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	return [[NSStatusBar systemStatusBar] thickness] + 10.0;
 }
 
-/* The area the grid lays icons out in: the whole view, less the top padding. Its ORIGIN is the area's top-left and
- * `WSIconLayout` fills from there, so the padding is the gap and not an inset the grid adds again. */
+/* **THE AIR THIS VIEW KEEPS UNDER THE MENU BAR**, on top of the bar the work area already excludes. */
+#define WS_DESKTOP_TOP_AIR 10.0
+
+/* **THE AREA THE GRID LAYS ICONS IN: THE SCREEN'S WORK AREA, WHICH IS WHERE THE DOCK'S STRIP IS ALREADY TAKEN OUT.**
+ * The Dock reserves its width with the compositor (`agora_window.set_reserved`), the compositor sums the reservations by
+ * edge and publishes what is left, and `NSScreen -visibleFrame` is that answer — so the desktop does not guess a dock's
+ * size and does not have to follow a second one appearing. Its ORIGIN is the area's top-left, because `WSIconLayout`
+ * fills from there and the padding is the gap rather than an inset the grid adds again.
+ *
+ * **AND ONLY WHEN THIS VIEW IS THE SCREEN.** The work area is a fact about a display; a view of some other size (a probe,
+ * or a desktop window a test made) lays out in its own bounds and keeps the menu bar's thickness as padding, which is
+ * what it did before there was a work area to ask for. */
 - (NSRect)layoutBounds
 {
 	NSRect bounds = [self bounds];
+	NSScreen *screen = [NSScreen mainScreen];
+	NSRect work = (screen != nil) ? [screen visibleFrame] : NSZeroRect;
 	CGFloat top = [WSDesktopView topPadding];
 
-	return NSMakeRect(bounds.origin.x, top, bounds.size.width, bounds.size.height - top);
+	if (screen == nil || work.size.width <= 0.0 || work.size.height <= 0.0
+	    || !NSEqualSizes([screen frame].size, bounds.size)) {
+		return NSMakeRect(bounds.origin.x, top, bounds.size.width, bounds.size.height - top);
+	}
+	/* THE WORK AREA ARRIVES IN COCOA'S SPACE — up from the bottom — and the grid is written down from the top. */
+	return NSMakeRect(NSMinX(work),
+			  bounds.size.height - NSMaxY(work) + WS_DESKTOP_TOP_AIR,
+			  NSWidth(work),
+			  NSHeight(work) - WS_DESKTOP_TOP_AIR);
 }
 
 /* Give every item a place: the one the store remembers, or the next free grid cell. */
@@ -126,6 +170,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 {
 	NSArray *items;
 	NSMutableArray *positions = [[NSMutableArray alloc] init];
+	NSRect area = [self layoutBounds];
 	NSUInteger i;
 	NSInteger iconSize = [_store iconSize];
 
@@ -138,12 +183,18 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		if ([_store hasIconPositionForName:[item name]]) {
 			position = [_store iconPositionForName:[item name]];
 		} else {
-			position = [WSIconLayout gridPositionForIndex:(NSInteger)i
-							     inBounds:[self layoutBounds]
-							     iconSize:iconSize];
+			position = [WSIconLayout gridPositionForIndex:(NSInteger)i inBounds:area iconSize:iconSize];
 		}
+		/* **EVERY ICON IS RESOLVED INTO A FREE CELL, WHETHER IT WAS DRAGGED OR REMEMBERED.** A remembered position is
+		 * where a hand left an icon, and the world it was left in can have changed under it — the screen narrowed because
+		 * the Dock took a strip, or two sidecar entries name the same point. Both are the same question, so it is asked
+		 * once, of the same arithmetic a drop uses: the nearest cell that nothing else occupies and that the area holds.
+		 * The store is not rewritten here; the placement is a fact about this layout, and a person's own drag is what
+		 * writes it down. */
+		position = [WSIconLayout snapPosition:position inBounds:area iconSize:iconSize avoiding:positions];
 		[positions addObject:[NSValue valueWithPoint:position]];
 	}
+	_laidOutWorkArea = area;
 	[_positions release];
 	_positions = positions;
 	[_icons removeAllObjects];
@@ -252,8 +303,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		if (_dropOperation != NSDragOperationNone && (NSInteger)i == _dropIndex) {
 			selected = YES;
 		}
-		attributes = [NSDictionary dictionaryWithObjectsAndKeys:[NSColor whiteColor],
-							  NSForegroundColorAttributeName, nil];
+		attributes = [self labelAttributes];
 
 		cell.iconRect = iconRect;
 		cell.cellWidth = cellSize.width;
@@ -459,6 +509,11 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 /* **THE SAME PASTEBOARD A FILE WINDOW FILLS.** The paths go on `NSFilenamesPboardType` and one dragging item per selected
  * icon carries the picture that moves with the pointer, so a drag out of the desktop is a drag another window already
  * knows how to accept. */
+- (NSRect)cg_layoutBounds
+{
+	return [self layoutBounds];
+}
+
 - (NSArray *)cg_selectedPaths
 {
 	NSArray *items = [_model items];
@@ -689,8 +744,24 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	CFRelease(url);
 }
 
+/* **THE DOCK RESERVES ITS STRIP AFTER THIS APPLICATION HAS STARTED.** The compositor sums what its clients reserve and
+ * republishes the work area, and `NSScreen -visibleFrame` is that answer — but nothing above the seam is TOLD when it
+ * changes (the server sends `work_area_changed` per window and the AppKit drops it, which its own note says is
+ * deliberate). A second is a long time for a layout nobody is watching, and four integers a second is nothing.
+ * shortcut: polled, because there is no notification to observe; upgrade when the AppKit posts
+ * `NSApplicationDidChangeScreenParametersNotification` for a work-area change. */
+- (void)fn_workAreaTick:(NSTimer *)timer
+{
+	(void)timer;
+	if (!NSEqualRects([self layoutBounds], _laidOutWorkArea)) {
+		[self reload];
+	}
+}
+
 - (void)dealloc
 {
+	[_workAreaTimer invalidate];
+	[_workAreaTimer release];
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:WSSelectionDidChangeNotification object:nil];
 	[_model release];
 	[_store release];

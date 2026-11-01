@@ -49,8 +49,12 @@ NORMAL_Y=200
 
 # THE DESKTOP'S ITEM, clear of the normal window and of the sample points.
 ICON_NAME=hello.txt
-ICON_X=900
-ICON_Y=300
+# **A POSITION ON THE GRID, BECAUSE THE DESKTOP ONLY PLACES ICONS IN CELLS.** A stored point is resolved into the
+# nearest free cell of the work area (`WSIconLayout -snapPosition:…`), so a fixture that names an arbitrary point would
+# be measured somewhere it was never put. This is the first cell: the area's top, one margin and one cell in from its
+# RIGHT edge (1280 - 16 - 80), which is where the desktop's right-to-left columns begin.
+ICON_X=1184
+ICON_Y=34
 ICON_SIZE=64
 
 cleanup() {

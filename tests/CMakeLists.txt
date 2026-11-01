@@ -25,6 +25,30 @@ set_tests_properties(workspace-desktop-layout PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
 
 
+
+# **ONE ICON PER CELL, AND EVERY CELL INSIDE THE WORK AREA.** A sidecar remembers a corner and nothing resolved it against
+# the grid, so two entries could name the same corner and an entry could sit under the strip a Dock had since reserved.
+add_executable(desktop_cells desktop_cells.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionOwner.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+target_include_directories(desktop_cells PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(desktop_cells PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-desktop-cells COMMAND desktop_cells)
+set_tests_properties(workspace-desktop-cells PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
 # **THE DESKTOP AS A DRAG SOURCE AND A DROP DESTINATION.** The gesture was the desktop's own and could not leave the
 # view, so a file could not be dragged out of it or into it. Both directions are driven here the way a person drives
 # them — a real session between two registered windows — plus the destination's own doors for the two cases a session

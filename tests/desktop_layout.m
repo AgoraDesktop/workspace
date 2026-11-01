@@ -78,7 +78,42 @@ int main(void)
 		check([WSIconLayout indexOfPosition:NSMakePoint(10.0, 10.0) among:positions iconSize:size] == -1,
 		      "and a point outside misses");
 
-		printf("desktop_layout: %d case(s) failed\n", failed);
+		/* **A SNAP CANNOT LEAVE THE AREA IT WAS GIVEN, WHICH IS HOW A RESERVED STRIP IS HONOURED.** The desktop passes the
+	 * work area — the screen less what the Dock reserved — so the only thing that keeps a cell out of the Dock's strip is
+	 * this arithmetic. The area here is the same grid, 64 points narrower: nothing may land in the last 64 points. */
+	{
+		NSRect reserved = NSMakeRect(0.0, 34.0, 800.0 - 64.0, 566.0);
+		BOOL inside = YES;
+		NSInteger n;
+
+		for (n = 0; n < 40; n++) {
+			NSPoint point = [WSIconLayout snapPosition:NSMakePoint((CGFloat)((n * 37) % 800), (CGFloat)((n * 53) % 566))
+						  inBounds:reserved
+						  iconSize:size
+						  avoiding:[NSArray array]];
+
+			if (point.x < NSMinX(reserved) || point.x + cell.width > NSMaxX(reserved) + 0.01
+			    || point.y < NSMinY(reserved) || point.y + cell.height > NSMaxY(reserved) + 0.01) {
+				inside = NO;
+			}
+		}
+		check(inside, "every cell a snap can choose lies inside the area it was given, clear of a reserved strip");
+	}
+	/* **AND TWO ICONS CANNOT BE SENT TO ONE CELL.** The same desired point, asked twice with the first answer already
+	 * occupied, is the arithmetic a reload and a drop both lean on for one icon per cell. */
+	{
+		NSPoint desired = NSMakePoint(120.0, 90.0);
+		NSRect area = NSMakeRect(0.0, 34.0, 800.0, 566.0);
+		NSPoint first = [WSIconLayout snapPosition:desired inBounds:area iconSize:size
+						  avoiding:[NSArray array]];
+		NSArray *taken = [NSArray arrayWithObject:[NSValue valueWithPoint:first]];
+		NSPoint second = [WSIconLayout snapPosition:desired inBounds:area iconSize:size avoiding:taken];
+
+		check(!NSEqualPoints(first, second),
+		      "a second icon asking for a taken cell is given another cell, never the same one");
+	}
+
+	printf("desktop_layout: %d case(s) failed\n", failed);
 	}
 	return failed == 0 ? 0 : 1;
 }

@@ -48,6 +48,11 @@ extern NSString *WSDesktopViewPathKey;
 
 	/* AN OUTGOING DRAG: where the session began, so the icons can be told what the pointer did while the session had it.
 	 * An incoming one: which cell is under the pointer and what a drop there would do. */
+	/* **THE WORK AREA THE ICONS WERE LAST PLACED IN**, and a timer that watches it: the Dock reserves its strip AFTER
+	 * this application has started, and the server's answer changes without anything above the seam being told. */
+	NSRect _laidOutWorkArea;
+	id _workAreaTimer;		/* NSTimer, RETAINED */
+
 	BOOL _dragSessionBegan;		/* the press became a drag session, which now owns the pointer */
 	NSPoint _pressPoint;		/* where it began, in top-left coordinates */
 	NSPoint _dragStartWindow;	/* and in the window's, because the session reports its end in screen space */
@@ -78,6 +83,8 @@ extern NSString *WSDesktopViewPathKey;
 /* **THE DRAG, AS A PROBE ASKS FOR IT.** The same two doors the icon view has, for the same reason: a session only
  * begins from a real event, and a test has none. */
 - (NSArray *)cg_selectedPaths;
+/* The area the grid places into — the work area when this view is the screen, its own bounds otherwise. */
+- (NSRect)cg_layoutBounds;
 - (NSDraggingSession *)cg_beginDragWithEvent:(NSEvent *)event;
 - (NSDragOperation)cg_updateDropWithInfo:(id <NSDraggingInfo>)info;
 - (void)cg_dropSessionDidEnd:(NSPoint)screenPoint operation:(NSDragOperation)operation;
