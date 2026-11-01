@@ -191,7 +191,9 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		 * once, of the same arithmetic a drop uses: the nearest cell that nothing else occupies and that the area holds.
 		 * The store is not rewritten here; the placement is a fact about this layout, and a person's own drag is what
 		 * writes it down. */
-		position = [WSIconLayout snapPosition:position inBounds:area iconSize:iconSize avoiding:positions];
+		position = [WSIconLayout freePositionNearest:position inBounds:area iconSize:iconSize avoiding:positions];
+		/* **A FULL GRID SHOWS WHAT FITS AND NOTHING OF THE REST.** `WSIconNoPosition` is outside every view: the item is
+		 * still in the directory and still listed by the model, and it is not drawn, not hit and not dragged. */
 		[positions addObject:[NSValue valueWithPoint:position]];
 	}
 	_laidOutWorkArea = area;
@@ -280,6 +282,10 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	 * window's. */
 	for (i = 0; i < (int)[items count]; i++) {
 		NSPoint position = [[_positions objectAtIndex:i] pointValue];
+
+		if (NSEqualPoints(position, WSIconNoPosition)) {
+			continue;	/* the grid was full: this item has no cell, so it has no pixels */
+		}
 		NSRect iconRect = [self cocoaRectForPosition:position
 							size:NSMakeSize((CGFloat)iconSize, (CGFloat)iconSize)];
 		NSSize cellSize = [WSIconLayout cellSizeForIconSize:iconSize];

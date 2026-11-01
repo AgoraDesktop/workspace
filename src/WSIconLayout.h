@@ -62,8 +62,20 @@ extern const NSInteger WSIconPadding;
 			  order:(WSIconOrder)order;
 + (NSPoint)gridPositionForIndex:(NSInteger)index inBounds:(NSRect)bounds iconSize:(NSInteger)iconSize;
 
-/* The free grid cell nearest `desired` — what a drop snaps to. `occupied` is an NSArray of NSValue NSPoints;
- * when every cell is taken the desired position is answered unchanged rather than dropped silently. */
+/* **THE POINT AN ICON IS AT WHEN THE GRID HAS NO ROOM FOR IT.** Far outside any view, so an icon with no cell is not
+ * drawn, cannot be hit and cannot be dragged: the desktop's rule is that a full grid shows what fits and says nothing
+ * about the rest, and a position nothing can reach is the whole of that. */
+extern const NSPoint WSIconNoPosition;
+
+/* The free grid cell nearest `desired`, or `WSIconNoPosition` when every cell is taken. `occupied` is an NSArray of
+ * NSValue NSPoints. This is the question a LAYOUT asks, where "no room" is an answer. */
++ (NSPoint)freePositionNearest:(NSPoint)desired
+		      inBounds:(NSRect)bounds
+		      iconSize:(NSInteger)iconSize
+		      avoiding:(NSArray *)occupied;
+
+/* The same, for a DRAG, where there is no such answer: a hand that let go has to leave the icon somewhere, so the
+ * desired position is kept when the grid is full. */
 + (NSPoint)snapPosition:(NSPoint)desired
 	       inBounds:(NSRect)bounds
 	       iconSize:(NSInteger)iconSize

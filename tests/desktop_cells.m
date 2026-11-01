@@ -131,6 +131,59 @@ int main(void)
 		[window release];
 	}
 
+	/* **A FULL GRID SHOWS WHAT FITS.** More items than cells: the ones with no cell are not placed at all — the sentinel
+	 * is outside every view, so they are not drawn, not hit and not dragged — and every icon that IS placed keeps a cell
+	 * of its own. */
+	{
+		char full[] = "/tmp/agora-desktop-full-XXXXXX";
+		NSString *fullRoot;
+		NSUInteger n;
+
+		if (mkdtemp(full) == NULL) {
+			printf("FAIL: could not make the full-grid fixture\n");
+		} else {
+			fullRoot = [manager stringWithFileSystemRepresentation:full length:strlen(full)];
+			for (n = 0; n < 63; n++) {
+				[manager createFileAtPath:[fullRoot stringByAppendingPathComponent:
+					[NSString stringWithFormat:@"item%02lu.txt", (unsigned long)n]]
+						 contents:[NSData data] attributes:nil];
+			}
+			{
+				WSDesktopView *desktop = [[WSDesktopView alloc]
+					initWithFrame:NSMakeRect(0.0, 0.0, 900.0, 600.0) directory:fullRoot];
+				NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 900.0, 600.0)
+									       styleMask:NSBorderlessWindowMask
+									     backing:NSBackingStoreBuffered defer:NO];
+				NSArray *positions;
+				NSUInteger unplaced = 0, placed = 0, i, j;
+				BOOL distinct = YES;
+
+				[window setContentView:desktop];
+				positions = [desktop cg_positions];
+				for (i = 0; i < [positions count]; i++) {
+					NSPoint position = [[positions objectAtIndex:i] pointValue];
+
+					if (NSEqualPoints(position, WSIconNoPosition)) {
+						unplaced++;
+						continue;
+					}
+					placed++;
+					for (j = i + 1; j < [positions count]; j++) {
+						if (NSEqualPoints([[positions objectAtIndex:j] pointValue], position)) {
+							distinct = NO;
+						}
+					}
+				}
+				check([positions count] == 63, "a directory of 63 items is read whole");
+				check(unplaced > 0, "and the ones with no cell are given no position at all");
+				check(placed + unplaced == 63, "every item is either placed or set aside");
+				check(distinct, "and no two placed icons share a cell");
+				[desktop release];
+				[window release];
+			}
+		}
+	}
+
 	printf("desktop_cells: %s\n", s_failed == 0 ? "all checks passed" : "FAILURES");
 	[pool release];
 	return s_failed == 0 ? 0 : 1;

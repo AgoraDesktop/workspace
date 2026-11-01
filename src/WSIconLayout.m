@@ -13,6 +13,7 @@
 
 #include <math.h>
 
+const NSPoint WSIconNoPosition = { -10000.0, -10000.0 };
 const NSInteger WSIconLabelGap = 2;
 const NSInteger WSIconDefaultSize = 64;
 const NSInteger WSIconGridMargin = 16;
@@ -86,10 +87,10 @@ const NSInteger WSIconPadding = 8;
 				    order:WSIconOrderRightToLeftColumns];
 }
 
-+ (NSPoint)snapPosition:(NSPoint)desired
-	       inBounds:(NSRect)bounds
-	       iconSize:(NSInteger)iconSize
-	       avoiding:(NSArray *)occupied
++ (NSPoint)freePositionNearest:(NSPoint)desired
+		      inBounds:(NSRect)bounds
+		      iconSize:(NSInteger)iconSize
+		      avoiding:(NSArray *)occupied
 {
 	NSSize cell = [self cellSizeForIconSize:iconSize];
 	NSInteger columns = (NSInteger)floor((bounds.size.width - 2.0 * (CGFloat)WSIconGridMargin) / cell.width);
@@ -122,8 +123,18 @@ const NSInteger WSIconPadding = 8;
 			if (best < 0 || distance < bestDistance) { best = i; bestDistance = distance; }
 		}
 	}
-	if (best < 0) return desired;
+	if (best < 0) return WSIconNoPosition;
 	return [self gridPositionForIndex:best inBounds:bounds iconSize:iconSize];
+}
+
++ (NSPoint)snapPosition:(NSPoint)desired
+	       inBounds:(NSRect)bounds
+	       iconSize:(NSInteger)iconSize
+	       avoiding:(NSArray *)occupied
+{
+	NSPoint free = [self freePositionNearest:desired inBounds:bounds iconSize:iconSize avoiding:occupied];
+
+	return NSEqualPoints(free, WSIconNoPosition) ? desired : free;
 }
 
 + (NSArray *)namesByArranging:(NSArray *)names mode:(WSArrangeMode)mode
