@@ -16,6 +16,8 @@
 #import "WSMainMenu.h"
 #import "WSMenuBarClock.h"
 #import "WSPreferencesWindow.h"
+
+#import <LaunchServices/LSOpen.h>
 #import "WSPrintService.h"
 
 #import <AppKit/NSApplication.h>
@@ -45,11 +47,14 @@
 @interface WSApplication (WSRunLoopDelegate)
 - (void)applicationDidUpdate:(NSNotification *)notification;
 - (BOOL)applicationShouldHandleReopen:(NSApplication *)sender hasVisibleWindows:(BOOL)flag;
+- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename;
 @end
 
 @interface WSApplication ()
 - (void)iconViewRequestFolderWindow:(NSNotification *)notification;
 - (void)openFileWindowAtDirectory:(NSString *)directory;
+/* The delegate's answer to a shell that asks for a path to be opened — see the implementation. */
+- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename;
 - (void)desktopOpenFolder:(NSNotification *)notification;
 - (void)fileWindowWillClose:(NSNotification *)notification;
 /* **ONE LOOP, TWO DEADLINES** — the ordinary run passes nil, and `--seconds` passes the date. */
@@ -263,6 +268,25 @@
 {
 	(void)sender;
 	[self openFileWindowAtDirectory:[WSPlaces desktopDirectory]];
+}
+
+/* **A SHELL ASKING FOR A PATH TO BE OPENED** — the Dock's trash tile is the first caller, and the path arrives as
+ * `agora_window.open_file` from the compositor. What opening means is the file manager's answer: a directory is a
+ * window on it, a file goes to the application that owns it through the same Launch Services door a double-click uses.
+ * A path this application cannot read is refused by answering NO, which is Apple's contract for the door. */
+- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename
+{
+	BOOL isDirectory = NO;
+
+	(void)sender;
+	if (filename == nil || ![[NSFileManager defaultManager] fileExistsAtPath:filename isDirectory:&isDirectory]) {
+		return NO;
+	}
+	if (isDirectory) {
+		[self openFileWindowAtDirectory:filename];
+		return YES;
+	}
+	return (BOOL)LSOpenCFURLRef((CFURLRef)[NSURL fileURLWithPath:filename], NULL);
 }
 
 - (void)desktopOpenFolder:(NSNotification *)notification
