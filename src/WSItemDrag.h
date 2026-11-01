@@ -40,6 +40,13 @@ NSDraggingSession *WSItemDragBegin(NSView *view, NSArray *paths, NSArray *items,
 - (void)reloadAfterChange;
 @end
 
+/* **AND THE ITEMS A DROP PUT HERE ARE THE ONES THE HAND MEANT**, so the surface that received them selects them: a set
+ * dragged out of the desktop arrives selected in the window, and the same set let go over the desktop stays selected where
+ * it landed. A destination asks by selector, like the reload above, so neither surface has to know the other. */
+@protocol WSItemDragSelectionTaking <NSObject>
+- (void)cg_selectPaths:(NSArray *)paths;
+@end
+
 /* The paths on a destination's dragging info, or nil when the drag carries none. */
 NSArray *WSItemDragPaths(id <NSDraggingInfo> info);
 

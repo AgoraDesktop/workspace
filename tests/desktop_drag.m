@@ -209,6 +209,20 @@ int main(void)
 			      && ![manager fileExistsAtPath:[deskRoot stringByAppendingPathComponent:@"alpha.txt"]],
 			      "dropping it on a file window moves the file there");
 			{
+				/* **AND IT ARRIVES SELECTED**, which is the set the hand was carrying. */
+				NSIndexSet *chosen = [view selectedIndexes];
+				BOOL atAlpha = NO;
+				NSUInteger k;
+
+				for (k = 0; k < [[[view model] items] count]; k++) {
+					if ([[[[[view model] items] objectAtIndex:k] name] isEqual:@"alpha.txt"]
+					    && [chosen containsIndex:k]) {
+						atAlpha = YES;
+					}
+				}
+				check(atAlpha, "and the item that arrived is the one selected in the window it arrived in");
+			}
+			{
 				NSUInteger k, seen = 0;
 
 				for (k = 0; k < [[[view model] items] count]; k++) {
@@ -244,8 +258,62 @@ int main(void)
 			check([manager fileExistsAtPath:[deskRoot stringByAppendingPathComponent:@"delta.txt"]]
 			      && ![manager fileExistsAtPath:[winRoot stringByAppendingPathComponent:@"delta.txt"]],
 			      "a drag from a window onto the desktop puts the file on the desktop");
+			check([[[[desktop cg_selectedPaths] lastObject] lastPathComponent] isEqual:@"delta.txt"],
+			      "and the desktop holds the item it received");
 		}
 		[desktop reload];
+
+		/* 3b. **A SELECTED SET, NOT ONE ICON.** Two desktop icons dragged together into the window arrive together, and
+		 * both are held there — the selection follows the SET, which is the gesture a person actually makes. */
+		{
+			NSFileManager *fm = [NSFileManager defaultManager];
+			NSArray *items;
+			NSUInteger a = NSNotFound, b = NSNotFound, k;
+			NSPoint first, second, into;
+
+			[fm createFileAtPath:[deskRoot stringByAppendingPathComponent:@"solo1.txt"]
+				     contents:[NSData data] attributes:nil];
+			[fm createFileAtPath:[deskRoot stringByAppendingPathComponent:@"solo2.txt"]
+				     contents:[NSData data] attributes:nil];
+			[desktop reload];
+			items = [[desktop model] items];
+			for (k = 0; k < [items count]; k++) {
+				if ([[[items objectAtIndex:k] name] isEqual:@"solo1.txt"]) a = k;
+				if ([[[items objectAtIndex:k] name] isEqual:@"solo2.txt"]) b = k;
+			}
+			check(a != NSNotFound && b != NSNotFound, "the desktop lists both items of the set");
+			first = [[[desktop cg_positions] objectAtIndex:a] pointValue];
+			second = [[[desktop cg_positions] objectAtIndex:b] pointValue];
+			[desktop mouseDown:mouse(NSLeftMouseDown, NSMakePoint(first.x + 32.0, 400.0 - (first.y + 32.0)))];
+			[desktop mouseUp:mouse(NSLeftMouseUp, NSMakePoint(first.x + 32.0, 400.0 - (first.y + 32.0)))];
+			[desktop mouseDown:[NSEvent mouseEventWithType:NSLeftMouseDown
+							 location:NSMakePoint(second.x + 32.0, 400.0 - (second.y + 32.0))
+						    modifierFlags:NSShiftKeyMask
+							timestamp:0.0 windowNumber:0 context:nil
+						    eventNumber:0 clickCount:1 pressure:1.0f]];
+			[desktop mouseUp:mouse(NSLeftMouseUp, NSMakePoint(second.x + 32.0, 400.0 - (second.y + 32.0)))];
+			check([[desktop cg_selectedPaths] count] == 2, "two desktop icons are held, as a set");
+			(void)[desktop cg_beginDragWithEvent:mouse(NSLeftMouseDragged,
+								   NSMakePoint(first.x + 32.0, 400.0 - (first.y + 32.0)))];
+			into = eventPointForScreenPoint(desktopWindow, NSMakePoint(1080.0, 200.0));
+			[desktopWindow sendEvent:mouse(NSLeftMouseDragged, into)];
+			[desktopWindow sendEvent:mouse(NSLeftMouseUp, into)];
+			check([fm fileExistsAtPath:[winRoot stringByAppendingPathComponent:@"solo1.txt"]]
+			      && [fm fileExistsAtPath:[winRoot stringByAppendingPathComponent:@"solo2.txt"]],
+			      "both icons of the set move into the window");
+			{
+				NSIndexSet *chosen = [view selectedIndexes];
+				NSArray *arrived = [[view model] items];
+				NSUInteger x = NSNotFound, y = NSNotFound, n;
+
+				for (n = 0; n < [arrived count]; n++) {
+					if ([[[arrived objectAtIndex:n] name] isEqual:@"solo1.txt"]) x = n;
+					if ([[[arrived objectAtIndex:n] name] isEqual:@"solo2.txt"]) y = n;
+				}
+				check(x != NSNotFound && y != NSNotFound && [chosen containsIndex:x] && [chosen containsIndex:y],
+				      "and BOTH of them are held in the window: the selection followed the set");
+			}
+		}
 
 		/* 4. **THE DESTINATION'S OWN RULES**, which a session cannot ask: a drop of a file that already lives on the
 		 * desktop is not a drop at all — a drag released over the desktop only places the icon — and a drop released on a
@@ -296,6 +364,22 @@ int main(void)
 		 * already there — so the source's own fallback is what a person sees: the icon is put where the pointer let go and
 		 * snapped to the free cell nearest it, and the file is not touched. */
 		{
+			NSArray *items = [[desktop model] items];
+			NSInteger keep = -1;
+			NSUInteger k;
+
+			[manager createFileAtPath:[deskRoot stringByAppendingPathComponent:@"keep.txt"]
+					 contents:[NSData data] attributes:nil];
+			[desktop reload];
+			items = [[desktop model] items];
+			for (k = 0; k < [items count]; k++) {
+				if ([[[items objectAtIndex:k] name] isEqual:@"keep.txt"]) {
+					keep = (NSInteger)k;
+				}
+			}
+			(void)keep;
+		}
+		{
 			NSPoint before = [[[desktop cg_positions] objectAtIndex:0] pointValue];
 			NSPoint windowPoint = NSMakePoint(before.x + 32.0, 400.0 - (before.y + 32.0));
 			NSPoint into = eventPointForScreenPoint(desktopWindow, NSMakePoint(150.0, 330.0));
@@ -306,9 +390,10 @@ int main(void)
 			[desktopWindow sendEvent:mouse(NSLeftMouseUp, into)];
 			check(!NSEqualPoints([[[desktop cg_positions] objectAtIndex:0] pointValue], before),
 			      "a drag released back over the desktop places the icon where the pointer let go");
-			check([manager fileExistsAtPath:[deskRoot stringByAppendingPathComponent:@"alpha.txt"]]
-			      || [manager fileExistsAtPath:[deskRoot stringByAppendingPathComponent:@"delta.txt"]],
+			check([manager fileExistsAtPath:[deskRoot stringByAppendingPathComponent:@"keep.txt"]],
 			      "and the file itself did not move off the desktop");
+			check([[desktop cg_selectedPaths] count] == 1,
+			      "and the set that was dragged is still the set that is held, where it landed");
 		}
 
 		[[NSApplication sharedApplication] cg_removeWindow:desktopWindow];

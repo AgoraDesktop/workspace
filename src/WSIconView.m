@@ -218,6 +218,22 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	[self invalidateSelectionChangeFrom:before];
 }
 
+/* **A DROP LANDS SELECTED.** The names that arrived are the ones the hand was carrying, so the grid holds them: a set
+ * dragged from the desktop into a window keeps its selection across the move. */
+- (void)cg_selectPaths:(NSArray *)paths
+{
+	NSArray *items = [_model items];
+	NSMutableIndexSet *chosen = [NSMutableIndexSet indexSet];
+	NSUInteger i;
+
+	for (i = 0; i < [items count]; i++) {
+		if ([paths containsObject:[[items objectAtIndex:i] path]]) {
+			[chosen addIndex:i];
+		}
+	}
+	[self selectIndexes:chosen];
+}
+
 - (void)selectAll:(id)sender
 {
 	NSIndexSet *before = [self snapshotSelection];
@@ -1017,7 +1033,16 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 		performed = [self cg_performDropOfPaths:paths intoDirectory:target operation:operation];
 	}
 	if (performed) {
+		NSMutableArray *arrived = [NSMutableArray array];
+		NSUInteger i;
+
 		[self reloadAfterChange];
+		/* **WHAT ARRIVED IS WHAT IS SELECTED**, named in the directory it arrived in: the same leaf under `target`. */
+		for (i = 0; i < [paths count]; i++) {
+			[arrived addObject:[target stringByAppendingPathComponent:
+				[[paths objectAtIndex:i] lastPathComponent]]];
+		}
+		[self cg_selectPaths:arrived];
 		if ([[sender draggingSource] respondsToSelector:@selector(reloadAfterChange)]) {
 			[(id <WSItemDragSourceReloading>)[sender draggingSource] reloadAfterChange];
 		}

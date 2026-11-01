@@ -509,6 +509,28 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 /* **THE SAME PASTEBOARD A FILE WINDOW FILLS.** The paths go on `NSFilenamesPboardType` and one dragging item per selected
  * icon carries the picture that moves with the pointer, so a drag out of the desktop is a drag another window already
  * knows how to accept. */
+/* **THE ITEMS A DROP PUT HERE ARE THE ONES THE HAND MEANT.** A set dragged out of a window and let go over the desktop
+ * arrives selected — the same rule the file window's grid follows — and a set dragged around the desktop keeps the
+ * selection it was dragged with, because the drop is the same gesture either way. */
+- (void)cg_selectPaths:(NSArray *)paths
+{
+	NSArray *items = [_model items];
+	NSUInteger i;
+
+	[_selection removeAllObjects];
+	for (i = 0; i < [items count]; i++) {
+		if ([paths containsObject:[[items objectAtIndex:i] path]]) {
+			[_selection addObject:[NSNumber numberWithInteger:(NSInteger)i]];
+		}
+	}
+	/* A DESKTOP THAT CHOOSES CLAIMS THE SELECTION; one that comes up empty stays silent, which is the rule the press
+	 * follows and the one that keeps the window next door's selection standing. */
+	if ([_selection count] > 0) {
+		[[NSNotificationCenter defaultCenter] postNotificationName:WSSelectionDidChangeNotification object:self];
+	}
+	[self setNeedsDisplay:YES];
+}
+
 - (NSRect)cg_layoutBounds
 {
 	return [self layoutBounds];
@@ -595,6 +617,16 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		}
 		_moved = YES;
 		[self snapSelectionToGridAndPersist];
+		/* **THE SET THAT WAS DRAGGED IS STILL THE SET THAT IS HELD**, wherever on the desktop it landed, and the reload
+		 * below is what would otherwise let it go — it clears the selection because a directory read from scratch knows
+		 * nothing about who was chosen. */
+		{
+			NSArray *held = [self cg_selectedPaths];
+
+			[self reload];
+			[self cg_selectPaths:held];
+		}
+		return;
 	}
 	[self reload];
 }
@@ -673,6 +705,9 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	BOOL performed = WSItemDragPerform(paths, target, operation);
 
 	if (performed) {
+		NSMutableArray *arrived = [NSMutableArray array];
+		NSUInteger i;
+
 		/* THE SOURCE IS TOLD ITS ITEMS MOVED. A drag within this application has a view at the other end, and it holds a
 		 * model that is now wrong; a drag from another application has none and the notification is the file
 		 * watcher's business. */
@@ -680,6 +715,12 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 			[(id <WSItemDragSourceReloading>)source reloadAfterChange];
 		}
 		[self reload];
+		/* AND WHAT ARRIVED IS WHAT IS SELECTED, named in the directory it arrived in. */
+		for (i = 0; i < [paths count]; i++) {
+			[arrived addObject:[target stringByAppendingPathComponent:
+				[[paths objectAtIndex:i] lastPathComponent]]];
+		}
+		[self cg_selectPaths:arrived];
 	}
 	_dropIndex = -1;
 	_dropOperation = NSDragOperationNone;

@@ -16,12 +16,15 @@
 
 #import <AppKit/NSView.h>
 
+/* **THE PROTOCOLS THIS VIEW ANSWERS FOR A DRAG**, because a class that conforms to one has to have its definition — a
+ * forward declaration names it and does not describe it, which the compiler says out loud. */
+#import "WSItemDrag.h"
+
 @class NSMutableArray;
 @class NSString;
 @class WSItemModel;
 @class WSMetadataStore;
 
-@protocol WSItemDragSourceReloading;
 
 /* **A FOLDER IS THE APPLICATION'S TO OPEN, NOT THIS VIEW'S.** The desktop posts this when a folder is
  * double-clicked; `WSApplication` makes the file window. A view that made windows itself would be a second place
@@ -34,7 +37,7 @@ extern NSString *WSDesktopViewPathKey;
  * paths on the same pasteboard a file window's does, and a drop onto it lands in the desktop's own directory — or in the
  * folder whose icon it was released on — by the same rule (`WSItemDrag`). The gesture is this view's own: a press on an
  * icon that moves is still how an icon is put somewhere else on the desktop. */
-@interface WSDesktopView : NSView <NSDraggingSource, WSItemDragSourceReloading>
+@interface WSDesktopView : NSView <NSDraggingSource, WSItemDragSourceReloading, WSItemDragSelectionTaking>
 {
 	WSItemModel *_model;
 	WSMetadataStore *_store;
@@ -79,6 +82,8 @@ extern NSString *WSDesktopViewPathKey;
 - (void)reload;
 /* The drag destination's answer: the files it moved are gone from here, so read the directory again. */
 - (void)reloadAfterChange;
+/* And the items a drop put here are the ones the hand meant, so they are the ones held. */
+- (void)cg_selectPaths:(NSArray *)paths;
 
 /* **THE DRAG, AS A PROBE ASKS FOR IT.** The same two doors the icon view has, for the same reason: a session only
  * begins from a real event, and a test has none. */

@@ -128,6 +128,8 @@ extern NSString *WSIconViewFolderPathKey;
 
 /* Reload the model and keep the still-present items selected — the destination of a drop and a rename both use it. */
 - (void)reloadAfterChange;
+/* Select the items at these paths — what a drop of them into this grid means, and the same door a probe uses. */
+- (void)cg_selectPaths:(NSArray *)paths;
 
 /* **THE TEST'S SEAMS, PREFIXED AS THE TIER'S PRIVATE DOORS ARE.** `-cg_proposedOperation…` is the policy arithmetic
  * without a live modifier state; `-cg_performDrop…` is the file operation without a fake pasteboard; and
