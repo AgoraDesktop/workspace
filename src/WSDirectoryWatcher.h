@@ -10,8 +10,11 @@
  * moved, a download that finished — none of them appeared until a person navigated away and back. The `New Folder`
  * command refreshed only because the command itself told the window; anything else was invisible.
  *
- * `libagora-watch` is this tree's FSEvents (`WORKSPACE-PLAN.md` §2, F3): its stream watches a path RECURSIVELY and
- * coalesces a burst of changes into one callback. This class is the small piece the views need between that stream and
+ * `libagora-watch` is this tree's FSEvents (`WORKSPACE-PLAN.md` §2, F3), and this class asks it for the NON-RECURSIVE
+ * form (a flag of ours, `kFSEventStreamCreateFlagNoRecursive`): one watch on the directory, no walk under it. A window
+ * watches what it shows — a change inside a subfolder it is not listing cannot change a row it is drawing — and the
+ * recursive form was measured as a freeze on a home directory. The stream coalesces a burst of changes into one
+ * callback either way. This class is the small piece the views need between that stream and
  * their own `-reloadData`: the stream's callback runs on ITS OWN READER THREAD — `libagora-watch` says so plainly and
  * offers no run-loop scheduling yet — and AppKit may only be touched from the main thread. So the callback does the one
  * thread-safe thing, raising a flag, and a repeating timer on the main run loop takes the flag and calls the target.

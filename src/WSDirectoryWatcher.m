@@ -58,9 +58,16 @@ static void fn_stream_changed(ConstFSEventStreamRef stream, void *info, size_t n
 				CFArrayRef paths = CFArrayCreate(NULL, values, 1, &kCFTypeArrayCallBacks);
 
 				context.info = _changed;
+				/* **THE WINDOW WATCHES WHAT IT SHOWS AND NOTHING ELSE.** `kFSEventStreamCreateFlagNoRecursive`
+				 * is this tree's own flag (see `EventStream.h`): one watch on the directory, no walk under it. A
+				 * window that recursed into `~` measured a freeze — 180,865 directories against a 65,536-watch
+				 * kernel limit, walked on the thread that navigated — and even bounded it was work for changes the
+				 * window does not draw: a file appearing in `~/Development/x/y/z` cannot change a row of the folder
+				 * the window is showing. */
 				_stream = FSEventStreamCreate(NULL, fn_stream_changed, &context, paths,
 							      kFSEventStreamEventIdSinceNow, WS_WATCH_LATENCY,
-							      kFSEventStreamCreateFlagFileEvents);
+							      kFSEventStreamCreateFlagFileEvents |
+							      kFSEventStreamCreateFlagNoRecursive);
 				if (paths != NULL) {
 					CFRelease(paths);
 				}
