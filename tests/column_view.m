@@ -416,6 +416,34 @@ int main(void)
 		rows = (menu != nil) ? [menu itemArray] : nil;
 		check([rows count] == 4 && [[[rows objectAtIndex:0] title] isEqual:@"New Folder"],
 		      "and a right-click below the rows asks the folder's own questions");
+		check([[[view cg_commandDirectory] lastPathComponent] isEqual:[root lastPathComponent]],
+		      "and the folder those rows are about is the one column zero shows");
+
+		/* **AND THE FOLDER IS THE COLUMN'S, NOT THE WINDOW'S.** A browser shows a chain of folders at once, so the rows
+		 * of a right-click in the SECOND column belong to the folder that column lists — MEASURED as "new directory in
+		 * the third column currently creates a new directory in the first". The command directory is what the window's
+		 * New Folder and Paste read, so it is what this records. */
+		{
+			NSInteger rowsInFirst;
+
+			[browser selectRow:0 inColumn:0];
+			rowsInFirst = [browser numberOfRowsInColumn:1];
+			check(rowsInFirst > 0, "selecting a folder fills the column beside it");
+			if (rowsInFirst > 0) {
+				NSRect last = [browser frameOfRow:(rowsInFirst - 1) inColumn:1];
+				NSPoint below = [browser convertPoint:NSMakePoint(NSMidX(last), NSMinY(last) - 20.0)
+							       toView:nil];
+
+				menu = [browser menuForEvent:rightClick(below)];
+				rows = (menu != nil) ? [menu itemArray] : nil;
+				check([rows count] == 4, "a right-click below the rows of the SECOND column asks a folder's questions");
+				printf("  (note: column 1's command directory is %s)\n",
+				       [[view cg_commandDirectory] UTF8String]);
+				check([[view cg_commandDirectory] isEqual:aFolder],
+				      "and that folder is the one the second column lists, not the window's");
+			}
+			[browser selectRow:0 inColumn:0];
+		}
 
 		[window setDelegate:nil];
 		[commands release];

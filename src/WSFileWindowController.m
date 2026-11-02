@@ -1106,24 +1106,36 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[[NSApplication sharedApplication] application:nil printFiles:paths];
 }
 
+/* **WHERE A COMMAND THAT MAKES SOMETHING PUTS IT.** A column view shows a chain of folders at once, so the folder a menu
+ * was raised in is not necessarily the folder the window opened on: "new directory in the third column" belongs in the
+ * third column's directory, and MEASURED it was landing in the first. Every other mode shows one folder, which is the
+ * window's own, and the browser says which one for itself. */
+- (NSString *)cg_commandDirectory
+{
+	if (_viewMode == 2 && _columnView != nil) {
+		return [_columnView cg_commandDirectory];
+	}
+	return _directory;
+}
+
 - (void)newFolder:(id)sender
 {
 	(void)sender;
-	(void)[_fileOperations createFolderInDirectory:_directory name:nil error:NULL];
+	(void)[_fileOperations createFolderInDirectory:[self cg_commandDirectory] name:nil error:NULL];
 	[self finishOperation];
 }
 
 - (void)duplicate:(id)sender
 {
 	(void)sender;
-	(void)[_fileOperations duplicatePaths:[self selectedPaths] inDirectory:_directory error:NULL];
+	(void)[_fileOperations duplicatePaths:[self selectedPaths] inDirectory:[self cg_commandDirectory] error:NULL];
 	[self finishOperation];
 }
 
 - (void)compress:(id)sender
 {
 	(void)sender;
-	(void)[_fileOperations compressPaths:[self selectedPaths] inDirectory:_directory error:NULL];
+	(void)[_fileOperations compressPaths:[self selectedPaths] inDirectory:[self cg_commandDirectory] error:NULL];
 	[self finishOperation];
 }
 
@@ -1163,10 +1175,10 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		return;
 	}
 	if (wasCut) {
-		(void)[_fileOperations movePaths:paths toDirectory:_directory error:NULL];
+		(void)[_fileOperations movePaths:paths toDirectory:[self cg_commandDirectory] error:NULL];
 		WSItemClipboardForget();
 	} else {
-		(void)[_fileOperations copyPaths:paths toDirectory:_directory error:NULL];
+		(void)[_fileOperations copyPaths:paths toDirectory:[self cg_commandDirectory] error:NULL];
 	}
 	[self finishOperation];
 }

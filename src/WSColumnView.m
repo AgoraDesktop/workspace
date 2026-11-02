@@ -84,9 +84,20 @@ static NSString *fn_size_string(WSItem *item)
 		return nil;
 	}
 	target = WSContextMenuCommandTarget(self);
-	if (![self getRow:&row column:&column forPoint:[self convertPoint:[event locationInWindow] fromView:nil]]
-	    || row < 0) {
-		return [WSContextMenu menuForBackgroundWithTarget:target];
+	{
+		BOOL inColumn = [self getRow:&row column:&column
+				     forPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+
+		/* **THE COLUMN THE CLICK LANDED IN IS WHAT THE COMMANDS ACT ON**, recorded before any row of the menu exists:
+		 * the window owns New Folder and Paste, and it must know that the third column's folder — not the window's — is
+		 * where they belong. A point in a gutter or outside the document has no column, and then the window's own folder
+		 * is the only answer there is. */
+		if (inColumn && column >= 0 && [[self delegate] isKindOfClass:[WSColumnView class]]) {
+			[(WSColumnView *)[self delegate] cg_prepareCommandsForColumn:column];
+		}
+		if (!inColumn || row < 0) {
+			return [WSContextMenu menuForBackgroundWithTarget:target];
+		}
 	}
 	/* **A RIGHT-CLICK INSIDE A GROUP KEEPS IT**, the rule the list and the grid follow: narrowing it to the one row under
 	 * the pointer would leave the commands a group is for with nothing to act on. */
@@ -240,6 +251,7 @@ static NSString *fn_size_string(WSItem *item)
 	[_model release];
 	[_childModels release];
 	[_columnCache release];
+	[_commandDirectory release];
 	[_browser release];
 	[_preview release];
 	[super dealloc];
@@ -298,6 +310,32 @@ static NSString *fn_size_string(WSItem *item)
  * column that held it stays open with nothing selected and the preview empties; when it is still there, it is selected
  * again and nothing about the view changed. A chain that breaks earlier stops there: an ancestor that no longer exists
  * is a stale place, and the columns beyond it have nothing to show. */
+/* **WHICH FOLDER A COLUMN LISTS.** Column zero lists the model's own folder; a later column lists the children of the
+ * item selected in the column to its left, which is where that column's rows came from. */
+- (NSString *)cg_directoryForColumn:(NSInteger)column
+{
+	WSItem *parent;
+
+	if (column <= 0) {
+		return [_model directory];
+	}
+	parent = [self itemAtRow:[_browser selectedRowInColumn:column - 1] column:column - 1];
+	return ([parent path] != nil) ? [parent path] : [_model directory];
+}
+
+- (void)cg_prepareCommandsForColumn:(NSInteger)column
+{
+	NSString *directory = [[self cg_directoryForColumn:column] copy];
+
+	[_commandDirectory release];
+	_commandDirectory = directory;
+}
+
+- (NSString *)cg_commandDirectory
+{
+	return (_commandDirectory != nil) ? _commandDirectory : [_model directory];
+}
+
 - (void)reloadData
 {
 	NSArray *chain = [self cg_selectedPathChain];

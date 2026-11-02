@@ -103,6 +103,11 @@ static NSString *placeTitleAt(WSFileWindowController *controller, NSInteger sect
 	return [(WSPlace *)item title];
 }
 
+/* THE BAND'S OWN HIT-TEST, which a probe may ask: the only way to say WHERE an item is without publishing the layout. */
+@interface NSObject (AGToolbarProbe)
+- (NSInteger)indexAtPoint:(NSPoint)point;
+@end
+
 int main(void)
 {
 	NSApplication *application = [NSApplication sharedApplication];
@@ -325,6 +330,31 @@ int main(void)
 		[first setViewMode:0];
 	}
 
+	/* **THE VIEW SWITCHER IS PINNED TO THE RIGHT OF THE WINDOW, AND THE SPACE BEFORE IT IS WHAT A RESIZE OPENS.** The
+	 * toolbar's default identifiers put one flexible spacer between Forward and the switcher, so the switcher must end
+	 * at the band's trailing edge, and stay there when the window grows. MEASURED through the band's own pointer door,
+	 * which is the same one a click uses. */
+	{
+		NSWindow *fileWindow = [first window];
+		NSToolbar *toolbar = [fileWindow toolbar];
+		NSView *band = [toolbar cg_view];
+		NSUInteger lastIndex = [[toolbar items] count] - 1;
+
+		check(band != nil && [band frame].size.width > 0.0, "the toolbar's band has a width");
+		[fileWindow setContentSize:NSMakeSize(1100.0, 500.0)];
+		printf("  (note: after a resize the band is %g wide and the item at its right edge is %ld of %lu)\n",
+		       (double)[band frame].size.width,
+		       (long)[(id)band indexAtPoint:NSMakePoint([band frame].size.width - 9.0, 20.0)],
+		       (unsigned long)[[toolbar items] count]);
+		check(fabs([band frame].size.width - 1100.0) < 1.0, "the band follows the window's new width");
+		check((NSUInteger)[(id)band indexAtPoint:NSMakePoint([band frame].size.width - 9.0, 20.0)] == lastIndex,
+		      "and the view switcher is against the band's right edge, not left behind at the old width");
+		/* THE WINDOW GOES BACK to the size the rest of this probe measures against. */
+		[fileWindow setContentSize:NSMakeSize(900.0, 560.0)];
+		check(fabs([band frame].size.width - 900.0) < 1.0,
+		      "and shrinking it again brings the band and the switcher back with it");
+	}
+
 	check([first cg_iconView] != nil, "the icon view exists");
 	check([[first cg_iconView] itemCount] == 4, "the icon view shows the model's items");
 	{
@@ -396,6 +426,50 @@ int main(void)
 	      "choosing Column builds the browser over the same four items");
 	[first cg_useIconView:nil];
 	check([first viewMode] == 0, "and choosing Icon returns to the grid");
+
+	/* **A COMMAND RAISED IN A COLUMN ACTS ON THAT COLUMN'S FOLDER.** The window owns New Folder and Paste, so it has to
+	 * be told which folder the menu was raised in: MEASURED as "new directory in the third column currently creates a new
+	 * directory in the first". Here the second column lists an empty folder, and a right-click in it must put the folder
+	 * THERE — and the column view must show it without the window being reopened. */
+	{
+		WSColumnView *columns;
+		NSBrowser *browser;
+		NSArray *inside;
+
+		[first cg_useColumnView:nil];
+		columns = [first cg_columnView];
+		browser = [columns cg_browser];
+		[browser selectRow:0 inColumn:0];
+		check([browser numberOfRowsInColumn:1] == 0, "the folder selected in column zero is empty, so column one is too");
+		{
+			NSRect strip = [browser titleFrameOfColumn:1];
+			NSPoint inWindow = [browser convertPoint:NSMakePoint(NSMidX(strip), NSMidY(strip)) toView:nil];
+			NSEvent *event = [NSEvent mouseEventWithType:NSRightMouseDown location:inWindow
+				modifierFlags:0 timestamp:0.0 windowNumber:0 context:nil eventNumber:0
+				clickCount:1 pressure:1.0f];
+
+			check([browser menuForEvent:event] != nil,
+			      "a right-click in the second column raises the folder's own menu");
+		}
+		check([[columns cg_commandDirectory] isEqual:folderA],
+		      "and the folder it is about is the one that column lists");
+		[first newFolder:nil];
+		inside = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:folderA error:NULL];
+		printf("  (note: after New Folder in column one, that folder holds %lu item(s))\n",
+		       (unsigned long)[inside count]);
+		check([inside count] == 1, "New Folder makes the folder in the COLUMN's folder, not in the window's");
+		check([browser numberOfRowsInColumn:1] == 1, "and the column view shows it at once");
+		/* THE FIXTURE GOES BACK AS IT WAS: later checks in this probe count what A Folder holds. */
+		{
+			NSUInteger k;
+
+			for (k = 0; k < [inside count]; k++) {
+				[[NSFileManager defaultManager] removeItemAtPath:
+					[folderA stringByAppendingPathComponent:[inside objectAtIndex:k]] error:NULL];
+			}
+		}
+		[first cg_useIconView:nil];
+	}
 
 	/* **AND COLUMN -> ICON -> COLUMN REBUILDS THE SAME GEOMETRY.** The browser's 256-slot pool and its per-column
 	 * scroll views are reused across the swap; the columns must come back at their own origins, not stacked or

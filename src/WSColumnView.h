@@ -43,6 +43,10 @@
 	NSMutableDictionary *_childModels;	/* RETAINED: path -> WSItemModel */
 	NSMutableDictionary *_columnCache;	/* RETAINED: column number -> sorted WSItem array */
 	WSFileOperations *_fileOperations;	/* NOT RETAINED: the window's, so a drop it performs is undoable */
+	/* **THE DIRECTORY A CONTEXT MENU'S COMMANDS ACT ON**, which is the one the column that was right-clicked lists —
+	 * not the window's. A browser shows a chain of folders at once, so "New Folder" in the third column belongs in the
+	 * third column's folder, and the window that owns the command has to be told which one the click landed in. */
+	NSString *_commandDirectory;		/* RETAINED */
 }
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
@@ -56,6 +60,11 @@
  * should not grow one: the move a drop makes is the window's, and the window's Edit menu is where it is taken back. */
 - (nullable WSFileOperations *)fileOperations;
 - (void)setFileOperations:(nullable WSFileOperations *)operations;
+
+/* **THE COLUMN A MENU WAS RAISED IN, SAID BEFORE THE MENU EXISTS.** The browser's right-click records the directory that
+ * column lists here; every command the menu sends then asks `-cg_commandDirectory` rather than the window's folder. */
+- (void)cg_prepareCommandsForColumn:(NSInteger)column;
+- (nullable NSString *)cg_commandDirectory;
 
 - (void)reloadData;
 - (nullable WSItem *)selectedItem;
