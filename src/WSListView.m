@@ -538,16 +538,33 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	return WSListNameColumn;
 }
 
-- (void)outlineView:(NSOutlineView *)outlineView sortDescriptorsDidChange:(NSArray *)oldDescriptors
+/* **THE SORT IS READ BACK FROM THE TABLE'S DESCRIPTORS, WHICHEVER DOOR SAID SO.** Apple declares this on
+ * `NSOutlineViewDelegate` and `-tableView:sortDescriptorsDidChange:` on `NSTableViewDataSource`; this view is its own
+ * DATA SOURCE (the window's controller is the delegate), so the data-source spelling is the one a header click reaches —
+ * and the outline spelling forwards here for a delegate that chooses to answer in its own vocabulary. One implementation,
+ * two doors, and a click changes the order either way. */
+- (void)cg_sortDescriptorsDidChange:(NSArray *)oldDescriptors
 {
-	NSSortDescriptor *descriptor = ([[outlineView sortDescriptors] count] > 0)
-		? [[outlineView sortDescriptors] objectAtIndex:0] : nil;
+	NSSortDescriptor *descriptor = ([[self sortDescriptors] count] > 0)
+		? [[self sortDescriptors] objectAtIndex:0] : nil;
 
 	(void)oldDescriptors;
 	_sortKey = [self keyForDescriptorKey:(descriptor != nil) ? [descriptor key] : nil];
 	_sortAscending = (descriptor != nil) ? [descriptor ascending] : YES;
 	[_sortedCache removeAllObjects];
 	[self reloadData];
+}
+
+- (void)tableView:(NSTableView *)tableView sortDescriptorsDidChange:(NSArray *)oldDescriptors
+{
+	(void)tableView;
+	[self cg_sortDescriptorsDidChange:oldDescriptors];
+}
+
+- (void)outlineView:(NSOutlineView *)outlineView sortDescriptorsDidChange:(NSArray *)oldDescriptors
+{
+	(void)outlineView;
+	[self cg_sortDescriptorsDidChange:oldDescriptors];
 }
 
 - (void)setSortKey:(WSItemSortKey)key ascending:(BOOL)ascending

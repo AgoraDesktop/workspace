@@ -27,6 +27,7 @@
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
+#import <AppKit/NSTableHeaderView.h>
 #import <AppKit/NSTextFieldCell.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
@@ -284,6 +285,50 @@ int main(void)
 	      "and its Date is a formatted date");
 	check([[WSItemKind kindForItem:(WSItem *)[list itemAtRow:6]] length] > 0,
 	      "a file's Kind is non-empty");
+
+	/* **2b. A CLICK ON A COLUMN HEADER SORTS BY THAT COLUMN, AND A SECOND CLICK REVERSES IT.** The header sets the
+	 * table's sort descriptors; the OUTLINE's contract is a delegate method (`-outlineView:sortDescriptorsDidChange:`),
+	 * so a view told in the table's spelling would change the descriptors and nothing else — MEASURED as "the column
+	 * headers do not sort the list". This drives the real header of the real scroll view. */
+	{
+		NSTableHeaderView *header = [list headerView];
+		NSInteger sizeColumn = -1;
+		NSInteger columnIndex;
+		NSRect cell;
+
+		for (columnIndex = 0; columnIndex < (NSInteger)[[list tableColumns] count]; columnIndex++) {
+			NSTableColumn *column = [[list tableColumns] objectAtIndex:(NSUInteger)columnIndex];
+
+			if ([[column identifier] isEqual:@"size"]) {
+				sizeColumn = columnIndex;
+			}
+		}
+		check(sizeColumn >= 0 && [header superview] != nil,
+		      "the header is in the scroll view and has a Size column");
+		cell = [header headerRectOfColumn:sizeColumn];
+		{
+			NSPoint windowPoint = [header convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell)) toView:nil];
+			NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown location:windowPoint
+						     modifierFlags:0 timestamp:0.0
+						      windowNumber:[window windowNumber]
+							   context:nil eventNumber:0 clickCount:1 pressure:1.0f];
+			NSEvent *up = [NSEvent mouseEventWithType:NSLeftMouseUp location:windowPoint
+						   modifierFlags:0 timestamp:0.0
+						    windowNumber:[window windowNumber]
+							 context:nil eventNumber:0 clickCount:1 pressure:1.0f];
+
+			[header mouseDown:down];
+			[header mouseUp:up];
+			check([list sortKey] == WSItemSortSize,
+			      "clicking the Size header sorts by size");
+
+			[header mouseDown:down];
+			[header mouseUp:up];
+			check([list sortKey] == WSItemSortSize && [[list sortDescriptors] count] == 1
+			      && [[[list sortDescriptors] objectAtIndex:0] ascending] == NO,
+			      "and a second click reverses the same column instead of leaving it");
+		}
+	}
 
 	/* 3. THE OTHER THREE KEYS, EACH STILL DIRECTORIES-FIRST. */
 	[list setSortKey:WSItemSortSize ascending:YES];
