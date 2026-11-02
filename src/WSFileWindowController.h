@@ -57,6 +57,7 @@
 	/* **THE TRASH HAS NO PATH BAR AT ALL**, decided once when the window is built: a strip whose only content would be
 	 * a breadcrumb ending in `.Trash` is a strip that says something untrue about the place. */
 	BOOL _isTrashDirectory;
+	NSArray *_stripConstraints;		/* RETAINED: the strips' layout, taken down when the window enters or leaves the trash */
 	NSSplitView *_split;			/* RETAINED by the content view */
 	NSOutlineView *_sidebar;		/* RETAINED by its scroll view */
 	NSScrollView *_sidebarScroll;		/* RETAINED by the split view */

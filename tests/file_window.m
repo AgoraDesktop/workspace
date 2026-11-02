@@ -158,6 +158,18 @@ int main(void)
 		check([[[inTrash window] title] isEqual:@"Trash"],
 		      "a window on the trash is titled Trash rather than the directory's own name");
 		check([[inTrash cg_pathControl] URL] == nil, "and its path bar shows no path at all");
+		check([[inTrash cg_pathControl] superview] == nil, "and it is not in the window's layout at all");
+
+		/* **AND LEAVING THE TRASH PUTS BOTH BACK.** The title and the path bar are decided by WHERE the window is, not by
+		 * where it started: a window opened on `.Trash` and sent Home must say the folder's name and show its breadcrumb
+		 * again. The path bar is not merely hidden — it is not part of the layout — so the strip is re-installed rather
+		 * than a flag flipped. */
+		[inTrash navigateToDirectory:root];
+		check([[[inTrash window] title] isEqual:[root lastPathComponent]],
+		      "navigating out of the trash restores the folder's own title");
+		check([[inTrash cg_pathControl] superview] != nil
+		      && [[[inTrash cg_pathControl] URL] path] != nil,
+		      "and the path bar is back, showing where the window now is");
 		(void)inTrash;	/* the probe leaks it: the application owns its windows */
 	}
 	/* **THE TRASH'S MENU HAS THE WAY BACK, AND NOTHING ELSE DOES.** Every surface raises the same rows and aims them at
@@ -283,6 +295,35 @@ int main(void)
 		[trash release];
 		[[NSFileManager defaultManager] removeItemAtPath:fixture error:NULL];
 	}
+	/* **THE WATCHES ARE THE ROWS THE WINDOW DRAWS.** The folder shown, and every folder expanded under it: a change in a
+	 * subtree nobody opened cannot change a row that is on the glass, and a subtree that IS open must stay live. So
+	 * expanding adds a path and collapsing drops it, and the folder the window shows is always in the list. */
+	{
+		[first navigateToDirectory:root];
+		[first setViewMode:1];
+		{
+			WSListView *list = [first cg_listView];
+			WSItem *folder = [list cg_itemForPath:folderA];
+			NSArray *paths;
+
+			check(folder != nil, "a folder in the list is a row to expand");
+			paths = [[first cg_watcher] paths];
+			check([paths containsObject:root] && ![paths containsObject:folderA],
+			      "before expanding, the window watches the folder it shows and nothing under it");
+
+			[list expandItem:folder];
+			check([[[first cg_watcher] paths] containsObject:folderA],
+			      "expanding a folder puts a watch on it too");
+
+			[list collapseItem:folder];
+			check(![[[first cg_watcher] paths] containsObject:folderA],
+			      "and collapsing it takes the watch away again");
+			check([[[first cg_watcher] paths] containsObject:root],
+			      "while the folder the window is showing stays watched");
+		}
+		[first setViewMode:0];
+	}
+
 	check([first cg_iconView] != nil, "the icon view exists");
 	check([[first cg_iconView] itemCount] == 4, "the icon view shows the model's items");
 	{

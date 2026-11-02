@@ -40,45 +40,58 @@ static void fn_stream_changed(ConstFSEventStreamRef stream, void *info, size_t n
 
 @implementation WSDirectoryWatcher
 
-- (instancetype)initWithDirectory:(NSString *)directory target:(id)target action:(SEL)action
+/* THE STREAM, BUILT FROM WHATEVER PATHS THE WINDOW IS SHOWING.** A window shows its folder and whatever it has
+ * expanded under it, so the watch is a LIST: one directory, or a folder and the three subtrees a person opened. Every
+ * path is watched on its own and the stream is NON-RECURSIVE (`kFSEventStreamCreateFlagNoRecursive`), which is what
+ * makes "the paths given" mean "the rows drawn" — no walk under a folder nobody expanded, and no freeze on a home
+ * directory (180,865 directories against a 65,536-watch limit, measured). */
+- (void)fn_openStream
+{
+	CFMutableArrayRef paths;
+	FSEventStreamContext context = { 0 };
+	NSUInteger i;
+
+	if (_stream != NULL) {
+		FSEventStreamStop(_stream);
+		FSEventStreamInvalidate(_stream);
+		FSEventStreamRelease(_stream);
+		_stream = NULL;
+	}
+	if (_changed == NULL || [_paths count] == 0) {
+		return;
+	}
+	paths = CFArrayCreateMutable(NULL, (CFIndex)[_paths count], &kCFTypeArrayCallBacks);
+	if (paths == NULL) {
+		return;
+	}
+	for (i = 0; i < [_paths count]; i++) {
+		CFStringRef path = CFStringCreateWithCString(NULL, [[_paths objectAtIndex:i] UTF8String],
+							     kCFStringEncodingUTF8);
+
+		if (path != NULL) {
+			CFArrayAppendValue(paths, path);
+			CFRelease(path);
+		}
+	}
+	context.info = _changed;
+	_stream = FSEventStreamCreate(NULL, fn_stream_changed, &context, paths,
+				      kFSEventStreamEventIdSinceNow, WS_WATCH_LATENCY,
+				      kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoRecursive);
+	CFRelease(paths);
+	if (_stream != NULL) {
+		(void)FSEventStreamStart(_stream);
+	}
+}
+
+- (instancetype)initWithPaths:(NSArray *)paths target:(id)target action:(SEL)action
 {
 	self = [super init];
-	if (self != nil && directory != nil && [directory length] > 0) {
-		CFStringRef path = CFStringCreateWithCString(NULL, [directory UTF8String], kCFStringEncodingUTF8);
-		FSEventStreamContext context = { 0 };
-		const void *values[1];
-
-		_directory = [directory copy];
+	if (self != nil) {
+		_paths = [paths copy];
 		_target = target;
 		_action = action;
 		_changed = (int *)calloc(1, sizeof(int));
-		if (path != NULL && _changed != NULL) {
-			values[0] = path;
-			{
-				CFArrayRef paths = CFArrayCreate(NULL, values, 1, &kCFTypeArrayCallBacks);
-
-				context.info = _changed;
-				/* **THE WINDOW WATCHES WHAT IT SHOWS AND NOTHING ELSE.** `kFSEventStreamCreateFlagNoRecursive`
-				 * is this tree's own flag (see `EventStream.h`): one watch on the directory, no walk under it. A
-				 * window that recursed into `~` measured a freeze — 180,865 directories against a 65,536-watch
-				 * kernel limit, walked on the thread that navigated — and even bounded it was work for changes the
-				 * window does not draw: a file appearing in `~/Development/x/y/z` cannot change a row of the folder
-				 * the window is showing. */
-				_stream = FSEventStreamCreate(NULL, fn_stream_changed, &context, paths,
-							      kFSEventStreamEventIdSinceNow, WS_WATCH_LATENCY,
-							      kFSEventStreamCreateFlagFileEvents |
-							      kFSEventStreamCreateFlagNoRecursive);
-				if (paths != NULL) {
-					CFRelease(paths);
-				}
-			}
-			CFRelease(path);
-		} else if (path != NULL) {
-			CFRelease(path);
-		}
-		if (_stream != NULL) {
-			(void)FSEventStreamStart(_stream);
-		}
+		[self fn_openStream];
 		/* **AND THE MAIN THREAD'S HALF IS A TIMER, WHICH IS ALSO WHAT MAKES THIS CLASS SURVIVE ITS OWN START.** A
 		 * watcher with no stream (a directory that is not there) still gets its timer, so its owner has one object to
 		 * keep and release rather than a nil to test at every turn. */
@@ -89,6 +102,14 @@ static void fn_stream_changed(ConstFSEventStreamRef stream, void *info, size_t n
 							 repeats:YES] retain];
 	}
 	return self;
+}
+
+- (instancetype)initWithDirectory:(NSString *)directory target:(id)target action:(SEL)action
+{
+	if (directory == nil || [directory length] == 0) {
+		return [self initWithPaths:[NSArray array] target:target action:action];
+	}
+	return [self initWithPaths:[NSArray arrayWithObject:directory] target:target action:action];
 }
 
 - (void)dealloc
@@ -120,7 +141,27 @@ static void fn_stream_changed(ConstFSEventStreamRef stream, void *info, size_t n
 	_action = NULL;
 }
 
-- (NSString *)directory { return _directory; }
+- (NSArray *)paths { return _paths; }
+- (NSString *)directory { return ([_paths count] > 0) ? [_paths objectAtIndex:0] : nil; }
+
+/* **A WINDOW THAT EXPANDS A FOLDER WATCHES IT TOO, AND ONE THAT COLLAPSES IT STOPS.** The list is replaced, and the
+ * stream is rebuilt only when the list actually changed — expanding the same folder twice is not two streams. */
+- (BOOL)setPaths:(NSArray *)paths
+{
+	NSArray *copy;
+
+	if (paths == nil) {
+		paths = [NSArray array];
+	}
+	if ([_paths isEqual:paths]) {
+		return NO;
+	}
+	copy = [paths copy];
+	[_paths release];
+	_paths = copy;
+	[self fn_openStream];
+	return YES;
+}
 
 /* **ONE REFRESH PER BURST, ON THE MAIN THREAD.** The exchange is what makes a storm of changes — and the stream's own
  * reader thread — cost exactly one reload: whoever takes the 1 owns the notification. */
@@ -130,7 +171,11 @@ static void fn_stream_changed(ConstFSEventStreamRef stream, void *info, size_t n
 		return;
 	}
 	if (_target != nil && _action != NULL && [_target respondsToSelector:_action]) {
+		/* **THE TARGET MAY LET GO OF THIS WATCHER WHILE IT ANSWERS** — a refresh that navigates or changes the watched
+		 * set replaces it — so the object is held across the call rather than used after its owner has dropped it. */
+		[self retain];
 		(void)[_target performSelector:_action withObject:self];
+		[self release];
 	}
 }
 

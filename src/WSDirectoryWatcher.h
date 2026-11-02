@@ -30,11 +30,12 @@
 
 #include <Watch/EventStream.h>
 
+@class NSArray;
 @class NSString;
 
 @interface WSDirectoryWatcher : NSObject
 {
-	NSString *_directory;		/* RETAINED: what is being watched */
+	NSArray *_paths;		/* RETAINED: the directories being watched — the folder shown and the ones expanded */
 	FSEventStreamRef _stream;	/* the kernel's own stream; NULL once started or never created */
 	int *_changed;			/* MALLOC'D: raised on the stream's thread, taken on the main one */
 	id _target;			/* NOT RETAINED: the view or controller that wants to know */
@@ -45,10 +46,19 @@
 /* The action is sent to `target` on the MAIN thread, with this watcher as its argument, whenever the stream has
  * reported a change since the last drain. A directory that cannot be watched (a path that is not there, no kernel
  * support) still answers an object: a missing ear is not an error, it is a window that behaves as it did before. */
+/* **THE PATHS ARE WHAT THE WINDOW SHOWS**: its folder, and every folder it has expanded under it. One watch each, no
+ * walk — a change under a folder nobody opened cannot change a row that is drawn. */
+- (instancetype)initWithPaths:(NSArray *)paths target:(id)target action:(SEL)action;
+
+/* The one-directory form, for a surface that shows exactly one folder (the desktop, a probe). */
 - (instancetype)initWithDirectory:(NSString *)directory target:(id)target action:(SEL)action;
 
+/* Replace the list; answers YES when the stream was rebuilt. A colapsed folder stops being watched here. */
+- (BOOL)setPaths:(NSArray *)paths;
+- (NSArray *)paths;
+
 - (void)invalidate;
-- (nullable NSString *)directory;
+- (nullable NSString *)directory;	/* the first path, for a caller that watches one */
 
 /* **THE SEAM, AND ALSO THE TIMER'S OWN DOOR.** The timer calls this; a probe calls it too, because a headless test has
  * no run loop to turn. */

@@ -212,6 +212,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	[_watcher invalidate];
 	[_watcher release];
+	[_stripConstraints release];
 	[_directory release];
 	[_model release];
 	[_history release];
@@ -361,6 +362,8 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		[[_status heightAnchor] constraintEqualToConstant:WS_STATUS_BAR_HEIGHT],
 		nil]];
 	[NSLayoutConstraint activateConstraints:constraints];
+	[_stripConstraints release];
+	_stripConstraints = [constraints copy];
 }
 
 /* **THE DOCUMENT VIEW'S SIZE IS STILL THE SHELL'S, BECAUSE A SCROLL VIEW'S DOCUMENT IS NOT A STRIP.** The split
@@ -411,6 +414,31 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 /* **WHICH FOLDERS ARE TRASHES, BY THE RULE THIS TIER ALREADY MOVES BY**: the home Trash for the home volume, and a
  * `.Trash-<uid>` on any other. Both are named that way by `WSTrash`'s own rule (`WSTrash.h`), so the test is the name
  * and not a second table of directories — a volume mounted tomorrow has a Trash the moment it has one of those. */
+/* **IS THIS WINDOW SHOWING THE TRASH? ASK ON EVERY NAVIGATION, NOT ONCE.** The answer decides the title and whether the
+ * path bar exists at all, so it is a fact about the window's CURRENT directory: a window opened on `.Trash` and then
+ * sent Home must show `kyle` and its breadcrumb again. The path bar is not merely hidden — it is not in the layout —
+ * so the constraints are taken down and put back rather than a hidden flag flipped. */
+- (void)fn_applyTrashLayout
+{
+	BOOL wasTrash = _isTrashDirectory;
+
+	_isTrashDirectory = [self fn_isTrashDirectory:_directory];
+	if (_isTrashDirectory == wasTrash) {
+		return;
+	}
+	if (_stripConstraints != nil) {
+		[NSLayoutConstraint deactivateConstraints:_stripConstraints];
+		[_stripConstraints release];
+		_stripConstraints = nil;
+	}
+	if (_isTrashDirectory) {
+		[_pathBar removeFromSuperview];
+	} else {
+		[[[self window] contentView] addSubview:_pathBar];
+	}
+	[self installStripConstraints];
+}
+
 - (BOOL)fn_isTrashDirectory:(NSString *)directory
 {
 	NSString *name = [directory lastPathComponent];
@@ -421,17 +449,35 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	return [name hasPrefix:@".Trash-"];
 }
 
-/* **THE WINDOW WATCHES THE FOLDER IT IS SHOWING, AND ONLY THAT FOLDER.** `libagora-watch`'s stream is recursive, so a
- * change inside a subfolder the list has expanded arrives too; a change anywhere else is another window's business.
+/* **THE WINDOW WATCHES WHAT IT SHOWS: ITS FOLDER, AND THE FOLDERS IT HAS EXPANDED.** Not the folder recursively — a
+ * change under a folder nobody opened cannot change a row that is drawn, and asking the kernel about a home directory
+ * was measured as a freeze. The list view answers which rows are open (`-cg_expandedPaths`), and each is one watch, so
+ * an expanded subtree is live while it is open and stops being watched when it closes.
+ *
  * The watcher is replaced when the window navigates, because a stream for the directory somebody left is an ear on
- * nothing. */
+ * nothing; a changed SET of paths keeps the watcher and rebuilds its stream (`-setPaths:`). */
+- (NSArray *)fn_watchedPaths
+{
+	NSMutableArray *paths = [NSMutableArray array];
+
+	if (_directory != nil) {
+		[paths addObject:_directory];
+	}
+	/* ONLY THE LIST HAS EXPANDED ROWS. The grid shows one folder and the browser one column per level, and neither
+	 * keeps a tree open, so neither adds a path. */
+	if (_viewMode == 1 && _listView != nil) {
+		[paths addObjectsFromArray:[_listView cg_expandedPaths]];
+	}
+	return paths;
+}
+
 - (void)fn_watchDirectory
 {
 	[_watcher invalidate];
 	[_watcher release];
-	_watcher = [[WSDirectoryWatcher alloc] initWithDirectory:_directory
-							  target:self
-							  action:@selector(fn_directoryDidChange:)];
+	_watcher = [[WSDirectoryWatcher alloc] initWithPaths:[self fn_watchedPaths]
+						      target:self
+						      action:@selector(fn_directoryDidChange:)];
 }
 
 /* **A CHANGE ON THE DISK IS A REFRESH, NOT A RELOAD OF THE WORLD.** Everything the window shows is read from the
@@ -506,6 +552,10 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	}
 	[[self window] setTitle:title];
 	[self refreshIconFrame];
+	/* **AND THE WATCHES FOLLOW THE ROWS.** Expanding a folder calls this through `-listViewDidChangeModel:`, so the
+	 * subtree is watched from the moment it is open; collapsing it drops the path. A refresh that changes nothing does
+	 * no work — `-setPaths:` compares. */
+	[_watcher setPaths:[self fn_watchedPaths]];
 	[self syncSidebarSelection];
 	[_toolbar validateVisibleItems];
 }
@@ -568,6 +618,11 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	_directory = [standard copy];
 	[_model release];
 	_model = [[WSItemModel alloc] initWithDirectory:_directory];
+	/* **A WINDOW CAN ENTER OR LEAVE THE TRASH, AND THE STRIP IS ABOUT WHERE IT IS.** The path bar and the title were
+	 * decided once, when the window was made: a window opened ON the trash kept its `.Trash` title and no path bar after
+	 * navigating to Home. Both are re-decided here, with the constraints rebuilt because the path bar is part of the
+	 * layout rather than a hidden view. */
+	[self fn_applyTrashLayout];
 	[self fn_watchDirectory];
 	[self refresh];
 }
@@ -677,6 +732,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		fn_resetContentScroll(_contentScroll);
 		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
 	}
+	[_watcher setPaths:[self fn_watchedPaths]];
 }
 
 - (void)cg_useIconView:(id)sender

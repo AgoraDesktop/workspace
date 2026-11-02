@@ -636,6 +636,12 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	if (item != nil) {
 		[_expandedPaths addObject:[(WSItem *)item path]];
 	}
+	/* **THE WINDOW IS TOLD, BECAUSE AN EXPANDED FOLDER IS A ROW IT NOW DRAWS.** The file window watches what it shows,
+	 * one watch per shown directory, so opening a subtree has to reach it: this is the same "the tree changed" door a
+	 * drop and a rename use, and the window re-aligns its watches there. */
+	if ([_listDelegate respondsToSelector:@selector(listViewDidChangeModel:)]) {
+		[_listDelegate listViewDidChangeModel:self];
+	}
 }
 
 - (void)itemDidCollapse:(NSNotification *)notification
@@ -648,6 +654,10 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	item = [[notification userInfo] objectForKey:NSOutlineViewItemKey];
 	if (item != nil) {
 		[_expandedPaths removeObject:[(WSItem *)item path]];
+	}
+	/* And closing one stops it being watched — the same door, for the same reason. */
+	if ([_listDelegate respondsToSelector:@selector(listViewDidChangeModel:)]) {
+		[_listDelegate listViewDidChangeModel:self];
 	}
 }
 
