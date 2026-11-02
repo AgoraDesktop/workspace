@@ -39,6 +39,7 @@
 @class WSListView;
 @class WSProgressWindow;
 @class WSTrash;
+@class WSHairlineView;
 @class NSUndoManager;
 @class WSHistory;
 @class WSItemModel;
@@ -71,6 +72,9 @@
 	WSTrash *_trash;			/* RETAINED */
 	WSProgressWindow *_progressWindow;	/* RETAINED, made on demand */
 	NSTextField *_status;			/* RETAINED by the content view */
+	/* **THE RULE ABOVE THE STATUS BAR**, because that strip is a bare label and has no border of its own: the pane
+	 * above it would otherwise meet the window's face with no line, the one edge in this window left unmarked. */
+	WSHairlineView *_statusRule;		/* RETAINED by the content view */
 	NSToolbar *_toolbar;			/* RETAINED by the window */
 	NSSegmentedControl *_viewSwitcher;	/* RETAINED by its toolbar item */
 

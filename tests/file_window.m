@@ -15,6 +15,7 @@
 #import "WSFileOperations.h"
 #import "WSIconView.h"
 #import "WSFileWindowController.h"
+#import "WSHairlineView.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 #import "WSListView.h"
@@ -519,9 +520,36 @@ int main(void)
 		check(near([[first cg_statusField] frame].origin.y, 0.0)
 		      && near([[first cg_statusField] frame].size.height, 22.0),
 		      "the status bar is its bottom strip");
-		check(near([[first cg_splitView] frame].origin.y, 22.0)
-		      && near([[first cg_splitView] frame].size.height, 354.0),
-		      "and the split view fills what is between");
+		/* **AND THE SPLIT VIEW ENDS ONE POINT ABOVE THE STATUS BAR, WHERE THE RULE IS.** The strip is a bare
+		 * label with no border, so the pane above it met the window's face with nothing between them; the
+		 * hairline is a view of its own, pinned to the same edges. */
+		check(near([[first cg_splitView] frame].origin.y, 23.0)
+		      && near([[first cg_splitView] frame].size.height, 353.0),
+		      "and the split view fills what is between, less the hairline above the status bar");
+		{
+			WSHairlineView *rule = nil;
+			NSArray *subs = [[[first window] contentView] subviews];
+			NSUInteger i;
+
+			for (i = 0; i < [subs count]; i++) {
+				NSView *v = [subs objectAtIndex:i];
+
+				if ([v isKindOfClass:[WSHairlineView class]]) {
+					rule = (WSHairlineView *)v;
+				}
+			}
+			check(rule != nil, "the status bar's hairline is in the content view");
+			if (rule != nil) {
+				/* **ITS PLACE IS WHAT CAN SILENTLY BREAK** — a rule that is not pinned above the status bar is a
+				 * grey line in the wrong place, and one that is not one point tall is a band. The colour is
+				 * `controlDarkShadowColor`, the same tier grey the splitter's hairlines and a column's title rule use,
+				 * and `libagora-app/tests/split_view.m` measures that grey in pixels. */
+				check([rule isOpaque], "and it is opaque, so it cannot be skipped as transparent");
+				check(near([rule frame].origin.y, 22.0) && near([rule frame].size.height, 1.0)
+				      && near([rule frame].size.width, 700.0),
+				      "it is one point tall, as wide as the window and directly above the status bar");
+			}
+		}
 		check(near([sidebarPane frame].size.width, sidebarWidth),
 		      "the sidebar keeps its width when the window shrinks");
 		contentWidthAt700 = [contentPane frame].size.width;
@@ -532,9 +560,9 @@ int main(void)
 
 		[[first window] setContentSize:NSMakeSize(1000.0, 500.0)];
 		check(near([[first cg_pathControl] frame].origin.y, 476.0)
-		      && near([[first cg_splitView] frame].origin.y, 22.0)
-		      && near([[first cg_splitView] frame].size.height, 454.0),
-		      "a second, larger resize places the strips again");
+		      && near([[first cg_splitView] frame].origin.y, 23.0)
+		      && near([[first cg_splitView] frame].size.height, 453.0),
+		      "a second, larger resize places the strips again, the hairline above the status bar included");
 		check(near([sidebarPane frame].size.width, sidebarWidth),
 		      "the sidebar is still the width it was");
 		check([contentPane frame].size.width > contentWidthAt700,

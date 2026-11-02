@@ -32,6 +32,7 @@
 #import "WSProgressWindow.h"
 #import "WSDirectoryWatcher.h"
 #import "WSTrash.h"
+#import "WSHairlineView.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColor.h>
@@ -321,6 +322,12 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_status setTextColor:[NSColor darkGrayColor]];
 	[_status setStringValue:@""];
 	[[[self window] contentView] addSubview:_status];
+
+	/* **AND THE RULE BETWEEN THE PANE AND THAT STRIP.** The status bar is a label, not a control: it has no border to
+	 * give, so the split view's panes ended at the window's face with nothing between them — the one meeting in this
+	 * window without a line, now that a column's title strip and each side of the splitter have one. */
+	_statusRule = [[WSHairlineView alloc] initWithFrame:NSMakeRect(0.0, WS_STATUS_BAR_HEIGHT, 900.0, 1.0)];
+	[[[self window] contentView] addSubview:_statusRule];
 }
 
 /* ---- THE CONTENT VIEW'S CONSTRAINTS --------------------------------------------------------- */
@@ -337,6 +344,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_pathBar setTranslatesAutoresizingMaskIntoConstraints:NO];
 	[_split setTranslatesAutoresizingMaskIntoConstraints:NO];
 	[_status setTranslatesAutoresizingMaskIntoConstraints:NO];
+	[_statusRule setTranslatesAutoresizingMaskIntoConstraints:NO];
 
 	NSMutableArray *constraints = [NSMutableArray array];
 
@@ -354,7 +362,11 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		_isTrashDirectory
 			? [[_split topAnchor] constraintEqualToAnchor:[content topAnchor]]
 			: [[_split topAnchor] constraintEqualToAnchor:[_pathBar bottomAnchor]],
-		[[_split bottomAnchor] constraintEqualToAnchor:[_status topAnchor]],
+		[[_split bottomAnchor] constraintEqualToAnchor:[_statusRule topAnchor]],
+		[[_statusRule heightAnchor] constraintEqualToConstant:1.0],
+		[[_statusRule leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
+		[[_statusRule trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],
+		[[_statusRule bottomAnchor] constraintEqualToAnchor:[_status topAnchor]],
 
 		[[_status leadingAnchor] constraintEqualToAnchor:[content leadingAnchor]],
 		[[_status trailingAnchor] constraintEqualToAnchor:[content trailingAnchor]],

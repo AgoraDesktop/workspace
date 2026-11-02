@@ -32,6 +32,7 @@
 #import <AppKit/NSWindow.h>
 #import <Foundation/Foundation.h>
 
+#include <objc/runtime.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -321,7 +322,9 @@ int main(void)
 			[header mouseUp:up];
 			check([list sortKey] == WSItemSortSize,
 			      "clicking the Size header sorts by size");
-
+			check([[[list sortDescriptors] objectAtIndex:0] key] != nil
+			      && [[[[list sortDescriptors] objectAtIndex:0] key] isEqual:@"size"],
+			      "and the table's own descriptors say so, which is what the header draws from");
 			[header mouseDown:down];
 			[header mouseUp:up];
 			check([list sortKey] == WSItemSortSize && [[list sortDescriptors] count] == 1
