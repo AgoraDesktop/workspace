@@ -11,12 +11,15 @@
  * with its own model and its own cursor. Offscreen: no compositor, no click, no menu tracking.
  */
 #import "WSColumnView.h"
+#import "WSContextMenu.h"
+#import "WSFileOperations.h"
 #import "WSIconView.h"
 #import "WSFileWindowController.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 #import "WSListView.h"
 #import "WSPlaces.h"
+#import "WSTrash.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBrowser.h>
@@ -156,6 +159,89 @@ int main(void)
 		      "a window on the trash is titled Trash rather than the directory's own name");
 		check([[inTrash cg_pathControl] URL] == nil, "and its path bar shows no path at all");
 		(void)inTrash;	/* the probe leaks it: the application owns its windows */
+	}
+	/* **THE TRASH'S MENU HAS THE WAY BACK, AND NOTHING ELSE DOES.** Every surface raises the same rows and aims them at
+	 * whoever owns the selection; the window knows whether it is showing the Trash, and that is the one fact that turns
+	 * "Move to Trash" into "Put Back". The put-back itself is the record beside each trashed item — the original path —
+	 * so the probe gives the window a trash of its own rather than touching the account's. */
+	{
+		/* **A FIXTURE OF ITS OWN, OUTSIDE THE FOLDER THE REST OF THE PROBE IS LOOKING AT** — the window watches its
+		 * directory, so a folder made inside it would change the count a later check reads. */
+		NSString *fixture = [NSString stringWithFormat:@"%@-trash", root];
+		NSString *tempTrash = [fixture stringByAppendingPathComponent:@".Trash"];
+		NSString *doomed = [fixture stringByAppendingPathComponent:@"put-me-back.txt"];
+		WSTrash *trash = [[WSTrash alloc] initWithRoot:tempTrash];
+		WSFileOperations *operations = [[WSFileOperations alloc] initWithUndoManager:nil trash:trash];
+		WSFileWindowController *inTrash;
+		NSMenuItem *row;
+		NSMenu *menu;
+
+		check(makeDirectory(fixture), "a fixture is made");
+		check(makeFile(doomed), "a file is made to be thrown away");
+		check([[operations movePathsToTrash:[NSArray arrayWithObject:doomed] error:NULL] count] == 1,
+		      "and goes into the probe's own trash, with its Put Back record");
+		inTrash = [[WSFileWindowController alloc] initWithDirectory:tempTrash];
+		[inTrash setFileOperations:operations];
+		check([inTrash isTrashDirectory], "a window on a trash directory says so");
+
+		menu = [WSContextMenu menuForSingleItemWithTarget:inTrash];
+		check([[menu itemArray] count] > 0
+		      && [[[[menu itemArray] objectAtIndex:0] title] isEqual:@"Put Back"]
+		      && [[[menu itemArray] objectAtIndex:0] action] == @selector(putBack:),
+		      "the trash's item menu begins with Put Back");
+		check([menu indexOfItemWithTitle:@"Move to Trash"] == (NSInteger)NSNotFound,
+		      "and offers no Move to Trash: an item in the bin has a way back, not further in");
+		check([[WSContextMenu menuForMultipleItemsWithTarget:inTrash] indexOfItemWithTitle:@"Put Back"]
+		      != (NSInteger)NSNotFound,
+		      "a group of trashed items can go back together");
+		check([[WSContextMenu menuForSingleItemWithTarget:first] indexOfItemWithTitle:@"Put Back"]
+		      == (NSInteger)NSNotFound,
+		      "while an ordinary folder's menu has no way back, because nothing is in a bin");
+
+		/* **AND AN ITEM WITH NO RECORD GREYS THE ROW.** Something another program put in the bin has no original path
+		 * to go back to, so the command would do nothing — the menu bar's own convention is that such a row is drawn
+		 * grey rather than offered. */
+		{
+			NSString *stray = [tempTrash stringByAppendingPathComponent:@"no-record.txt"];
+			NSMenuItem *grey = [[NSMenuItem alloc] initWithTitle:@"Put Back" action:@selector(putBack:)
+							       keyEquivalent:@""];
+			NSArray *items;
+			NSInteger index;
+
+			check(makeFile(stray), "a file is put in the trash with no record beside it");
+			[inTrash refresh];
+			items = [[[inTrash cg_iconView] model] items];
+			for (index = 0; index < (NSInteger)[items count]; index++) {
+				if ([[[items objectAtIndex:(NSUInteger)index] name] isEqual:@"no-record.txt"]) {
+					[[inTrash cg_iconView] selectIndex:index];
+				}
+			}
+			check([[[[inTrash selectedItems] lastObject] name] isEqual:@"no-record.txt"],
+			      "the recordless item is the one selected");
+			check(![inTrash validateMenuItem:grey],
+			      "and Put Back is grey for it: there is nowhere to send it");
+			[grey release];
+			[[NSFileManager defaultManager] removeItemAtPath:stray error:NULL];
+			[inTrash refresh];
+		}
+
+		/* AND THE COMMAND ITSELF PUTS IT WHERE IT CAME FROM. */
+		[[inTrash cg_iconView] selectIndex:0];
+		row = [[NSMenuItem alloc] initWithTitle:@"Put Back" action:@selector(putBack:) keyEquivalent:@""];
+		check([inTrash validateMenuItem:row], "the window answers the row while it is showing the trash");
+		check(![first validateMenuItem:row], "and refuses it everywhere else");
+		[row release];
+		[[inTrash cg_iconView] selectIndex:0];
+		[inTrash putBack:nil];
+		check([[NSFileManager defaultManager] fileExistsAtPath:doomed],
+		      "Put Back puts the file back where it came from");
+		check([inTrash itemCount] == 0, "and the trash the window shows is empty again");
+
+		[inTrash close];
+		[inTrash release];
+		[operations release];
+		[trash release];
+		[[NSFileManager defaultManager] removeItemAtPath:fixture error:NULL];
 	}
 	check([first cg_iconView] != nil, "the icon view exists");
 	check([[first cg_iconView] itemCount] == 4, "the icon view shows the model's items");

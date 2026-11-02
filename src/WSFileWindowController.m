@@ -1154,6 +1154,61 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[self finishOperation];
 }
 
+/* **PUT BACK IS THE TRASH'S OWN COMMAND, AND IT IS THE RECORD THAT ANSWERS IT.** A trashed item keeps the path it came
+ * from in its Put Back record, beside it under `.putback/`; nothing here guesses from a name. The selection is matched
+ * against those records by where the item SITS — the only thing the window is looking at — and `WSTrash` does the move,
+ * which is the same door the undo of "Move to Trash" already uses.
+ *
+ * An item with no record (something another program put in the bin, or a record somebody deleted) is simply not in the
+ * list: there is nowhere to send it, and inventing a destination would be worse than doing nothing. */
+/* THE SELECTION'S RECORDS, newest first and in the records' own order — the one answer both the command and its
+ * validation ask for. */
+- (NSArray *)fn_trashRecordsForSelection
+{
+	NSArray *paths = [self selectedPaths];
+	NSArray *records = [[_fileOperations trash] items];
+	NSMutableArray *items = [[NSMutableArray alloc] init];
+	NSUInteger i;
+	NSUInteger j;
+
+	for (i = 0; i < [records count]; i++) {
+		WSTrashItem *item = [records objectAtIndex:i];
+
+		for (j = 0; j < [paths count]; j++) {
+			if ([[item trashPath] isEqual:[paths objectAtIndex:j]]) {
+				[items addObject:item];
+				break;
+			}
+		}
+	}
+	return [items autorelease];
+}
+
+- (void)putBack:(id)sender
+{
+	NSArray *items = [self fn_trashRecordsForSelection];
+
+	(void)sender;
+	if ([items count] == 0) {
+		return;
+	}
+	(void)[_fileOperations putBackTrashItems:items error:NULL];
+	[self finishOperation];
+}
+
+- (BOOL)isTrashDirectory { return _isTrashDirectory; }
+
+- (WSFileOperations *)fileOperations { return _fileOperations; }
+- (void)setFileOperations:(WSFileOperations *)operations
+{
+	if (operations == _fileOperations) {
+		return;
+	}
+	[operations retain];
+	[_fileOperations release];
+	_fileOperations = operations;
+}
+
 - (void)undo:(id)sender
 {
 	(void)sender;
@@ -1250,6 +1305,13 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	if (action == @selector(duplicate:) || action == @selector(compress:)
 	    || action == @selector(moveToTrash:)) {
 		return [[self selectedItems] count] > 0;
+	}
+	if (action == @selector(putBack:)) {
+		/* **A ROW THE WINDOW IS NOT SHOWING IS A ROW IT CANNOT ANSWER** — the trash has the way back, an ordinary folder
+		 * has none, and the menu's own update walk draws the difference. **AND NEITHER IS A ROW WITH NOWHERE TO GO**:
+		 * something another program put in the bin has no Put Back record, so the row is grey rather than a command that
+		 * would do nothing when pressed. */
+		return _isTrashDirectory && [[self fn_trashRecordsForSelection] count] > 0;
 	}
 	if (action == @selector(undo:)) {
 		return [_undoManager canUndo];

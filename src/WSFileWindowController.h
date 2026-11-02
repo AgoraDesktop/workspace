@@ -130,6 +130,16 @@
 - (nullable WSListView *)cg_listView;
 - (nullable WSColumnView *)cg_columnView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
+
+/* **WHETHER THIS WINDOW IS SHOWING THE TRASH**, which is what puts "Put Back" in its context menus and keeps "Move to
+ * Trash" out of them: an item in the bin has a way back, not a way further in. The context menu asks this of whatever
+ * owns the selection, so it is a command's fact rather than a flag passed through four views. */
+- (BOOL)isTrashDirectory;
+
+/* **THE OPERATIONS THIS WINDOW COMMANDS WITH**, and a door to hand them in: a probe gives the window a trash of its own
+ * rather than emptying the account's, and a drop or a put-back is otherwise the real file system's. */
+- (nullable WSFileOperations *)fileOperations;
+- (void)setFileOperations:(nullable WSFileOperations *)operations;
 /* **THE WINDOW'S EAR ON THE FILESYSTEM**, so a probe can turn the main thread's half of it without a run loop: the
  * stream still does its own work on its own thread, and `-cg_drain` is the door the timer uses. */
 - (nullable WSDirectoryWatcher *)cg_watcher;

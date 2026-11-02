@@ -19,6 +19,17 @@
 
 @implementation WSContextMenu
 
+/* **THE TRASH ADDS A ROW, AND THE MENU ASKS THE TARGET RATHER THAN TAKING A FLAG.** Every surface that raises one of
+ * these menus already aims it at whoever owns the selection (`WSContextMenuCommandTarget`), and whether the window is
+ * showing the Trash is that owner's fact — a file window knows, a desktop cannot be one. Asking means no caller changes
+ * and no second copy of "am I in the trash" in four views. A target that does not answer at all is a probe or a plain
+ * view, and gets the menu every window gets. */
++ (BOOL)cg_targetShowsTrash:(id)target
+{
+	return (target != nil && [target respondsToSelector:@selector(isTrashDirectory)]
+		&& [target isTrashDirectory]);
+}
+
 /* ONE ROW: title, selector, and the target that will be asked whether it can answer. Nil is allowed for the target —
  * then the row is disabled by the update walk, which is the honest picture of a command nobody implements. */
 + (NSMenuItem *)cg_row:(NSString *)title action:(SEL)action target:(id)target
@@ -32,14 +43,24 @@
 + (NSMenu *)menuForSingleItemWithTarget:(id)target
 {
 	NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"Context"] autorelease];
+	BOOL trash = [self cg_targetShowsTrash:target];
 
+	/* **IN THE TRASH THE FIRST ROW IS THE WAY BACK OUT OF IT.** "Move to Trash" is not offered there: what it would do
+	 * to an item already in it is the file manager talking to itself, and the reference file manager answers the same way
+	 * — a trashed item's menu says Put Back and nothing about the bin it is already in. */
+	if (trash) {
+		[menu addItem:[self cg_row:@"Put Back" action:@selector(putBack:) target:target]];
+		[menu addItem:[NSMenuItem separatorItem]];
+	}
 	[menu addItem:[self cg_row:@"Get Info" action:@selector(getInfo:) target:target]];
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Cut" action:@selector(cut:) target:target]];
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Rename" action:@selector(rename:) target:target]];
-	[menu addItem:[self cg_row:@"Move to Trash" action:@selector(moveToTrash:) target:target]];
+	if (!trash) {
+		[menu addItem:[self cg_row:@"Move to Trash" action:@selector(moveToTrash:) target:target]];
+	}
 	return menu;
 }
 
@@ -53,7 +74,12 @@
 + (NSMenu *)menuForMultipleItemsWithTarget:(id)target
 {
 	NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"Context"] autorelease];
+	BOOL trash = [self cg_targetShowsTrash:target];
 
+	if (trash) {
+		[menu addItem:[self cg_row:@"Put Back" action:@selector(putBack:) target:target]];
+		[menu addItem:[NSMenuItem separatorItem]];
+	}
 	[menu addItem:[self cg_row:@"Get Info" action:@selector(getInfo:) target:target]];
 	[menu addItem:[self cg_row:@"New Folder with Selection"
 			   action:@selector(newFolderWithSelection:) target:target]];
@@ -61,7 +87,9 @@
 	[menu addItem:[self cg_row:@"Cut" action:@selector(cut:) target:target]];
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];
 	[menu addItem:[NSMenuItem separatorItem]];
-	[menu addItem:[self cg_row:@"Move to Trash" action:@selector(moveToTrash:) target:target]];
+	if (!trash) {
+		[menu addItem:[self cg_row:@"Move to Trash" action:@selector(moveToTrash:) target:target]];
+	}
 	return menu;
 }
 
