@@ -183,6 +183,89 @@ int main(void)
 		      "a point away from any selected icon is clear again");
 	}
 
+	/* 4. **A MODIFIER-CLICK ON THE DESKTOP FOLLOWS THE SAME TWO RULES AS EVERY OTHER SURFACE**: Control or Command
+	 * adds or takes away one icon, and Shift takes the run between the anchor and the icon clicked. Without them the
+	 * desktop's only way to gather several icons was a band or Select All. */
+	{
+		NSArray *positions = [view cg_positions];
+		NSRect bounds = [view bounds];
+		NSPoint icon[3];
+		NSUInteger i;
+
+		for (i = 0; i < 3 && i < [positions count]; i++) {
+			NSPoint topLeft = [[positions objectAtIndex:i] pointValue];
+			/* The view is not flipped: a top-left point becomes the window's by subtracting from the height. */
+			icon[i] = NSMakePoint(topLeft.x + 32.0, bounds.size.height - (topLeft.y + 32.0));
+		}
+		[view selectAll:nil];
+		check([[view cg_selection] count] == 3, "Select All holds every icon on the desktop");
+		[view mouseDown:mouse(NSLeftMouseDown, icon[0], NSControlKeyMask)];
+		check([[view cg_selection] count] == 2
+		      && ![[view cg_selection] containsObject:[NSNumber numberWithInteger:0]],
+		      "a Control-click takes the icon it is on out of the selection");
+		[view mouseDown:mouse(NSLeftMouseDown, icon[0], NSControlKeyMask)];
+		check([[view cg_selection] count] == 3, "and a second one puts it back");
+		[view mouseUp:mouse(NSLeftMouseUp, icon[0], 0)];
+		[view mouseDown:mouse(NSLeftMouseDown, icon[2], 0)];
+		check([[view cg_selection] count] == 3,
+		      "a plain click on an icon already held keeps the group, so the group can be dragged");
+		/* A press on the wallpaper clears, and the band takes the pointer, so it is let go again here. */
+		{
+			NSPoint emptyWindow = NSMakePoint(start.x, bounds.size.height - start.y);
+
+			[view mouseDown:mouse(NSLeftMouseDown, emptyWindow, 0)];
+			[view mouseUp:mouse(NSLeftMouseUp, emptyWindow, 0)];
+		}
+		check([[view cg_selection] count] == 0, "and a press on the wallpaper clears the selection");
+		[view mouseDown:mouse(NSLeftMouseDown, icon[2], 0)];
+		check([[view cg_selection] count] == 1, "so a plain click on an icon then selects it alone");
+		[view mouseDown:mouse(NSLeftMouseDown, icon[0], NSShiftKeyMask)];
+		check([[view cg_selection] count] == 3
+		      && [[view cg_selection] containsObject:[NSNumber numberWithInteger:0]]
+		      && [[view cg_selection] containsObject:[NSNumber numberWithInteger:1]]
+		      && [[view cg_selection] containsObject:[NSNumber numberWithInteger:2]],
+		      "and a Shift-click takes the run between the anchor and the icon clicked");
+		[view mouseUp:mouse(NSLeftMouseUp, icon[0], 0)];
+	}
+
+	/* 5. **A FOLDER THAT APPEARS WHILE THE DESKTOP IS SHOWING APPEARS ON IT.** The desktop read its directory once and
+	 * nothing told it to read again, so a file that landed beside it — a finished download, another application's
+	 * write, a folder made in a terminal — stayed invisible until the view happened to reload. The kernel's change
+	 * stream is what tells it now (`libagora-watch`, through `WSDirectoryWatcher`). */
+	{
+		NSString *made = [root stringByAppendingPathComponent:@"made-outside"];
+		NSInteger before = (NSInteger)[[[view model] items] count];
+		NSInteger attempt;
+		NSArray *held;
+		BOOL named = NO;
+		NSUInteger i;
+
+		check([view cg_watcher] != nil, "the desktop watches the folder it shows");
+		[view selectAll:nil];
+		held = [view cg_selectedPaths];
+		check([held count] == 3, "everything on the desktop is held before the change");
+		check([[NSFileManager defaultManager] createDirectoryAtPath:made
+						withIntermediateDirectories:YES attributes:nil error:NULL],
+		      "a folder is made behind the desktop's back");
+		for (attempt = 0; attempt < 20 && (NSInteger)[[[view model] items] count] == before; attempt++) {
+			usleep(100000);
+			[[view cg_watcher] cg_drain];
+		}
+		check((NSInteger)[[[view model] items] count] == before + 1,
+		      "and the stream reloads the desktop: the new folder is in the model");
+		check((NSInteger)[[view cg_positions] count] == before + 1,
+		      "with a place on the grid, not a phantom row");
+		for (i = 0; i < [[[view model] items] count]; i++) {
+			if ([[[[[view model] items] objectAtIndex:i] name] isEqual:@"made-outside"]) {
+				named = YES;
+			}
+		}
+		check(named, "and it is the folder that was made");
+		/* **AND A CHANGE ON THE DISK IS NOT A NEW SELECTION**: what was held is still held, by path. */
+		check([[view cg_selectedPaths] count] == [held count],
+		      "and what was held is still held: a file appearing does not clear the selection");
+	}
+
 	printf(s_failed == 0 ? "desktop_band: all checks passed\n" : "desktop_band: FAILURES\n");
 	[fm removeItemAtPath:root error:NULL];
 	[view release];

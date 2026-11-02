@@ -26,6 +26,7 @@
 @class NSEvent;
 @class NSDraggingSession;
 @class NSView;
+@class WSFileOperations;
 
 /* **THE SOURCE'S HALF: ONE PASTEBOARD, ONE SESSION.** `paths` is what the drag offers, `items` are the
  * `NSDraggingItem`s the caller built (each with its own frame and picture). A drag that offers nothing is not one, and
@@ -63,5 +64,25 @@ NSDragOperation WSItemDragOperation(NSArray *paths, NSString *target, NSDragOper
 /* And doing it: every destination is preflighted before anything moves, so a conflict halfway through a multi-file drag
  * is a refusal rather than a partial result. */
 BOOL WSItemDragPerform(NSArray *paths, NSString *target, NSDragOperation operation);
+
+/* **AND THE SAME MOVE, THROUGH THE WINDOW'S OPERATIONS, SO IT CAN BE UNDONE.** A view that has a `WSFileOperations` hands
+ * it in and a Move is performed by it — the same MOVE, with the undo entry the Edit menu needs. Copy and Link have no
+ * such owner here and fall through to the plain answer. A view with no operations (a probe, a surface that was made
+ * without one) keeps the old behaviour rather than dropping the gesture. */
+BOOL WSItemDragPerformWithOperations(NSArray *paths, NSString *target, NSDragOperation operation,
+				     WSFileOperations *operations);
+
+/* **AND THE SAME PATHS ON THE GENERAL PASTEBOARD, WHICH IS WHAT A COPY IS.** A drag puts them on `NSDragPboard` for the
+ * length of the gesture; a Copy leaves them on the pasteboard every application reads, in the one type this tree speaks.
+ * Nothing is marked or removed: the pasteboard is a place to put an offer, and what a paste makes of it belongs to
+ * whoever pastes. */
+void WSItemCopyPathsToPasteboard(NSArray *paths);
+
+/* **A CUT IS THE SAME OFFER WITH A PROMISE ATTACHED** — "and take them away when you use it" — which is the one thing a
+ * pasteboard property list cannot say, so this process remembers it. A paste asks which it was, performs the operation it
+ * promised, and forgets it: a second paste of the same cut has nothing left to move. */
+void WSItemCutPathsToPasteboard(NSArray *paths);
+NSArray *WSItemClipboardPaths(BOOL *wasCut);
+void WSItemClipboardForget(void);
 
 #endif /* WORKSPACE_WSITEMDRAG_H */

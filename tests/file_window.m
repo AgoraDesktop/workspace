@@ -308,6 +308,27 @@ int main(void)
 		[newFolderItem release];
 	}
 
+	/* **AND A COMMAND THE GRID ITSELF PERFORMED ENDS WHERE THE MENU'S DOES.** The icon view was handed THIS window's
+	 * operation manager (its progress handler owns the plate), so a grid command that ends by refreshing the window alone
+	 * leaves that plate on the glass — MEASURED, as a half-transparent rounded panel hanging in the middle of the window
+	 * after New Folder with Selection. The plate is a real window with a real visibility flag here, so this is a
+	 * measurement of the ending and not of the compositor. */
+	{
+		WSIconView *icons = [first cg_iconView];
+		NSInteger before = [first itemCount];
+
+		/* **THE WINDOW OWNS THE ENDING, AND THIS IS THE DOOR THE GRID HAS TO KNOCK ON.** A plate's visibility is a
+		 * compositor's answer and this probe has none — MEASURED: the same check passed with the bug in place — so what is
+		 * asserted here is the CONTRACT (`-iconViewDidFinishOperation:` exists and this window answers it) and the
+		 * operation's real effect. The grid's own suite counts the call. */
+		check([first respondsToSelector:@selector(iconViewDidFinishOperation:)],
+		      "the window answers the grid's \"the operation is over\" door, which is what closes the progress plate");
+		[icons newFolder:nil];
+		check([first itemCount] == before + 1, "New Folder from the grid adds the folder the way the menu's row does");
+		[first undo:nil];
+		check([first itemCount] == before, "whose Undo still works, because the manager is the window's");
+	}
+
 	/* A WINDOW IS A SHELL, SO IT RESIZES. The three strips are placed by Auto Layout, not by a resize hook:
 	 * path bar at the top, status at the bottom, the split view between them, and the split's delegate keeps the
 	 * sidebar's width while the content pane takes the rest. The icon view inside the scroll view follows the
@@ -515,6 +536,57 @@ int main(void)
 		[row release];
 		[banded close];
 		[banded release];
+	}
+
+	/* **A FOLDER MADE BEHIND THE WINDOW'S BACK APPEARS IN IT.** The window read its directory once and nothing told it
+	 * to read again, so a directory made in a terminal (or by another application) stayed invisible until a person
+	 * navigated away and back — and its own New Folder did not appear either, because the refresh re-laid the views out
+	 * over a model that had not been re-read. The kernel's change stream (`libagora-watch`) is what tells it now.
+	 *
+	 * **A WINDOW OF ITS OWN, IN LIST MODE, WHICH IS WHERE IT WAS REPORTED.** The one built above has already been in
+	 * Column mode, and that view reloads the model itself — a check run in it would pass for that reason and say nothing
+	 * about this window, which has never left the view the report was about. */
+	{
+		WSFileWindowController *watched = [[WSFileWindowController alloc] initWithDirectory:root];
+		NSString *made = [root stringByAppendingPathComponent:@"Made Outside"];
+		WSListView *list;
+		NSInteger before;
+		NSInteger attempt;
+		BOOL listed = NO;
+
+		[watched setViewMode:1];
+		check([[watched directory] isEqual:root] && [watched cg_watcher] != nil,
+		      "a window watches the folder it shows");
+		before = [watched itemCount];
+		check([[NSFileManager defaultManager] createDirectoryAtPath:made withIntermediateDirectories:YES
+									 attributes:nil error:NULL],
+		      "a directory is made behind the window's back");
+		for (attempt = 0; attempt < 20 && [watched itemCount] == before; attempt++) {
+			usleep(100000);
+			[[watched cg_watcher] cg_drain];
+		}
+		check([watched itemCount] == before + 1,
+		      "and the stream refreshes it: the new folder is in the model without navigating");
+		list = [watched cg_listView];
+		{
+			NSInteger row;
+
+			for (row = 0; row < [list numberOfRows]; row++) {
+				if ([[(WSItem *)[list itemAtRow:row] name] isEqual:@"Made Outside"]) {
+					listed = YES;
+				}
+			}
+		}
+		check(listed, "and List mode's rows carry it, which is the view the report was about");
+
+		/* **AND THE WINDOW'S OWN NEW FOLDER APPEARS THE SAME WAY.** It always did the *file* operation; what it never
+		 * did was re-read the directory afterwards. */
+		before = [watched itemCount];
+		[watched newFolder:nil];
+		check([watched itemCount] == before + 1,
+		      "a folder made by the window's own command is in the model at once");
+		[watched close];
+		[watched release];
 	}
 
 	[backItem release];

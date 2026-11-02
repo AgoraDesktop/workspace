@@ -30,6 +30,7 @@ set_tests_properties(workspace-desktop-layout PROPERTIES ENVIRONMENT
 # the grid, so two entries could name the same corner and an entry could sit under the strip a Dock had since reserved.
 add_executable(desktop_cells desktop_cells.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
@@ -38,12 +39,17 @@ add_executable(desktop_cells desktop_cells.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(desktop_cells PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(desktop_cells PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
+    AgoraWatch::Watch
     Foundation::Foundation
+    ZLIB::ZLIB
     objc)
 add_test(NAME workspace-desktop-cells COMMAND desktop_cells)
 set_tests_properties(workspace-desktop-cells PROPERTIES ENVIRONMENT
@@ -55,6 +61,7 @@ set_tests_properties(workspace-desktop-cells PROPERTIES ENVIRONMENT
 # cannot express: a drop of a file that already lives there, and a drop released on a folder's icon.
 add_executable(desktop_drag desktop_drag.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
@@ -64,12 +71,17 @@ add_executable(desktop_drag desktop_drag.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(desktop_drag PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(desktop_drag PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
+    AgoraWatch::Watch
     Foundation::Foundation
+    ZLIB::ZLIB
     objc)
 add_test(NAME workspace-desktop-drag COMMAND desktop_drag)
 set_tests_properties(workspace-desktop-drag PROPERTIES ENVIRONMENT
@@ -80,6 +92,7 @@ set_tests_properties(workspace-desktop-drag PROPERTIES ENVIRONMENT
 # view makes its own model and metadata store from a directory, so the fixture is three files in /tmp.
 add_executable(desktop_band desktop_band.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
@@ -88,12 +101,17 @@ add_executable(desktop_band desktop_band.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(desktop_band PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(desktop_band PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
+    AgoraWatch::Watch
     Foundation::Foundation
+    ZLIB::ZLIB
     objc)
 add_test(NAME workspace-desktop-band COMMAND desktop_band)
 set_tests_properties(workspace-desktop-band PROPERTIES ENVIRONMENT
@@ -190,12 +208,14 @@ set_tests_properties(workspace-history PROPERTIES ENVIRONMENT
 # the icon service is the real one, because the sidebar and the grid draw real icons.
 find_package(AgoraIconServices CONFIG REQUIRED)
 find_package(AgoraLaunchServices CONFIG REQUIRED)
+find_package(AgoraWatch CONFIG REQUIRED)
 
 add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
@@ -211,12 +231,14 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(file_window PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(file_window PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
+    AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
     objc)
@@ -225,6 +247,7 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
@@ -240,12 +263,14 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(app_bundle PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(app_bundle PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
+    AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
     objc)
@@ -263,6 +288,7 @@ add_executable(icon_view icon_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
@@ -271,12 +297,17 @@ add_executable(icon_view icon_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(icon_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(icon_view PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
+    AgoraWatch::Watch
     Foundation::Foundation
+    ZLIB::ZLIB
     objc)
 add_test(NAME workspace-icon-view COMMAND icon_view)
 set_tests_properties(workspace-icon-view PROPERTIES ENVIRONMENT
@@ -287,16 +318,21 @@ set_tests_properties(workspace-icon-view PROPERTIES ENVIRONMENT
 # column) but no compositor.
 add_executable(list_view list_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(list_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(list_view PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
     Foundation::Foundation
+    ZLIB::ZLIB
     objc)
 add_test(NAME workspace-list-view COMMAND list_view)
 set_tests_properties(workspace-list-view PROPERTIES ENVIRONMENT
@@ -306,6 +342,8 @@ set_tests_properties(workspace-list-view PROPERTIES ENVIRONMENT
 # AppKit, Icon Services and Launch Services; no compositor.
 add_executable(column_view column_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
@@ -351,9 +389,11 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPrintService.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSApplication.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSAboutPanel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDesktopView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
@@ -381,12 +421,14 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPreferencesWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(printing PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(printing PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
+    AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
     objc)

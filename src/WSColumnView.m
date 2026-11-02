@@ -7,6 +7,9 @@
  */
 #import "WSColumnView.h"
 
+#import "WSContextMenu.h"
+#import "WSItemDrag.h"
+#import "WSFileOperations.h"
 #import "WSItemIcons.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
@@ -14,6 +17,9 @@
 
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSBrowserCell.h>
+#import <AppKit/NSDragging.h>
+#import <AppKit/NSPasteboard.h>
+#import <AppKit/NSMenu.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSStringDrawing.h>
@@ -53,6 +59,47 @@ static NSString *fn_size_string(WSItem *item)
 	if (size < 1024ULL * 1024ULL * 1024ULL) return [NSString stringWithFormat:@"%.1f MB", (double)size / (1024.0 * 1024.0)];
 	return [NSString stringWithFormat:@"%.1f GB", (double)size / (1024.0 * 1024.0 * 1024.0)];
 }
+
+/* **THE BROWSER'S OWN RIGHT-CLICK, BECAUSE THE EVENT LANDS ON IT AND NOT ON THE WRAPPER.** A column is a table inside an
+ * `NSBrowser`, so the menu question is asked of the browser; this subclass answers it with the row and column under the
+ * pointer — `-getRow:column:forPoint:` is the browser's own hit test, so no second layout is invented here — and aims the
+ * rows at the WINDOW, which owns the commands (`WSContextMenuCommandTarget`). A point below the last row, or in a title
+ * strip, is the folder's own menu, exactly as it is on the icon surfaces.
+ *
+ * **A COLUMN HOLDS SEVERAL ROWS**, so the menu is the same three-way choice a list makes: a row that is one of several
+ * held keeps the group and offers the group's commands, a row on its own offers its own, and the space below the rows is
+ * the folder's menu. */
+@interface WSColumnBrowser : NSBrowser
+@end
+
+@implementation WSColumnBrowser
+
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+	NSInteger row = -1;
+	NSInteger column = -1;
+	id target;
+
+	if (event == nil) {
+		return nil;
+	}
+	target = WSContextMenuCommandTarget(self);
+	if (![self getRow:&row column:&column forPoint:[self convertPoint:[event locationInWindow] fromView:nil]]
+	    || row < 0) {
+		return [WSContextMenu menuForBackgroundWithTarget:target];
+	}
+	/* **A RIGHT-CLICK INSIDE A GROUP KEEPS IT**, the rule the list and the grid follow: narrowing it to the one row under
+	 * the pointer would leave the commands a group is for with nothing to act on. */
+	if (![[self selectedRowIndexesInColumn:column] containsIndex:(NSUInteger)row]) {
+		[self selectRow:row inColumn:column];
+	}
+	if ([[self selectedRowIndexesInColumn:column] count] > 1) {
+		return [WSContextMenu menuForMultipleItemsWithTarget:target];
+	}
+	return [WSContextMenu menuForSingleItemWithTarget:target];
+}
+
+@end
 
 /* ============================================================================================ *
  * THE PREVIEW — the rightmost column, and the selected item's facts.                           *
@@ -153,7 +200,7 @@ static NSString *fn_size_string(WSItem *item)
 		_model = [model retain];
 		_childModels = [[NSMutableDictionary alloc] init];
 		_columnCache = [[NSMutableDictionary alloc] init];
-		_browser = [[NSBrowser alloc] initWithFrame:NSMakeRect(0.0, 0.0,
+		_browser = [[WSColumnBrowser alloc] initWithFrame:NSMakeRect(0.0, 0.0,
 								      frame.size.width - WS_COLUMN_PREVIEW_WIDTH,
 								      frame.size.height)];
 		[_browser setDelegate:self];
@@ -168,6 +215,16 @@ static NSString *fn_size_string(WSItem *item)
 		[_browser setTarget:self];
 		[_browser setAction:@selector(browserSelectionChanged:)];
 		[_browser setDoubleAction:@selector(openSelectedItem)];
+		/* **A COLUMN HOLDS SEVERAL ROWS AT ONCE**, which is what Shift- and Control-click in a browser mean: a range or a
+		 * set of files in the same folder, so Move to Trash, Copy or a drag can take them all. The browser's own rule still
+		 * picks the column's first selected row to open the column to the right, so the browse path stays predictable. */
+		[_browser setAllowsMultipleSelection:YES];
+		/* **AND THE COLUMNS ARE A DRAG SOURCE AND A DROP DESTINATION**, which the browser forwards to this delegate: the
+		 * type is registered on the BROWSER and it applies it to each column's table as columns are made, and the masks
+		 * say what a drag out of here offers. */
+		[_browser registerForDraggedTypes:[NSArray arrayWithObject:NSFilenamesPboardType]];
+		[_browser setDraggingSourceOperationMask:NSDragOperationEvery forLocal:YES];
+		[_browser setDraggingSourceOperationMask:NSDragOperationEvery forLocal:NO];
 		_preview = [[WSColumnPreviewView alloc] initWithFrame:
 			NSMakeRect(frame.size.width - WS_COLUMN_PREVIEW_WIDTH, 0.0,
 				   WS_COLUMN_PREVIEW_WIDTH, frame.size.height)];
@@ -228,13 +285,81 @@ static NSString *fn_size_string(WSItem *item)
 - (id <WSColumnViewDelegate>)viewDelegate { return _viewDelegate; }
 - (void)setViewDelegate:(id <WSColumnViewDelegate>)delegate { _viewDelegate = delegate; }
 
+- (WSFileOperations *)fileOperations { return _fileOperations; }
+- (void)setFileOperations:(WSFileOperations *)operations { _fileOperations = operations; }
+
+/* **A RELOAD RE-READS THE FOLDER; IT DOES NOT CLOSE THE COLUMNS.** `-loadColumnZero` forgets every selection, which is
+ * what a new directory wants and what a trashed file must NOT get: a person who moves the selected file to the Trash is
+ * looking at the same folder they were, and having the browser collapse to column zero loses their place. So the chain
+ * of selected items is remembered BY PATH — the rows move when a name leaves the sort — and selected again column by
+ * column, which re-opens the columns the way a click does.
+ *
+ * **THE LAST ITEM IN THE CHAIN IS THE ONE THAT MAY BE GONE.** When it is (that is the Trash, a delete, a move out), the
+ * column that held it stays open with nothing selected and the preview empties; when it is still there, it is selected
+ * again and nothing about the view changed. A chain that breaks earlier stops there: an ancestor that no longer exists
+ * is a stale place, and the columns beyond it have nothing to show. */
 - (void)reloadData
 {
+	NSArray *chain = [self cg_selectedPathChain];
+	NSUInteger count = [chain count];
+	NSUInteger restored;
+
 	[_childModels removeAllObjects];
 	[_columnCache removeAllObjects];
 	[_model reload];
 	[_browser loadColumnZero];
-	[_preview setItem:nil];
+	restored = [self cg_restorePathChain:chain];
+	if (restored == 0 || restored < count) {
+		[self updatePreviewForItem:nil];
+	}
+}
+
+/* The items selected in columns zero through the selected column, as paths, leaf last. */
+- (NSArray *)cg_selectedPathChain
+{
+	NSMutableArray *chain = [[NSMutableArray alloc] init];
+	NSInteger selected = [_browser selectedColumn];
+	NSInteger column;
+
+	for (column = 0; column <= selected; column++) {
+		WSItem *item = [self itemAtRow:[_browser selectedRowInColumn:column] column:column];
+
+		if (item == nil) {
+			break;
+		}
+		[chain addObject:[item path]];
+	}
+	return [chain autorelease];
+}
+
+- (NSInteger)cg_rowForPath:(NSString *)path inColumn:(NSInteger)column
+{
+	NSArray *items = [self itemsForColumn:column];
+	NSUInteger i;
+
+	for (i = 0; i < [items count]; i++) {
+		if ([[[items objectAtIndex:i] path] isEqual:path]) {
+			return (NSInteger)i;
+		}
+	}
+	return -1;
+}
+
+/* Selecting each column in turn is what loads the next one; the answer is how many of the chain survived. */
+- (NSUInteger)cg_restorePathChain:(NSArray *)chain
+{
+	NSUInteger i;
+
+	for (i = 0; i < [chain count]; i++) {
+		NSString *path = [chain objectAtIndex:i];
+		NSInteger row = [self cg_rowForPath:path inColumn:(NSInteger)i];
+
+		if (row < 0) {
+			return i;
+		}
+		[_browser selectRow:row inColumn:(NSInteger)i];
+	}
+	return i;
 }
 
 /* ---- THE MODEL PER COLUMN -------------------------------------------------------------------- */
@@ -296,15 +421,40 @@ static NSString *fn_size_string(WSItem *item)
 - (WSItem *)selectedItem
 {
 	NSInteger column = [_browser selectedColumn];
+	NSIndexSet *rows;
 
-	return (column >= 0) ? [self itemAtRow:[_browser selectedRowInColumn:column] column:column] : nil;
+	if (column < 0) {
+		return nil;
+	}
+	rows = [_browser selectedRowIndexesInColumn:column];
+	return ([rows count] > 0) ? [self itemAtRow:(NSInteger)[rows firstIndex] column:column] : nil;
 }
 
+/* **THE SELECTION IS THE COLUMN'S ROWS, PLURAL.** A browser keeps one selection per column and a column can hold
+ * several rows once Shift- or Control-click has added them; the preview describes the first, which is the row the
+ * browser itself treats as the column's selection. */
 - (NSArray *)selectedItems
 {
-	WSItem *item = [self selectedItem];
+	NSInteger column = [_browser selectedColumn];
+	NSIndexSet *rows;
+	NSMutableArray *items = [NSMutableArray array];
+	NSUInteger row;
 
-	return (item != nil) ? [NSArray arrayWithObject:item] : [NSArray array];
+	if (column < 0) {
+		return items;
+	}
+	rows = [_browser selectedRowIndexesInColumn:column];
+	if ([rows count] == 0) {
+		return items;
+	}
+	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
+		WSItem *item = [self itemAtRow:(NSInteger)row column:column];
+
+		if (item != nil) {
+			[items addObject:item];
+		}
+	}
+	return items;
 }
 
 - (void)updatePreviewForItem:(WSItem *)item
@@ -377,6 +527,127 @@ static NSString *fn_size_string(WSItem *item)
 {
 	(void)sender;
 	[self updatePreviewForItem:[self selectedItem]];
+}
+
+/* ---- THE DRAG, OUT AND IN --------------------------------------------------------------------- */
+
+/* **A COLUMN'S DRAG IS THE BROWSER'S, AND THE BROWSER ASKS ITS DELEGATE.** The three answers below are Apple's own deal
+ * for a browser: the rows a drag carries, the drop a pointer is proposing, and the drop that ends one. The item under a
+ * row and column is `-itemAtRow:column:`, so nothing here re-derives the layout. */
+
+- (NSArray *)cg_pathsForRows:(NSIndexSet *)rows column:(NSInteger)column
+{
+	NSMutableArray *paths = [[NSMutableArray alloc] init];
+	NSUInteger row;
+
+	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
+		WSItem *item = [self itemAtRow:(NSInteger)row column:column];
+
+		if (item != nil) {
+			[paths addObject:[item path]];
+		}
+	}
+	return [paths autorelease];
+}
+
+- (BOOL)browser:(NSBrowser *)browser writeRowsWithIndexes:(NSIndexSet *)rowIndexes inColumn:(NSInteger)column
+   toPasteboard:(NSPasteboard *)pasteboard
+{
+	NSArray *paths = [self cg_pathsForRows:rowIndexes column:column];
+
+	(void)browser;
+	if ([paths count] == 0) {
+		return NO;
+	}
+	[pasteboard declareTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
+	[pasteboard setPropertyList:paths forType:NSFilenamesPboardType];
+	return YES;
+}
+
+/* **WHERE A DROP IN A COLUMN LANDS.** A folder's own row is a place a file can go; any other row means the folder that
+ * column is showing, which is the parent of the rows in it — the same rule the tree and the grid follow with a row and
+ * with a cell. */
+- (NSString *)cg_dropDirectoryForRow:(NSInteger)row column:(NSInteger)column browser:(NSBrowser *)browser
+{
+	WSItem *item = [self itemAtRow:row column:column];
+	WSItem *parent;
+
+	if (item != nil) {
+		if ([item isDirectory]) {
+			return [item path];
+		}
+		parent = (column > 0)
+			? [self itemAtRow:[browser selectedRowInColumn:column - 1] column:column - 1]
+			: nil;
+		return ([parent isDirectory]) ? [parent path] : [_model directory];
+	}
+	return ([self cg_directoryForColumn:column browser:browser]);
+}
+
+/* The folder a column is showing, which is the model's directory for the first column and the selected parent beyond it. */
+- (NSString *)cg_directoryForColumn:(NSInteger)column browser:(NSBrowser *)browser
+{
+	WSItem *parent;
+
+	if (column <= 0) {
+		return [_model directory];
+	}
+	parent = [self itemAtRow:[browser selectedRowInColumn:column - 1] column:column - 1];
+	return ([parent isDirectory]) ? [parent path] : [_model directory];
+}
+
+- (NSDragOperation)browser:(NSBrowser *)browser validateDrop:(id <NSDraggingInfo>)info
+	       proposedRow:(NSInteger *)row column:(NSInteger *)column
+    proposedDropOperation:(NSBrowserDropOperation *)dropOperation
+{
+	NSArray *paths = WSItemDragPaths(info);
+	NSString *target;
+	NSDragOperation operation;
+
+	(void)dropOperation;
+	if ([paths count] == 0 || row == NULL || column == NULL) {
+		return NSDragOperationNone;
+	}
+	target = [self cg_dropDirectoryForRow:*row column:*column browser:browser];
+	if (target == nil) {
+		return NSDragOperationNone;
+	}
+	operation = WSItemDragOperation(paths, target, [info draggingSourceOperationMask], [NSEvent modifierFlags]);
+	/* **A FOLDER ROW SAYS "IN HERE".** The table proposes an insertion line; a drop onto a folder is a drop INTO it, and
+	 * that is the answer the destination above just gave. */
+	if (operation != NSDragOperationNone && *row >= 0
+	    && [[self itemAtRow:*row column:*column] isDirectory]) {
+		if (dropOperation != NULL) {
+			*dropOperation = NSBrowserDropOn;
+		}
+	}
+	return operation;
+}
+
+- (BOOL)browser:(NSBrowser *)browser acceptDrop:(id <NSDraggingInfo>)info row:(NSInteger)row
+	 column:(NSInteger)column dropOperation:(NSBrowserDropOperation)dropOperation
+{
+	NSArray *paths = WSItemDragPaths(info);
+	NSString *target = [self cg_dropDirectoryForRow:row column:column browser:browser];
+	NSDragOperation operation;
+	BOOL performed;
+
+	(void)dropOperation;
+	if (target == nil) {
+		return NO;
+	}
+	operation = WSItemDragOperation(paths, target, [info draggingSourceOperationMask], [NSEvent modifierFlags]);
+	performed = WSItemDragPerformWithOperations(paths, target, operation, _fileOperations);
+	if (performed) {
+		[self reloadData];
+		if ([_viewDelegate respondsToSelector:@selector(columnViewDidChangeModel:)]) {
+			[_viewDelegate columnViewDidChangeModel:self];
+		}
+		if ([[info draggingSource] respondsToSelector:@selector(reloadAfterChange)]) {
+			[(id <WSItemDragSourceReloading>)[info draggingSource] reloadAfterChange];
+		}
+	}
+	return performed;
 }
 
 - (void)openSelectedItem

@@ -19,15 +19,20 @@
  */
 #import "WSDesktopView.h"
 
+#import "WSDirectoryWatcher.h"
+
 #import "WSIconCell.h"
 #import "WSIconLabel.h"
 #import "WSIconLayout.h"
+#import "WSContextMenu.h"
+#import "WSFileOperations.h"
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
 #import "WSItemIcons.h"
 #import "WSItemDrag.h"
 #import "WSItemModel.h"
 #import "WSMetadataStore.h"
+#import "WSTrash.h"
 
 #import <AppKit/NSWindow.h>
 
@@ -43,13 +48,18 @@
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSMenu.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSFont.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSStatusBar.h>
+#import <AppKit/NSText.h>
+#import <AppKit/NSTextField.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSCharacterSet.h>
 #import <Foundation/NSDictionary.h>
+#import <Foundation/NSFileManager.h>
 #import <Foundation/NSNotificationCenter.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
@@ -83,6 +93,11 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		_positions = [[NSMutableArray alloc] init];
 		_icons = [[NSMutableArray alloc] init];
 		_selection = [[NSMutableArray alloc] init];
+		/* **AND THE OPERATIONS THE CONTEXT MENU PERFORMS.** The trash is this desktop's own, because a desktop is a
+		 * place a file can be trashed FROM and it has no file window to borrow one; the manager carries no undo, see
+		 * the header. */
+		_trash = [[WSTrash alloc] init];
+		_fileOperations = [[WSFileOperations alloc] initWithUndoManager:nil trash:_trash];
 		/* **AND IT TAKES DROPS**, the same type a file window's icon view takes: a drag out of a window and onto the
 		 * desktop is a move into the desktop's own directory. */
 		[self registerForDraggedTypes:[NSArray arrayWithObject:NSFilenamesPboardType]];
@@ -97,6 +112,13 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 								 selector:@selector(fn_workAreaTick:)
 								 userInfo:nil
 								  repeats:YES] retain];
+		/* **AND THE DESKTOP WATCHES ITS OWN FOLDER.** Everything else that shows a directory reads it again when the
+		 * kernel says it changed (`WSDirectoryWatcher`); without this the desktop was the one surface where a file that
+		 * landed beside it — a finished download, another application's write, a folder made in a terminal — stayed
+		 * invisible until the view happened to reload. */
+		_watcher = [[WSDirectoryWatcher alloc] initWithDirectory:directory
+								  target:self
+								  action:@selector(fn_directoryDidChange:)];
 	}
 	return self;
 }
@@ -166,6 +188,57 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	[self reload];
 }
 
+/* **A CHANGE ON THE DISK IS NOT A NEW SELECTION.** `-reload` re-reads the directory and starts the selection over; what a
+ * person had chosen is put back BY PATH — the identity a reloaded `WSItem` keeps — and SILENTLY: a file appearing on the
+ * desktop is no reason to take the Workspace-wide selection away from the window next door. */
+- (void)fn_reloadKeepingSelection
+{
+	NSArray *items = [_model items];
+	NSMutableArray *paths = [[NSMutableArray alloc] init];
+	NSUInteger i;
+
+	for (i = 0; i < [_selection count]; i++) {
+		NSInteger index = [[_selection objectAtIndex:i] integerValue];
+
+		if (index >= 0 && index < (NSInteger)[items count]) {
+			[paths addObject:[[items objectAtIndex:(NSUInteger)index] path]];
+		}
+	}
+	[self reload];
+	items = [_model items];
+	for (i = 0; i < [items count]; i++) {
+		if ([paths containsObject:[[items objectAtIndex:i] path]]) {
+			[_selection addObject:[NSNumber numberWithInteger:(NSInteger)i]];
+		}
+	}
+	_anchorIndex = ([_selection count] > 0) ? [[_selection objectAtIndex:0] integerValue] : -1;
+	[paths release];
+	[self setNeedsDisplay:YES];
+}
+
+/* **NOT UNDER THE HAND.** A reload re-places every icon from the store and would close a field a person is typing in, so
+ * a change that arrives mid-drag, mid-band or mid-rename is remembered and taken when the gesture ends. */
+- (void)fn_directoryDidChange:(WSDirectoryWatcher *)watcher
+{
+	(void)watcher;
+	if (_dragging || _rubberBanding || _renaming) {
+		_pendingReload = YES;
+		return;
+	}
+	[self fn_reloadKeepingSelection];
+}
+
+- (void)fn_drainPendingReload
+{
+	if (!_pendingReload || _dragging || _rubberBanding || _renaming) {
+		return;
+	}
+	_pendingReload = NO;
+	[self fn_reloadKeepingSelection];
+}
+
+- (WSDirectoryWatcher *)cg_watcher { return _watcher; }
+
 - (void)reload
 {
 	NSArray *items;
@@ -202,6 +275,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	[_icons removeAllObjects];
 	for (i = 0; i < [items count]; i++) [_icons addObject:[NSNull null]];
 	[_selection removeAllObjects];
+	_anchorIndex = -1;
 	[self setNeedsDisplay:YES];
 }
 
@@ -375,14 +449,19 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	 * type-select went to the window that happened to hold the keyboard. */
 	[[self window] makeFirstResponder:self];
 	NSInteger index = [WSIconLayout indexOfPosition:point among:_positions iconSize:[self iconSize]];
-	BOOL shift = ([event modifierFlags] & NSShiftKeyMask) != 0;
+	NSUInteger flags = [event modifierFlags];
+	BOOL shift = (flags & NSShiftKeyMask) != 0;
+	/* **COMMAND AND CONTROL BOTH ADD TO THE SELECTION.** The Mac spells "and this one too" with Command and every other
+	 * desktop with Control, and a desktop that answered only one of them looked broken to whoever pressed the other. */
+	BOOL toggle = (flags & (NSCommandKeyMask | NSControlKeyMask)) != 0;
 
 	_moved = NO;
 	_dragLast = point;
 	_rubberBanding = NO;
 
 	if (index < 0) {
-		if (!shift) [_selection removeAllObjects];
+		if (!shift && !toggle) [_selection removeAllObjects];
+		_anchorIndex = -1;
 		_rubberBanding = YES;
 		_rubberStart = point;
 		_rubberRect = NSMakeRect(point.x, point.y, 0.0, 0.0);
@@ -398,15 +477,26 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		return;
 	}
 
-	if (!shift) {
-		NSUInteger s;
-		BOOL already = NO;
-
-		for (s = 0; s < [_selection count]; s++)
-			if ([[_selection objectAtIndex:s] integerValue] == index) already = YES;
-		if (!already) [_selection removeAllObjects];
+	/* **THE MODIFIER DECIDES WHAT THE PRESS DOES TO THE SELECTION, AND THE DRAG STILL FOLLOWS.** A Shift-click takes
+	 * every icon between the anchor and the one clicked — the range rule a list has, read in the order the icons are laid
+	 * out — and a Control- or Command-click adds one or takes it away; a plain click on an unselected icon starts over,
+	 * while a plain click on one already selected keeps the group so it can be dragged as a whole. */
+	if (toggle) {
+		if ([self fn_isSelected:index]) {
+			[self removeFromSelection:index];
+		} else {
+			[self addToSelection:index];
+		}
+		_anchorIndex = index;
+	} else if (shift) {
+		[self extendSelectionToIndex:index];
+	} else if (![self fn_isSelected:index]) {
+		[_selection removeAllObjects];
+		[self addToSelection:index];
+		_anchorIndex = index;
+	} else {
+		_anchorIndex = index;
 	}
-	[self addToSelection:index];
 	_dragging = YES;
 	_dragSessionBegan = NO;
 	_pressPoint = point;
@@ -478,12 +568,336 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		_rubberBanding = NO;
 		[[self window] cg_setPointerCapture:NO];
 		[self setNeedsDisplay:YES];
+		[self fn_drainPendingReload];
 		return;
 	}
 	if (_dragging) {
 		if (_moved) [self snapSelectionToGridAndPersist];
 		_dragging = NO;
 	}
+	[self fn_drainPendingReload];
+}
+
+/* ---- THE CONTEXT MENU, AND WHAT ONE ICON CAN ANSWER -------------------------------------------- */
+
+/* The icon whose cell holds a point, in this view's top-left space, or -1. An item the grid could not place holds
+ * `WSIconNoPosition` and is under nothing, so it is never the answer. */
+- (NSInteger)fn_indexAtTopLeftPoint:(NSPoint)point
+{
+	NSInteger index = [WSIconLayout indexOfPosition:point among:_positions iconSize:[self iconSize]];
+
+	if (index >= 0
+	    && NSEqualPoints([[_positions objectAtIndex:(NSUInteger)index] pointValue], WSIconNoPosition)) {
+		return -1;
+	}
+	return index;
+}
+
+- (BOOL)fn_isSelected:(NSInteger)index
+{
+	NSUInteger s;
+
+	for (s = 0; s < [_selection count]; s++)
+		if ([[_selection objectAtIndex:s] integerValue] == index) return YES;
+	return NO;
+}
+
+/* **A RIGHT-CLICK NAMES ITS ICON, AND THE MENU IS ABOUT THAT ONE.** The click narrows the selection to the icon under
+ * the pointer first: `WSContextMenu` builds a single item's menu, so a right-click inside a group makes that icon the
+ * subject rather than offering commands that would have to mean several different things. A click on the wallpaper is
+ * not a menu yet, so it answers nil and nothing opens. */
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+	NSInteger index;
+
+	if (event == nil) {
+		return nil;
+	}
+	index = [self fn_indexAtTopLeftPoint:[self topLeftPointForEvent:event]];
+	if (index < 0) {
+		/* **NOTHING UNDER THE POINTER IS THE FOLDER'S MENU, NOT NO MENU.** The desktop is the view of a directory like
+		 * any grid, so its empty space offers the three things a directory can be asked — and the selection is left
+		 * alone, because Paste and New Folder are useful with something held elsewhere. */
+		return [WSContextMenu menuForBackgroundWithTarget:self];
+	}
+	/* **A CLICK ON ONE OF SEVERAL HOLDS THE GROUP** — the rule the file window's grid follows, and the reason a group's
+	 * menu can be reached at all: the pointer must be over one of the icons the menu is about. A click OUTSIDE the
+	 * selection narrows to what it landed on. */
+	if (![self fn_isSelected:index]) {
+		[_selection removeAllObjects];
+		[self addToSelection:index];
+		[self setNeedsDisplay:YES];
+	}
+	return ([_selection count] > 1)
+		? [WSContextMenu menuForMultipleItemsWithTarget:self]
+		: [WSContextMenu menuForSingleItemWithTarget:self];
+}
+
+/* COPY IS THE PATHS ON THE GENERAL PASTEBOARD, by the rule `WSItemDrag` writes once for both surfaces. */
+- (void)copy:(id)sender
+{
+	(void)sender;
+	WSItemCopyPathsToPasteboard([self cg_selectedPaths]);
+}
+
+/* CUT AND PASTE, the pair that makes a cut mean something: the paste moves what was cut and copies what was copied, into
+ * the desktop's own directory. */
+- (void)cut:(id)sender
+{
+	(void)sender;
+	WSItemCutPathsToPasteboard([self cg_selectedPaths]);
+}
+
+- (void)paste:(id)sender
+{
+	BOOL wasCut = NO;
+	NSArray *paths = WSItemClipboardPaths(&wasCut);
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	if (wasCut) {
+		(void)[_fileOperations movePaths:paths toDirectory:[_model directory] error:NULL];
+		WSItemClipboardForget();
+	} else {
+		(void)[_fileOperations copyPaths:paths toDirectory:[_model directory] error:NULL];
+	}
+	[self reload];
+}
+
+/* MOVE TO TRASH IS W6'S OPERATION, the same call a file window's `-moveToTrash:` makes, and the desktop then reads its
+ * directory again — the trashed icon is gone from the grid. */
+- (void)moveToTrash:(id)sender
+{
+	(void)sender;
+	if ([_selection count] == 0) {
+		return;
+	}
+	(void)[_fileOperations movePathsToTrash:[self cg_selectedPaths] error:NULL];
+	[self reload];
+}
+
+/* ---- THE EMPTY DESKTOP'S TWO COMMANDS -------------------------------------------------------- */
+
+/* NEW FOLDER IS W6'S OPERATION, and the folder it made is what the desktop holds afterwards — the same rule the file
+ * window's grid follows. */
+- (void)newFolder:(id)sender
+{
+	NSString *made;
+
+	(void)sender;
+	made = [_fileOperations createFolderInDirectory:[_model directory] name:nil error:NULL];
+	[self reload];
+	if (made != nil) {
+		[self cg_selectPaths:[NSArray arrayWithObject:made]];
+	}
+}
+
+/* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN** — the desktop's copy of the file window's
+ * grid command, and the same rule: the folder is made here, the selection moves into it, and the folder is held. */
+- (void)newFolderWithSelection:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSString *made;
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	made = [_fileOperations createFolderInDirectory:[_model directory]
+						 name:@"New Folder with Selection" error:NULL];
+	if (made == nil) {
+		return;
+	}
+	(void)[_fileOperations movePaths:paths toDirectory:made error:NULL];
+	[self reload];
+	[self cg_selectPaths:[NSArray arrayWithObject:made]];
+}
+
+/* **SELECT ALL IS EVERY ICON THE GRID COULD PLACE.** An item the grid had no cell for holds `WSIconNoPosition` and has no
+ * pixels, so selecting it would be a claim the desktop could not show; the press and the band both work from cells for the
+ * same reason. */
+- (void)selectAll:(id)sender
+{
+	NSUInteger i;
+
+	(void)sender;
+	[_selection removeAllObjects];
+	for (i = 0; i < [_positions count]; i++) {
+		if (!NSEqualPoints([[_positions objectAtIndex:i] pointValue], WSIconNoPosition)) {
+			[self addToSelection:(NSInteger)i];
+		}
+	}
+	_anchorIndex = ([_selection count] > 0) ? [[_selection objectAtIndex:0] integerValue] : -1;
+	[self setNeedsDisplay:YES];
+}
+
+/* ---- INLINE RENAME ---------------------------------------------------------------------------- */
+
+- (BOOL)isRenaming { return _renaming; }
+- (NSTextField *)cg_renameField { return _renameField; }
+
+- (WSFileOperations *)fileOperations { return _fileOperations; }
+
+/* **A CALLER MAY BRING ITS OWN OPERATIONS** — a probe with a trash on `/tmp` rather than the account's — and nil means
+ * "make my own", which is what the desktop window leaves it as. */
+- (void)setFileOperations:(WSFileOperations *)operations
+{
+	if (operations == _fileOperations) {
+		return;
+	}
+	[_fileOperations release];
+	_fileOperations = (operations != nil)
+		? [operations retain]
+		: [[WSFileOperations alloc] initWithUndoManager:nil trash:_trash];
+}
+
+/* RENAME IS A FIELD OVER THE LABEL, the same gesture a file window's grid gives the Return key. The field lands where
+ * `WSIconCell` draws the name — under the icon on this unflipped view — and the item's extension is left out of the
+ * selection, so a rename edits the name and not the fact about the file. */
+- (void)rename:(id)sender
+{
+	NSInteger index;
+	WSItem *item;
+	NSSize cell;
+	NSRect iconRect;
+	NSRect highlight;
+	NSRect frame;
+	NSTextField *field;
+
+	(void)sender;
+	if (_renaming) {
+		[self cancelRenaming];
+	}
+	if ([_selection count] != 1) {
+		return;
+	}
+	index = [[_selection objectAtIndex:0] integerValue];
+	if (index < 0 || index >= (NSInteger)[[_model items] count]
+	    || NSEqualPoints([[_positions objectAtIndex:(NSUInteger)index] pointValue], WSIconNoPosition)) {
+		return;
+	}
+	item = [[_model items] objectAtIndex:(NSUInteger)index];
+	cell = [WSIconLayout cellSizeForIconSize:[self iconSize]];
+	iconRect = [self cocoaRectForPosition:[[_positions objectAtIndex:(NSUInteger)index] pointValue]
+					size:NSMakeSize((CGFloat)[self iconSize], (CGFloat)[self iconSize])];
+	highlight = WSIconCellHighlightRect(iconRect, cell.width, NO);
+	frame = NSMakeRect(highlight.origin.x + 2.0,
+			   NSMinY(iconRect) - (CGFloat)WSIconLabelGap - (CGFloat)WSIconLabelHeight - 2.0,
+			   highlight.size.width - 4.0, (CGFloat)WSIconLabelHeight + 4.0);
+
+	field = [[NSTextField alloc] initWithFrame:frame];
+	[field setStringValue:[item name]];
+	[field setEditable:YES];
+	[field setSelectable:YES];
+	[field setBordered:YES];
+	[field setBezeled:YES];
+	[field setDrawsBackground:YES];
+	[field setBackgroundColor:[NSColor whiteColor]];
+	[field setTextColor:[NSColor blackColor]];
+	[field setDelegate:(id <NSTextFieldDelegate>)self];
+	[field setTarget:self];
+	[field setAction:@selector(renameFieldAction:)];
+	[self addSubview:field];
+	_renameField = field;
+	_renameIndex = index;
+	_renaming = YES;
+	[[self window] makeFirstResponder:field];
+	[field selectText:nil];
+	if (![item isDirectory] || [item isPackage]) {
+		NSText *editor = [field currentEditor];
+		NSRange dot = [[item name] rangeOfString:@"." options:NSBackwardsSearch];
+
+		if (editor != nil && dot.location != NSNotFound && dot.location > 0) {
+			[editor setSelectedRange:NSMakeRange(0, dot.location)];
+		}
+	}
+}
+
+- (void)renameFieldAction:(id)sender
+{
+	(void)sender;
+	(void)[self commitRenaming];
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)notification
+{
+	NSNumber *movement = [[notification userInfo] objectForKey:NSTextMovementUserInfoKey];
+
+	if (!_renaming) {
+		return;
+	}
+	if (movement != nil && [movement integerValue] == NSTextMovementCancel) {
+		[self cancelRenaming];
+	} else {
+		(void)[self commitRenaming];
+	}
+}
+
+- (BOOL)commitRenaming
+{
+	NSTextField *field;
+	NSString *name;
+	WSItem *item;
+	NSString *oldPath;
+	NSString *newPath;
+	NSFileManager *manager = [NSFileManager defaultManager];
+	BOOL renamed = NO;
+
+	if (!_renaming) {
+		return NO;
+	}
+	_renaming = NO;
+	field = _renameField;
+	_renameField = nil;
+	name = [[field stringValue] stringByTrimmingCharactersInSet:
+		[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+	item = [[_model items] objectAtIndex:(NSUInteger)_renameIndex];
+	oldPath = [item path];
+	newPath = [[_model directory] stringByAppendingPathComponent:name];
+
+	[[self window] makeFirstResponder:self];
+	[field removeFromSuperview];
+	[field release];
+
+	if ([name length] == 0 || [name isEqual:@"."] || [name isEqual:@".."]
+	    || [name rangeOfString:@"/"].location != NSNotFound) {
+		return NO;
+	}
+	if ([name isEqual:[item name]]) {
+		return YES;
+	}
+	if ([manager fileExistsAtPath:newPath]) {
+		return NO;
+	}
+	if ((_fileOperations != nil)
+	    ? ([_fileOperations renamePath:oldPath toName:name error:NULL] != nil)
+	    : [manager moveItemAtPath:oldPath toPath:newPath error:NULL]) {
+		[self reload];
+		[self cg_selectPaths:[NSArray arrayWithObject:newPath]];
+		renamed = YES;
+	}
+	[self setNeedsDisplay:YES];
+	[self fn_drainPendingReload];
+	return renamed;
+}
+
+- (void)cancelRenaming
+{
+	NSTextField *field;
+
+	if (!_renaming) {
+		return;
+	}
+	_renaming = NO;
+	field = _renameField;
+	_renameField = nil;
+	[[self window] makeFirstResponder:self];
+	[field removeFromSuperview];
+	[field release];
+	[self setNeedsDisplay:YES];
+	[self fn_drainPendingReload];
 }
 
 - (void)addToSelection:(NSInteger)index
@@ -499,6 +913,40 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	[[NSNotificationCenter defaultCenter] postNotificationName:WSSelectionDidChangeNotification object:self];
 }
 
+/* The toggle's other half: a Control- or Command-click on an icon already held takes it out, and says so, so that a
+ * window's selection lets go of an icon it no longer shares. */
+- (void)removeFromSelection:(NSInteger)index
+{
+	NSUInteger s;
+
+	for (s = 0; s < [_selection count]; s++) {
+		if ([[_selection objectAtIndex:s] integerValue] == index) {
+			[_selection removeObjectAtIndex:s];
+			[[NSNotificationCenter defaultCenter] postNotificationName:WSSelectionDidChangeNotification
+									     object:self];
+			return;
+		}
+	}
+}
+
+/* **A SHIFT-CLICK TAKES THE RUN BETWEEN THE ANCHOR AND THE ICON CLICKED**, which is the rule every list has, read in
+ * the order the icons are laid out — the order the keyboard walks. A rectangle would be a shape nobody described: these
+ * icons are placed on the desktop, not laid in a grid. */
+- (void)extendSelectionToIndex:(NSInteger)index
+{
+	NSInteger anchor = (_anchorIndex >= 0) ? _anchorIndex : index;
+	NSInteger lo = (anchor < index) ? anchor : index;
+	NSInteger hi = (anchor < index) ? index : anchor;
+	NSInteger i;
+
+	[_selection removeAllObjects];
+	for (i = lo; i <= hi; i++) {
+		[_selection addObject:[NSNumber numberWithInteger:i]];
+	}
+	_anchorIndex = anchor;
+	[[NSNotificationCenter defaultCenter] postNotificationName:WSSelectionDidChangeNotification object:self];
+}
+
 /* **A WINDOW TOOK THE SELECTION, SO THE DESKTOP LETS GO.** Repaint everything: the whole surface is the highlight's, and
  * one repaint per claim is cheaper than walking the icons the claim took. */
 - (void)fn_selectionHeldElsewhere:(NSNotification *)note
@@ -507,6 +955,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 		return;
 	}
 	[_selection removeAllObjects];
+	_anchorIndex = -1;
 	[self setNeedsDisplay:YES];
 }
 
@@ -529,6 +978,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 			[_selection addObject:[NSNumber numberWithInteger:(NSInteger)i]];
 		}
 	}
+	_anchorIndex = ([_selection count] > 0) ? [[_selection objectAtIndex:0] integerValue] : -1;
 	/* A DESKTOP THAT CHOOSES CLAIMS THE SELECTION; one that comes up empty stays silent, which is the rule the press
 	 * follows and the one that keeps the window next door's selection standing. */
 	if ([_selection count] > 0) {
@@ -708,7 +1158,7 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	NSString *target = [self dropDirectoryForIndex:_dropIndex];
 	NSDragOperation operation = _dropOperation;
 	id source = [sender draggingSource];
-	BOOL performed = WSItemDragPerform(paths, target, operation);
+	BOOL performed = WSItemDragPerformWithOperations(paths, target, operation, _fileOperations);
 
 	if (performed) {
 		NSMutableArray *arrived = [NSMutableArray array];
@@ -807,9 +1257,14 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 
 - (void)dealloc
 {
+	[_watcher invalidate];
+	[_watcher release];
 	[_workAreaTimer invalidate];
 	[_workAreaTimer release];
 	[[NSNotificationCenter defaultCenter] removeObserver:self name:WSSelectionDidChangeNotification object:nil];
+	[_renameField release];
+	[_fileOperations release];
+	[_trash release];
 	[_model release];
 	[_store release];
 	[_positions release];

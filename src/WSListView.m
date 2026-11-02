@@ -7,12 +7,17 @@
  */
 #import "WSListView.h"
 
+#import "WSContextMenu.h"
 #import "WSFileOperations.h"
 #import "WSItemIcons.h"
+#import "WSItemDrag.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 
 #import <AppKit/NSImage.h>
+#import <AppKit/NSDragging.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSTableHeaderCell.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
@@ -145,6 +150,14 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	_expandedPaths = [[NSMutableSet alloc] init];
 	_sortKey = WSItemSortName;
 	_sortAscending = YES;
+
+	/* **THE TREE IS A DRAG SOURCE AND A DROP DESTINATION, AND BOTH ARE THE TIER'S OWN MACHINERY.** `NSTableView`
+	 * already begins a session from a press-and-drag and asks its data source to write the rows (see
+	 * `-tableView:writeRowsWithIndexes:toPasteboard:` below), and it already tracks a drop and asks its data source to
+	 * validate and accept it. So this view supplies the four answers, not a fifth drag implementation. */
+	[self registerForDraggedTypes:[NSArray arrayWithObject:NSFilenamesPboardType]];
+	[self setDraggingSourceOperationMask:NSDragOperationEvery forLocal:YES];
+	[self setDraggingSourceOperationMask:NSDragOperationEvery forLocal:NO];
 
 	name = [[NSTableColumn alloc] initWithIdentifier:WSListNameColumn];
 	[[name headerCell] setStringValue:@"Name"];
@@ -636,6 +649,144 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	if (item != nil) {
 		[_expandedPaths removeObject:[(WSItem *)item path]];
 	}
+}
+
+/* ---- THE CONTEXT MENU ------------------------------------------------------------------------- */
+
+/* **A RIGHT-CLICK NAMES ITS ROW, AND THE MENU IS THE SAME THREE THE ICON SURFACES RAISE.** The rows are `WSContextMenu`'s
+ * and the commands are the WINDOW's (`WSContextMenuCommandTarget`): a tree has no Cut of its own, because the window owns
+ * the selection's meaning, the operation manager and the progress plate. A click on one of several held rows keeps the
+ * group, exactly as the icon grid's does; a click below the last row asks the folder's own questions. */
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+	NSInteger row;
+	id target;
+
+	if (event == nil) {
+		return nil;
+	}
+	row = [self rowAtPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+	target = WSContextMenuCommandTarget(self);
+	if (row < 0) {
+		return [WSContextMenu menuForBackgroundWithTarget:target];
+	}
+	if (![[self selectedRowIndexes] containsIndex:(NSUInteger)row]) {
+		[self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row] byExtendingSelection:NO];
+	}
+	return ([[self selectedRowIndexes] count] > 1)
+		? [WSContextMenu menuForMultipleItemsWithTarget:target]
+		: [WSContextMenu menuForSingleItemWithTarget:target];
+}
+
+/* ---- THE DRAG, OUT AND IN --------------------------------------------------------------------- */
+
+/* THE PATHS THE ROWS STAND FOR, in the order the rows are in: a nested row drags the item, not the folder it lives in. */
+- (NSArray *)cg_pathsForRows:(NSIndexSet *)rows
+{
+	NSMutableArray *paths = [[NSMutableArray alloc] init];
+	NSUInteger row;
+
+	for (row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex:row]) {
+		WSItem *item = (WSItem *)[self itemAtRow:(NSInteger)row];
+
+		if (item != nil) {
+			[paths addObject:[item path]];
+		}
+	}
+	return [paths autorelease];
+}
+
+/* **THE SOURCE'S HALF IS ONE ANSWER: WHAT THE ROWS OFFER.** The table has already made the pasteboard, cleared it and
+ * begun the session; it asks here for the contents, in the one type this tree speaks. */
+- (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes
+   toPasteboard:(NSPasteboard *)pasteboard
+{
+	NSArray *paths = [self cg_pathsForRows:rowIndexes];
+
+	(void)tableView;
+	if ([paths count] == 0) {
+		return NO;
+	}
+	[pasteboard declareTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
+	[pasteboard setPropertyList:paths forType:NSFilenamesPboardType];
+	return YES;
+}
+
+/* **WHERE A DROP AT A ROW WOULD LAND.** A folder row is somewhere a file can go; any other row means "into the folder
+ * this row lives in", and no row at all means the folder the whole tree is showing — which is the rule the icon grid
+ * follows with an icon and with its background. */
+- (NSString *)cg_dropDirectoryForRow:(NSInteger)row
+{
+	WSItem *item = (row >= 0 && row < [self numberOfRows]) ? (WSItem *)[self itemAtRow:row] : nil;
+	WSItemModel *parent;
+
+	if (item == nil) {
+		return [_model directory];
+	}
+	if ([item isDirectory]) {
+		return [item path];
+	}
+	parent = [self modelForParentOfItem:item];
+	return (parent != nil) ? [parent directory] : [_model directory];
+}
+
+/* THE OPERATION A DROP AT A ROW WOULD PERFORM, asked once and used by both halves of the destination. */
+- (NSDragOperation)cg_operationForDropAtRow:(NSInteger)row info:(id <NSDraggingInfo>)info
+{
+	NSArray *paths = WSItemDragPaths(info);
+	NSString *target = [self cg_dropDirectoryForRow:row];
+
+	if ([paths count] == 0 || target == nil) {
+		return NSDragOperationNone;
+	}
+	return WSItemDragOperation(paths, target, [info draggingSourceOperationMask], [NSEvent modifierFlags]);
+}
+
+- (NSDragOperation)tableView:(NSTableView *)tableView validateDrop:(id <NSDraggingInfo>)info
+		 proposedRow:(NSInteger)row proposedDropOperation:(NSTableViewDropOperation)dropOperation
+{
+	NSDragOperation operation;
+
+	(void)tableView;
+	(void)dropOperation;
+	operation = [self cg_operationForDropAtRow:row info:info];
+	if (operation == NSDragOperationNone) {
+		return NSDragOperationNone;
+	}
+	/* **A FOLDER ROW SAYS "IN HERE" RATHER THAN "BESIDE ME".** The table proposes an insertion line; re-targeting the
+	 * drop ONTO the folder row is what draws the highlight on the folder it would go into, which is the same answer
+	 * `-cg_dropDirectoryForRow:` just gave. */
+	if (row >= 0 && row < [self numberOfRows]
+	    && [(WSItem *)[self itemAtRow:row] isDirectory]) {
+		[self setDropRow:row dropOperation:NSTableViewDropOn];
+	}
+	return operation;
+}
+
+- (BOOL)tableView:(NSTableView *)tableView acceptDrop:(id <NSDraggingInfo>)info
+	       row:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation
+{
+	NSArray *paths = WSItemDragPaths(info);
+	NSString *target = [self cg_dropDirectoryForRow:row];
+	NSDragOperation operation;
+	BOOL performed;
+
+	(void)tableView;
+	(void)dropOperation;
+	operation = [self cg_operationForDropAtRow:row info:info];
+	performed = WSItemDragPerformWithOperations(paths, target, operation, _fileOperations);
+	if (performed) {
+		[self reloadData];
+		if ([_listDelegate respondsToSelector:@selector(listViewDidChangeModel:)]) {
+			[_listDelegate listViewDidChangeModel:self];
+		}
+		/* **AND A SOURCE WHOSE ROWS HAVE MOVED READS ITSELF AGAIN**, by the selector the two icon surfaces already
+		 * answer, so a drag out of a window into this tree updates the window it came from. */
+		if ([[info draggingSource] respondsToSelector:@selector(reloadAfterChange)]) {
+			[(id <WSItemDragSourceReloading>)[info draggingSource] reloadAfterChange];
+		}
+	}
+	return performed;
 }
 
 /* ---- THE KEYBOARD AND THE DOUBLE-CLICK -------------------------------------------------------- */

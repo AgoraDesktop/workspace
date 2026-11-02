@@ -33,14 +33,17 @@ endif()
 find_package(AgoraApp CONFIG REQUIRED)
 find_package(AgoraIconServices CONFIG REQUIRED)
 find_package(AgoraLaunchServices CONFIG REQUIRED)
+find_package(AgoraWatch CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 
 add_executable(Workspace
     src/main.m
     src/WSAboutPanel.m
     src/WSApplication.m
+    src/WSContextMenu.m
     src/WSDesktopWindow.m
     src/WSDesktopView.m
+    src/WSDirectoryWatcher.m
     src/WSIconView.m
     src/WSSelectionBand.m
     src/WSSelectionOwner.m
@@ -83,6 +86,7 @@ target_link_libraries(Workspace PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
+    AgoraWatch::Watch
     ZLIB::ZLIB)
 
 # ---------------------------------------------------------------------------

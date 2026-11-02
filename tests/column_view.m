@@ -16,6 +16,11 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBrowser.h>
 #import <AppKit/NSBrowserCell.h>
+#import <AppKit/NSDragging.h>
+#import <AppKit/NSEvent.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableView.h>
@@ -25,6 +30,18 @@
 #include <math.h>
 #include <stdio.h>
 #include <unistd.h>
+
+/* **THE BROWSER'S DATA-SOURCE HALF, DECLARED HERE AS THE OTHER PROBES DECLARE A PRIVATE SEAM.** A column's table asks its
+ * data source — the browser — for the four drag answers, and the browser forwards them to its delegate. Calling these is
+ * what measures the whole path rather than only the view's half of it. */
+@interface NSBrowser (AGColumnDragProbe)
+- (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes
+   toPasteboard:(NSPasteboard *)pasteboard;
+- (NSDragOperation)tableView:(NSTableView *)tableView validateDrop:(id <NSDraggingInfo>)info
+		 proposedRow:(NSInteger)row proposedDropOperation:(NSTableViewDropOperation)dropOperation;
+- (BOOL)tableView:(NSTableView *)tableView acceptDrop:(id <NSDraggingInfo>)info
+	       row:(NSInteger)row dropOperation:(NSTableViewDropOperation)dropOperation;
+@end
 
 static int s_failed;
 
@@ -75,6 +92,65 @@ static NSString *cellAt(NSBrowser *browser, NSInteger row, NSInteger column)
 	[opened release];
 	[super dealloc];
 }
+@end
+
+static NSEvent *rightClick(NSPoint inWindow)
+{
+	return [NSEvent mouseEventWithType:NSRightMouseDown location:inWindow modifierFlags:0
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+static NSEvent *leftClick(NSPoint inWindow, NSUInteger flags)
+{
+	return [NSEvent mouseEventWithType:NSLeftMouseDown location:inWindow modifierFlags:flags
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+/* **THE WINDOW OWNS A CONTEXT MENU'S COMMANDS**, so a probe that answers `-newFolder:` stands in for
+ * `WSFileWindowController` — the same stand-in the list view's suite uses. */
+@interface AGColumnCommands : NSObject
+@end
+
+@implementation AGColumnCommands
+- (void)newFolder:(id)sender { (void)sender; }
+- (void)selectAll:(id)sender { (void)sender; }
+@end
+
+/* A DRAGGING INFO WITH NO SESSION, so the browser's forwards are asked the way its columns' tables ask them. */
+@interface AGColumnDropInfo : NSObject <NSDraggingInfo>
+{
+	NSPasteboard *_pasteboard;	/* RETAINED */
+	NSPoint _location;
+	NSDragOperation _mask;
+}
+- (instancetype)initWithPaths:(NSArray *)paths location:(NSPoint)location;
+@end
+
+@implementation AGColumnDropInfo
+- (instancetype)initWithPaths:(NSArray *)paths location:(NSPoint)location
+{
+	self = [super init];
+	if (self != nil) {
+		_pasteboard = [[NSPasteboard pasteboardWithUniqueName] retain];
+		[_pasteboard declareTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
+		[_pasteboard setPropertyList:paths forType:NSFilenamesPboardType];
+		_location = location;
+		_mask = NSDragOperationEvery;
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[_pasteboard release];
+	[super dealloc];
+}
+- (NSPasteboard *)draggingPasteboard { return _pasteboard; }
+- (NSPoint)draggingLocation { return _location; }
+- (NSDragOperation)draggingSourceOperationMask { return _mask; }
+- (id)draggingSource { return nil; }
+- (NSInteger)draggingSequenceNumber { return 0; }
 @end
 
 int main(void)
@@ -192,6 +268,68 @@ int main(void)
 	[browser selectRow:0 inColumn:0];
 	check([browser numberOfRowsInColumn:1] == 3, "after reload the folder's new child is in column 1");
 
+	/* **A TRASHED FILE LEAVES THE COLUMNS WHERE THEY WERE.** Removing the leaf selected in column 1 and reloading is
+	 * exactly what Move to Trash does to the view: the two columns must survive, column 1 must come back with nothing
+	 * selected rather than the browser collapsing to column zero, and the preview must empty while column 0 keeps the
+	 * folder a person was inside. */
+	[browser selectRow:0 inColumn:0];
+	{
+		NSInteger leafRow = -1;
+		NSInteger row;
+
+		for (row = 0; row < [browser numberOfRowsInColumn:1]; row++) {
+			if ([cellAt(browser, row, 1) isEqual:@"new.txt"]) {
+				leafRow = row;
+			}
+		}
+		check(leafRow >= 0, "the folder's new child is selectable in column 1");
+		[browser selectRow:leafRow inColumn:1];
+		check([[[view cg_previewItem] name] isEqual:@"new.txt"], "and it is the preview's item");
+		check([[NSFileManager defaultManager] removeItemAtPath:
+			[aFolder stringByAppendingPathComponent:@"new.txt"] error:NULL],
+		      "the selected file goes away, as Move to Trash makes it");
+		[view reloadData];
+		check([browser cg_activeColumnCount] == 2 && [browser selectedColumn] == 0,
+		      "the reloaded browser keeps both columns and selects the folder, not the file");
+		check([browser selectedRowInColumn:1] == -1,
+		      "and the column that held the trashed file is open with nothing selected");
+		check([view cg_previewItem] == nil, "while the preview empties rather than describing a gone file");
+		check([[cellAt(browser, [browser selectedRowInColumn:0], 0) copy] isEqual:@"A Folder"],
+		      "and column 0 still holds the folder the person was in");
+		check([browser numberOfRowsInColumn:1] == 2, "whose remaining children are still listed");
+	}
+
+	/* **A COLUMN HOLDS SEVERAL ROWS, WHICH IS WHAT THE MODIFIERS ARE FOR.** Control and Command add a row to the
+	 * column's selection and Shift takes the run from the anchor, so Move to Trash, Copy or a drag can take several
+	 * files of one folder — the whole reason a browser's columns are multi-selection. The browser still opens the
+	 * column to the right from the first selected row, so browsing stays predictable. */
+	{
+		NSTableView *table = [browser cg_tableForColumn:0];
+		NSPoint row0 = [browser convertPoint:NSMakePoint(NSMidX([browser frameOfRow:0 inColumn:0]),
+								NSMidY([browser frameOfRow:0 inColumn:0]))
+					   toView:nil];
+		NSPoint row2 = [browser convertPoint:NSMakePoint(NSMidX([browser frameOfRow:2 inColumn:0]),
+								NSMidY([browser frameOfRow:2 inColumn:0]))
+					   toView:nil];
+
+		[browser selectRow:0 inColumn:0];
+		[table mouseDown:leftClick(row2, NSControlKeyMask)];
+		check([[view selectedItems] count] == 2 && [browser selectedColumn] == 0,
+		      "a Control-click adds a row of the column to the selection");
+		check([[[[view selectedItems] objectAtIndex:1] name] isEqual:@"notes.txt"],
+		      "and the group is the rows the two clicks named");
+		[table mouseDown:leftClick(row2, NSControlKeyMask)];
+		check([[view selectedItems] count] == 1, "a second Control-click takes it away again");
+		[table mouseDown:leftClick(row2, NSCommandKeyMask)];
+		check([[view selectedItems] count] == 2, "and a Command-click adds one back");
+		[browser selectRow:0 inColumn:0];
+		[table mouseDown:leftClick(row2, NSShiftKeyMask)];
+		check([[view selectedItems] count] == 3,
+		      "a Shift-click takes the run between the anchor and the row clicked");
+		[browser selectRow:0 inColumn:0];
+		check([[view selectedItems] count] == 1, "and a plain selection is one row again");
+	}
+
 	/* THE PREVIEW IS A COLUMN OF ITS OWN AND THE BROWSER GETS THE REST. */
 	[view setFrameSize:NSMakeSize(900.0, 500.0)];
 	check([[browser superview] isEqual:view] && [browser frame].size.width < 900.0
@@ -207,6 +345,126 @@ int main(void)
 		check(scroll != nil
 		      && fabs([scroll frame].size.width - [browser bounds].size.width) < 0.01,
 		      "and the browser's own scroll view follows its frame");
+	}
+
+	/* **THE CONTEXT MENU IS THE BROWSER'S, because the event lands on it and not on the wrapper.** The row under the
+	 * pointer comes from the browser's own hit test, and the rows are aimed at the WINDOW, which owns the commands. */
+	{
+		AGColumnCommands *commands = [[AGColumnCommands alloc] init];
+		NSInteger row = [browser selectedRowInColumn:0];
+		NSMenu *menu;
+		NSArray *rows;
+
+		[window setDelegate:commands];
+		{
+			/* A point inside the first row of column zero: the browser's own hit test is asked for the row's rect. */
+			NSRect cell = [browser frameOfRow:(row >= 0 ? row : 0) inColumn:0];
+			NSPoint inWindow = [browser convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell)) toView:nil];
+
+			menu = [browser menuForEvent:rightClick(inWindow)];
+		}
+		rows = (menu != nil) ? [menu itemArray] : nil;
+		check([rows count] == 7, "a right-click on a column's row raises the item's own menu");
+		if ([rows count] == 7) {
+			check([[[rows objectAtIndex:0] title] isEqual:@"Get Info"]
+			      && [[[rows objectAtIndex:6] title] isEqual:@"Move to Trash"],
+			      "with the reference file manager's rows");
+			check([[rows objectAtIndex:6] target] == commands,
+			      "aimed at the WINDOW's commands, not at the browser");
+		}
+
+		/* **A RIGHT-CLICK INSIDE A GROUP KEEPS IT AND OFFERS THE GROUP'S ROWS**, the rule the list follows: narrowing
+		 * the click to one row would leave the commands a group is for with nothing to act on. */
+		{
+			NSTableView *table = [browser cg_tableForColumn:0];
+			NSRect cell = [browser frameOfRow:0 inColumn:0];
+			NSPoint inWindow = [browser convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell)) toView:nil];
+			NSRect other = [browser frameOfRow:2 inColumn:0];
+			NSPoint otherWindow = [browser convertPoint:NSMakePoint(NSMidX(other), NSMidY(other)) toView:nil];
+
+			[browser selectRow:0 inColumn:0];
+			[table mouseDown:leftClick(otherWindow, NSControlKeyMask)];
+			menu = [browser menuForEvent:rightClick(inWindow)];
+			rows = (menu != nil) ? [menu itemArray] : nil;
+			check([[browser selectedRowIndexesInColumn:0] count] == 2
+			      && [menu indexOfItemWithTitle:@"New Folder with Selection"] != (NSInteger)NSNotFound
+			      && [menu indexOfItemWithTitle:@"Rename"] == (NSInteger)NSNotFound,
+			      "a right-click inside a group keeps it and offers the group's rows");
+			[browser selectRow:0 inColumn:0];
+		}
+
+		/* Below the last row of the column is the folder's own menu. */
+		{
+			NSInteger count = [browser numberOfRowsInColumn:0];
+			NSRect last = [browser frameOfRow:(count - 1) inColumn:0];
+			NSPoint below = [browser convertPoint:NSMakePoint(NSMidX(last), NSMinY(last) - 20.0)
+						       toView:nil];
+
+			menu = [browser menuForEvent:rightClick(below)];
+		}
+		rows = (menu != nil) ? [menu itemArray] : nil;
+		check([rows count] == 4 && [[[rows objectAtIndex:0] title] isEqual:@"New Folder"],
+		      "and a right-click below the rows asks the folder's own questions");
+
+		[window setDelegate:nil];
+		[commands release];
+	}
+
+	/* **AND A COLUMN IS A DRAG SOURCE AND A DROP DESTINATION, THROUGH THE BROWSER'S OWN FORWARDS.** The three answers go
+	 * through the browser (it is the tables' data source) to the view, which is its delegate — so what is measured is the
+	 * whole path, not just the view's method. */
+	{
+		NSTableView *table = [browser cg_tableForColumn:0];
+		NSPasteboard *pasteboard = [NSPasteboard pasteboardWithUniqueName];
+		NSArray *offered;
+		NSInteger fileRow;
+		NSInteger folderRow;
+		NSString *doomed;
+		NSDragOperation operation;
+
+		fileRow = -1;
+		folderRow = -1;
+		{
+			/* **THE ROWS ARE NAMED BY THEIR CELLS.** This browser is driven through the CELL-based delegate contract
+			 * (`-browser:willDisplayCell:atRow:column:`), so a row's name is the cell's string — the item-based
+			 * `-itemAtRow:inColumn:` is the other contract and answers nothing here. */
+			NSInteger i;
+
+			for (i = 0; i < [browser numberOfRowsInColumn:0]; i++) {
+				NSString *name = [[browser loadedCellAtRow:i column:0] stringValue];
+
+				if ([name isEqual:@"notes.txt"]) fileRow = i;
+				if ([name isEqual:@"B Folder"]) folderRow = i;
+			}
+		}
+		check(fileRow >= 0 && folderRow >= 0 && fileRow != folderRow,
+		      "the probe found the file's row and the folder's row");
+
+		check([browser tableView:table writeRowsWithIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)fileRow]
+			     toPasteboard:pasteboard],
+		      "the browser asks its delegate what the rows offer, and they offer their paths");
+		offered = [pasteboard propertyListForType:NSFilenamesPboardType];
+		check([offered count] == 1
+		      && [[offered objectAtIndex:0] isEqual:[root stringByAppendingPathComponent:@"notes.txt"]],
+		      "as the path that row stands for");
+
+		doomed = [root stringByAppendingPathComponent:@"notes.txt"];
+		{
+			AGColumnDropInfo *info = [[AGColumnDropInfo alloc]
+				initWithPaths:[NSArray arrayWithObject:doomed]
+				    location:[browser convertPoint:NSMakePoint(10.0, 10.0) toView:nil]];
+
+			operation = [browser tableView:table validateDrop:info proposedRow:folderRow
+				     proposedDropOperation:NSTableViewDropAbove];
+			check(operation == NSDragOperationMove,
+			      "a file dropped on a folder's row is a Move within the volume");
+			check([browser tableView:table acceptDrop:info row:folderRow
+				  dropOperation:NSTableViewDropOn]
+			      && [[NSFileManager defaultManager] fileExistsAtPath:
+					[bFolder stringByAppendingPathComponent:@"notes.txt"]],
+			      "and accepting it moves the file into that folder");
+			[info release];
+		}
 	}
 
 	[probe release];

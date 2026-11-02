@@ -12,6 +12,7 @@
  * field editor and one `NSFileManager` move. **And the Name cell carries the item's icon**, set through the same
  * `-outlineView:willDisplayCell:…` door the table uses, so a row's picture is checked without a window.
  */
+#import "WSFileOperations.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 #import "WSItemSort.h"
@@ -19,7 +20,11 @@
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSDragging.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTextFieldCell.h>
@@ -129,6 +134,79 @@ static NSString *objectFor(WSListView *view, NSInteger row, NSString *identifier
 	[opened release];
 	[super dealloc];
 }
+@end
+
+static NSEvent *rightClick(NSPoint inWindow)
+{
+	return [NSEvent mouseEventWithType:NSRightMouseDown location:inWindow modifierFlags:0
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+static NSEvent *leftClick(NSPoint inWindow, NSUInteger flags)
+{
+	return [NSEvent mouseEventWithType:NSLeftMouseDown location:inWindow modifierFlags:flags
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+static NSEvent *leftUp(NSPoint inWindow, NSUInteger flags)
+{
+	return [NSEvent mouseEventWithType:NSLeftMouseUp location:inWindow modifierFlags:flags
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
+static NSEvent *leftDrag(NSPoint inWindow, NSUInteger flags)
+{
+	return [NSEvent mouseEventWithType:NSLeftMouseDragged location:inWindow modifierFlags:flags
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:0 pressure:1.0f];
+}
+
+/* **THE WINDOW OWNS A CONTEXT MENU'S COMMANDS, SO THE MENU MUST BE AIMED AT IT** — see `WSContextMenuCommandTarget`, and
+ * `WSFileWindowController`, which is the real one. This probe is the smallest object that answers `-newFolder:`. */
+@interface AGListCommands : NSObject
+@end
+
+@implementation AGListCommands
+- (void)newFolder:(id)sender { (void)sender; }
+- (void)selectAll:(id)sender { (void)sender; }
+@end
+
+/* A DRAGGING INFO WITH NO SESSION, so the destination's two doors are asked the way the table asks them. */
+@interface AGListDropInfo : NSObject <NSDraggingInfo>
+{
+	NSPasteboard *_pasteboard;	/* RETAINED */
+	NSPoint _location;
+	NSDragOperation _mask;
+}
+- (instancetype)initWithPaths:(NSArray *)paths location:(NSPoint)location;
+@end
+
+@implementation AGListDropInfo
+- (instancetype)initWithPaths:(NSArray *)paths location:(NSPoint)location
+{
+	self = [super init];
+	if (self != nil) {
+		_pasteboard = [[NSPasteboard pasteboardWithUniqueName] retain];
+		[_pasteboard declareTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
+		[_pasteboard setPropertyList:paths forType:NSFilenamesPboardType];
+		_location = location;
+		_mask = NSDragOperationEvery;
+	}
+	return self;
+}
+- (void)dealloc
+{
+	[_pasteboard release];
+	[super dealloc];
+}
+- (NSPasteboard *)draggingPasteboard { return _pasteboard; }
+- (NSPoint)draggingLocation { return _location; }
+- (NSDragOperation)draggingSourceOperationMask { return _mask; }
+- (id)draggingSource { return nil; }
+- (NSInteger)draggingSequenceNumber { return 0; }
 @end
 
 int main(void)
@@ -383,6 +461,202 @@ int main(void)
 		      "a folder row's Name cell carries its 16-point icon");
 		check([fileCell image] != nil, "a file row's Name cell carries its type's icon");
 		check([dateCell image] == nil, "and a non-Name cell carries no icon of its own");
+	}
+
+	/* **THE CONTEXT MENU: THE THREE THE ICON SURFACES RAISE, AIMED AT THE WINDOW'S COMMANDS.** A tree has no Cut of its
+	 * own — the window owns the selection's meaning, the operation manager and the progress plate — so the rows' target is
+	 * the window's delegate, and a probe that answers `-newFolder:` stands in for `WSFileWindowController` here. */
+	{
+		AGListCommands *commands = [[AGListCommands alloc] init];
+		NSPoint inRow0;
+		NSPoint inRow1;
+		NSPoint below;
+		NSMenu *menu;
+		NSArray *rows;
+
+		[window setDelegate:commands];
+		inRow0 = [list convertPoint:NSMakePoint(NSMidX([list rectOfRow:0]), NSMidY([list rectOfRow:0])) toView:nil];
+		inRow1 = [list convertPoint:NSMakePoint(NSMidX([list rectOfRow:1]), NSMidY([list rectOfRow:1])) toView:nil];
+		below = [list convertPoint:NSMakePoint(40.0, [list numberOfRows] * [list rowHeight] + 20.0)
+				    toView:nil];
+
+		[list selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+		menu = [list menuForEvent:rightClick(inRow0)];
+		rows = (menu != nil) ? [menu itemArray] : nil;
+		check([rows count] == 7, "a right-click on a list row raises the item's own menu");
+		if ([rows count] == 7) {
+			check([[[rows objectAtIndex:0] title] isEqual:@"Get Info"]
+			      && [[[rows objectAtIndex:5] title] isEqual:@"Rename"]
+			      && [[[rows objectAtIndex:6] title] isEqual:@"Move to Trash"],
+			      "with the reference file manager's rows");
+			check([[rows objectAtIndex:6] target] == commands,
+			      "aimed at the WINDOW's commands, which is what owns the selection's meaning");
+		}
+
+		/* A click on one of several held rows keeps the group, and a group cannot be renamed. */
+		[list selectRowIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 2)]
+	     byExtendingSelection:NO];
+		menu = [list menuForEvent:rightClick(inRow1)];
+		rows = (menu != nil) ? [menu itemArray] : nil;
+		check([[list selectedRowIndexes] count] == 2 && [rows count] == 7
+		      && [menu indexOfItemWithTitle:@"New Folder with Selection"] != (NSInteger)NSNotFound
+		      && [menu indexOfItemWithTitle:@"Rename"] == (NSInteger)NSNotFound,
+		      "a right-click inside a group keeps it and offers the group's rows");
+
+		/* **A CONTROL- OR COMMAND-CLICK ADDS A ROW AND SHIFT TAKES A RUN**, the same rules the table has and the ones a
+		 * person arriving from any other file manager will use: Control is not a dead key here. */
+		{
+			NSPoint row0 = [list convertPoint:NSMakePoint(NSMidX([list rectOfRow:0]),
+								      NSMidY([list rectOfRow:0])) toView:nil];
+			NSPoint row2 = [list convertPoint:NSMakePoint(NSMidX([list rectOfRow:2]),
+								      NSMidY([list rectOfRow:2])) toView:nil];
+
+			[list selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+			[list mouseDown:leftClick(row2, NSControlKeyMask)];
+			check([[list selectedRowIndexes] count] == 2 && [list isRowSelected:0]
+			      && [list isRowSelected:2],
+			      "a Control-click adds a row to the list's selection");
+			[list mouseDown:leftClick(row2, NSControlKeyMask)];
+			check([[list selectedRowIndexes] count] == 1 && ![list isRowSelected:2],
+			      "and a second one takes it away again");
+			[list mouseDown:leftClick(row2, NSCommandKeyMask)];
+			check([[list selectedRowIndexes] count] == 2 && [list isRowSelected:2],
+			      "while a Command-click does the same");
+			[list selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+			[list mouseDown:leftClick(row2, NSShiftKeyMask)];
+			check([[list selectedRowIndexes] count] == 3 && [list isRowSelected:0]
+			      && [list isRowSelected:1] && [list isRowSelected:2],
+			      "and a Shift-click takes the run between the anchor and the row clicked");
+			check([list numberOfRows] > 2, "the list holds the rows the run crossed");
+		}
+
+		/* Below the last row is the folder's own menu. */
+		menu = [list menuForEvent:rightClick(below)];
+		rows = (menu != nil) ? [menu itemArray] : nil;
+		check([rows count] == 4 && [[[rows objectAtIndex:0] title] isEqual:@"New Folder"]
+		      && [[[rows objectAtIndex:3] title] isEqual:@"Select All"],
+		      "and a right-click below the rows asks the folder's own questions");
+
+		[window setDelegate:nil];
+		[commands release];
+	}
+
+	/* **AND THE TREE IS A DRAG SOURCE AND A DROP DESTINATION, through the four answers the table asks its data source
+	 * for.** The source is one call; the destination is its validate/accept pair, asked with a dragging info that has no
+	 * session behind it — exactly what the table passes. */
+	{
+		NSPasteboard *pasteboard = [NSPasteboard pasteboardWithUniqueName];
+		NSArray *offered;
+		NSInteger folderRow;
+		NSInteger fileRow;
+		NSDragOperation operation;
+		NSString *doomed;
+
+		/* The rows are named rather than numbered, because an earlier section EXPANDED a folder and the tree's numbering
+		 * is not the flat list's afterwards. */
+		{
+			NSIndexSet *carried = [NSIndexSet indexSetWithIndexesInRange:
+				NSMakeRange((NSUInteger)rowForName(list, @"big.bin"), 2)];
+			NSString *first = [[list itemAtRow:(NSInteger)[carried firstIndex]] path];
+			NSString *second = [[list itemAtRow:(NSInteger)[carried firstIndex] + 1] path];
+
+			[list selectRowIndexes:carried byExtendingSelection:NO];
+			check([list tableView:list writeRowsWithIndexes:carried toPasteboard:pasteboard],
+			      "the source writes the rows the drag carries");
+			offered = [pasteboard propertyListForType:NSFilenamesPboardType];
+			check([offered count] == 2 && [[offered objectAtIndex:0] isEqual:first]
+			      && [[offered objectAtIndex:1] isEqual:second],
+			      "as the paths those rows stand for, in the tree's order");
+		}
+
+		/* **A CLICK WITH A SHAKY HAND MOVES NOTHING.** A hand's tremor crosses a four-point threshold during an ordinary
+		 * click; a table drag that ends on the next row MOVES the file into that row's folder — the way a 22 GB folder
+		 * was taken out of a home directory. A press whose pointer stays inside its own row writes nothing to the
+		 * pasteboard and begins no session, so the item cannot move. */
+		{
+			NSInteger row = rowForName(list, @"big.bin");
+			NSRect cell = [list rectOfRow:row];
+			NSPoint press = [list convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell)) toView:nil];
+			NSPoint jitter = [list convertPoint:NSMakePoint(NSMidX(cell) + 16.0, NSMidY(cell) + 3.0)
+						    toView:nil];
+			NSString *path = [[list itemAtRow:row] path];
+
+			[list mouseDown:leftClick(press, 0)];
+			[list mouseDragged:leftDrag(jitter, 0)];
+			check([[NSFileManager defaultManager] fileExistsAtPath:path],
+			      "a click whose pointer drifts inside its own row moves nothing");
+			check([[list selectedRowIndexes] containsIndex:(NSUInteger)row],
+			      "and the row it was on is the row it selected");
+		}
+
+		/* A drop ON a folder row goes into that folder. */
+		folderRow = rowForName(list, @"alphaDir");
+		fileRow = rowForName(list, @"notes.txt");
+		doomed = [root stringByAppendingPathComponent:@"notes.txt"];
+		{
+			AGListDropInfo *info = [[AGListDropInfo alloc]
+				initWithPaths:[NSArray arrayWithObject:doomed]
+				    location:[list convertPoint:NSMakePoint(NSMidX([list rectOfRow:folderRow]),
+									    NSMidY([list rectOfRow:folderRow]))
+							 toView:nil]];
+
+			NSUndoManager *undo = [[NSUndoManager alloc] init];
+			WSFileOperations *operations = [[WSFileOperations alloc] initWithUndoManager:undo trash:nil];
+
+			/* **A DISCLOSURE TRIANGLE IS NOT A DRAG.** The outline CONSUMES that press — its `-mouseDown:` toggles and
+		 * returns without calling the table's — so the table's drag bookkeeping still named the last ordinary click.
+		 * A twitch of the hand after opening a folder then began a drag of that stale row, and the click after it
+		 * completed the drop: opening a folder moved a file. */
+		{
+			WSItem *alphaItem = [list cg_itemForPath:alpha];
+			NSInteger row = [list rowForItem:alphaItem];
+			NSRect triangle = [list frameOfOutlineCellAtRow:row];
+			NSString *notesPath = [root stringByAppendingPathComponent:@"notes.txt"];
+			NSRect rowRect = [list rectOfRow:[list rowForItem:[list cg_itemForPath:notesPath]]];
+			NSPoint inTriangle = [list convertPoint:NSMakePoint(NSMidX(triangle), NSMidY(triangle)) toView:nil];
+			NSPoint inRow = [list convertPoint:NSMakePoint(NSMidX(rowRect) + 60.0, NSMidY(rowRect)) toView:nil];
+
+			/* An ordinary click first, so the stale state the bug used is there to be used. */
+			[list mouseDown:leftClick(inRow, 0)];
+			[list mouseUp:leftUp(inRow, 0)];
+			NSRect otherRect = [list rectOfRow:0];
+			NSPoint inOtherRow = [list convertPoint:NSMakePoint(NSMidX(otherRect) + 60.0,
+									    NSMidY(otherRect)) toView:nil];
+
+			[list mouseDown:leftClick(inTriangle, 0)];
+			/* **AND THE HAND MOVES ONTO ANOTHER ROW**, which is what made the stale start point dangerous: a drag
+			 * that stays in its own row is refused anyway. */
+			[list mouseDragged:leftDrag(inOtherRow, 0)];
+			check([NSDraggingSession cg_activeSession] == nil,
+			      "opening a disclosure triangle begins no drag, however the hand moves");
+			[list mouseUp:leftUp(inOtherRow, 0)];
+			check([[NSFileManager defaultManager] fileExistsAtPath:alpha]
+			      && [[NSFileManager defaultManager] fileExistsAtPath:notesPath],
+			      "and nothing was moved by opening it");
+		}
+
+		/* **A DROP THAT MOVES IS UNDOABLE**, which is the safety net a file manager owes anyone: the move a drag
+			 * performs is the window's, and Edit▸Undo is where it is taken back. */
+			[list setFileOperations:operations];
+			operation = [list tableView:list validateDrop:info proposedRow:folderRow
+				     proposedDropOperation:NSTableViewDropAbove];
+			check(operation == NSDragOperationMove,
+			      "a file dropped on a folder row is a Move within the volume");
+			check([list tableView:list acceptDrop:info row:folderRow dropOperation:NSTableViewDropOn]
+			      && [[NSFileManager defaultManager] fileExistsAtPath:
+					[alpha stringByAppendingPathComponent:@"notes.txt"]],
+			      "and accepting it moves the file into that folder");
+			check(probe->changes > 0, "the window is told the tree changed");
+			[undo undo];
+			check([[NSFileManager defaultManager] fileExistsAtPath:doomed]
+			      && ![[NSFileManager defaultManager] fileExistsAtPath:
+					[alpha stringByAppendingPathComponent:@"notes.txt"]],
+			      "and one Undo puts the moved file back where it came from");
+			[list setFileOperations:nil];
+			[operations release];
+			[undo release];
+			[info release];
+		}
 	}
 
 	[probe release];

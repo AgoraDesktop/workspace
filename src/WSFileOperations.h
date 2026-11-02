@@ -71,6 +71,13 @@ typedef void (^WSFileProgressHandler)(NSUInteger completed, NSUInteger total, NS
 - (nullable NSArray *)movePaths:(NSArray *)paths toDirectory:(NSString *)directory error:(NSError **)error;
 - (nullable NSArray *)copyPaths:(NSArray *)paths toDirectory:(NSString *)directory error:(NSError **)error;
 
+/* **A DROP'S MOVE, WITH THE UNDO A PERSON EXPECTS.** The same move `WSItemDragPerform` makes when a drag is let go —
+ * a conflict is refused rather than renamed, and the destination is refused when it is a source or inside one — with
+ * the undo entry `-movePaths:` already records. A drop that moves something must be undoable from the Edit menu:
+ * MEASURED the hard way, a drag released one row lower moved a 22 GB folder into its neighbour, and with no undo the
+ * only way back was to know where it went. */
+- (BOOL)movePathsForDrop:(NSArray *)paths toDirectory:(NSString *)directory error:(NSError **)error;
+
 - (nullable NSArray *)movePathsToTrash:(NSArray *)paths error:(NSError **)error;
 - (BOOL)putBackTrashItems:(NSArray *)items error:(NSError **)error;
 - (BOOL)emptyTrash:(NSError **)error;

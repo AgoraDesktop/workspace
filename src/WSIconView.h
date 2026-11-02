@@ -38,6 +38,7 @@
 
 @class NSTextField;
 @class NSTimer;
+@class NSMenu;
 @class WSItem;
 @class WSFileOperations;
 @class WSItemModel;
@@ -52,6 +53,12 @@ extern NSString *WSIconViewFolderPathKey;
 @optional
 - (void)iconView:(WSIconView *)view openItem:(WSItem *)item;
 - (void)iconViewDidChangeModel:(WSIconView *)view;
+/* **AND WHEN A COMMAND THE VIEW PERFORMED IS OVER.** The operation manager a grid is handed belongs to the WINDOW — its
+ * progress handler owns a floating window and its undo manager is the window's — so a command that runs an operation
+ * from the VIEW has to hand the window the ending, or the progress plate stays on the glass: MEASURED, as a
+ * half-transparent rounded panel left in the middle of a file window after New Folder with Selection. A delegate that
+ * does not answer still hears `-iconViewDidChangeModel:`, which is the part every caller needs. */
+- (void)iconViewDidFinishOperation:(WSIconView *)view;
 @end
 
 @interface WSIconView : NSView <NSDraggingSource, NSDraggingDestination>
@@ -102,6 +109,9 @@ extern NSString *WSIconViewFolderPathKey;
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
 - (void)setModel:(WSItemModel *)model;
+/* **THE SAME FOLDER, READ AGAIN.** The model was reloaded from the directory; this lays the grid out for its new items
+ * and keeps the selection, which `-setModel:` deliberately does not. */
+- (void)reloadData;
 - (nullable WSItemModel *)model;
 
 - (nullable id <WSIconViewDelegate>)delegate;
@@ -130,6 +140,21 @@ extern NSString *WSIconViewFolderPathKey;
 - (void)reloadAfterChange;
 /* Select the items at these paths — what a drop of them into this grid means, and the same door a probe uses. */
 - (void)cg_selectPaths:(NSArray *)paths;
+
+/* **THE CONTEXT MENU, AND WHAT A SINGLE ITEM CAN ANSWER.** `-menuForEvent:` is the AppKit's question (asked by `NSView`'s
+ * `-rightMouseDown:`) and this view answers it for the ONE item under the pointer, narrowing the selection to it first.
+ * Rename is the inline field the keyboard already reaches, Move to Trash is W6's, Copy and Cut are the pasteboard, and
+ * Paste is what a cut promised — so Get Info is the one row the menu carries and greys, until W8 gives it a window. */
+- (nullable NSMenu *)menuForEvent:(nullable NSEvent *)theEvent;
+- (void)rename:(nullable id)sender;
+- (void)copy:(nullable id)sender;
+- (void)cut:(nullable id)sender;
+- (void)paste:(nullable id)sender;
+- (void)moveToTrash:(nullable id)sender;
+/* And the empty grid's two: make a folder in this grid's directory, and hold everything in it. */
+- (void)newFolder:(nullable id)sender;
+- (void)selectAll:(nullable id)sender;
+- (void)newFolderWithSelection:(nullable id)sender;
 
 /* **THE TEST'S SEAMS, PREFIXED AS THE TIER'S PRIVATE DOORS ARE.** `-cg_proposedOperation…` is the policy arithmetic
  * without a live modifier state; `-cg_performDrop…` is the file operation without a fake pasteboard; and

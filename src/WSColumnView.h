@@ -23,6 +23,7 @@
 
 @class NSMutableDictionary;
 @class WSColumnPreviewView;
+@class WSFileOperations;
 @class WSItem;
 @class WSItemModel;
 @class WSColumnView;
@@ -41,6 +42,7 @@
 	WSColumnPreviewView *_preview;		/* RETAINED */
 	NSMutableDictionary *_childModels;	/* RETAINED: path -> WSItemModel */
 	NSMutableDictionary *_columnCache;	/* RETAINED: column number -> sorted WSItem array */
+	WSFileOperations *_fileOperations;	/* NOT RETAINED: the window's, so a drop it performs is undoable */
 }
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
@@ -49,6 +51,11 @@
 
 - (nullable id <WSColumnViewDelegate>)viewDelegate;
 - (void)setViewDelegate:(nullable id <WSColumnViewDelegate>)delegate;
+
+/* **THE WINDOW'S OPERATIONS, SO A DROP THIS VIEW PERFORMS IS UNDOABLE.** A browser has no undo manager of its own and
+ * should not grow one: the move a drop makes is the window's, and the window's Edit menu is where it is taken back. */
+- (nullable WSFileOperations *)fileOperations;
+- (void)setFileOperations:(nullable WSFileOperations *)operations;
 
 - (void)reloadData;
 - (nullable WSItem *)selectedItem;

@@ -17,7 +17,9 @@
 #import "WSDesktopView.h"
 #import "WSIconView.h"
 #import "WSItemModel.h"
+#import "WSFileOperations.h"
 #import "WSSelectionBand.h"
+#import "WSTrash.h"
 
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBitmapImageRep.h>
@@ -26,6 +28,8 @@
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSText.h>
@@ -166,6 +170,13 @@ static NSEvent *mouse(NSEventType type, NSPoint point)
 				 eventNumber:0 clickCount:1 pressure:1.0f];
 }
 
+static NSEvent *mouseWithFlags(NSEventType type, NSPoint point, NSUInteger flags)
+{
+	return [NSEvent mouseEventWithType:type location:point modifierFlags:flags
+				 timestamp:0.0 windowNumber:0 context:nil
+				 eventNumber:0 clickCount:1 pressure:1.0f];
+}
+
 static NSInteger indexNamed(WSIconView *view, NSString *name)
 {
 	NSArray *items = [[view model] items];
@@ -262,6 +273,7 @@ static NSPoint centerOfIndex(WSIconView *view, NSInteger index)
 @public
 	NSString *opened;
 	int changes;
+	int finishes;
 }
 @end
 
@@ -276,6 +288,11 @@ static NSPoint centerOfIndex(WSIconView *view, NSInteger index)
 {
 	(void)view;
 	changes++;
+}
+- (void)iconViewDidFinishOperation:(WSIconView *)view
+{
+	(void)view;
+	finishes++;
 }
 - (void)dealloc
 {
@@ -807,6 +824,45 @@ int main(void)
 	[view keyDown:key('a', NSCommandKeyMask)];
 	check([[view selectedIndexes] count] == (NSUInteger)[view itemCount], "Command-A selects all");
 
+	/* 2a. **A CLICK WITH CONTROL, COMMAND OR SHIFT EXTENDS THE SELECTION**, which is what those three keys mean in every
+	 * grid: Control and Command add or take away one icon, and Shift takes the run from the anchor to the one clicked.
+	 * Control is the spelling every non-Mac desktop taught the hand, and it must not be the one that does nothing. */
+	{
+		NSPoint row[3];
+
+		row[0] = [view convertPoint:centerOfIndex(view, 0) toView:nil];
+		row[1] = [view convertPoint:centerOfIndex(view, 1) toView:nil];
+		row[2] = [view convertPoint:centerOfIndex(view, 2) toView:nil];
+
+		[view selectIndex:-1];
+		[view mouseDown:mouse(NSLeftMouseDown, row[0])];
+		[view mouseUp:mouse(NSLeftMouseUp, row[0])];
+		check([[view selectedIndexes] count] == 1 && [[view selectedIndexes] containsIndex:0],
+		      "a plain click on an icon selects it alone");
+		[view mouseDown:mouseWithFlags(NSLeftMouseDown, row[2], NSControlKeyMask)];
+		[view mouseUp:mouse(NSLeftMouseUp, row[2])];
+		check([[view selectedIndexes] count] == 2 && [[view selectedIndexes] containsIndex:0]
+		      && [[view selectedIndexes] containsIndex:2],
+		      "a Control-click adds the icon it is on to the selection");
+		[view mouseDown:mouseWithFlags(NSLeftMouseDown, row[2], NSControlKeyMask)];
+		[view mouseUp:mouse(NSLeftMouseUp, row[2])];
+		check([[view selectedIndexes] count] == 1 && ![[view selectedIndexes] containsIndex:2],
+		      "and a second one takes it away again");
+		[view mouseDown:mouseWithFlags(NSLeftMouseDown, row[2], NSCommandKeyMask)];
+		[view mouseUp:mouse(NSLeftMouseUp, row[2])];
+		check([[view selectedIndexes] count] == 2 && [[view selectedIndexes] containsIndex:2],
+		      "Command-click does the same, so neither modifier is the only one that works");
+		[view mouseDown:mouse(NSLeftMouseDown, row[2])];
+		[view mouseUp:mouse(NSLeftMouseUp, row[2])];
+		[view mouseDown:mouseWithFlags(NSLeftMouseDown, row[0], NSShiftKeyMask)];
+		[view mouseUp:mouse(NSLeftMouseUp, row[0])];
+		check([[view selectedIndexes] count] == 3 && [[view selectedIndexes] containsIndex:0]
+		      && [[view selectedIndexes] containsIndex:1] && [[view selectedIndexes] containsIndex:2],
+		      "and a Shift-click takes the run between the anchor and the icon clicked");
+		[view mouseDown:mouse(NSLeftMouseDown, row[1])];
+		[view mouseUp:mouse(NSLeftMouseUp, row[1])];
+	}
+
 	/* 3. TYPE-SELECT ACCUMULATES A PREFIX AND RESTARTS AFTER A SECOND. */
 	[view selectIndex:-1];
 	[view keyDown:key('d', 0)];
@@ -1027,6 +1083,382 @@ int main(void)
 		[dropWindow release];
 		[dropView release];
 		[rootModel release];
+	}
+
+	/* 11. **THE CONTEXT MENU: THE REFERENCE FILE MANAGER'S ROWS, ONE ITEM, AND A CLICK THAT NAMES ITS SUBJECT.**
+	 *
+	 * The menu is built by `WSContextMenu` and returned by `-menuForEvent:` — the door `NSView -rightMouseDown:` asks —
+	 * so what is measured is the rows and their order, the command each one sends, and the two rows that are GREY today
+	 * because their features are not written (Get Info is W8; Cut has no Paste to feed). */
+	{
+		NSString *trashRoot = [@"/tmp" stringByAppendingPathComponent:
+			[NSString stringWithFormat:@"agora-icon-trash-%d", (int)getpid()]];
+		WSTrash *trash = [[WSTrash alloc] initWithRoot:trashRoot];
+		WSFileOperations *operations = [[WSFileOperations alloc] initWithUndoManager:nil trash:trash];
+		NSInteger notes;
+		NSMenu *menu;
+		NSArray *rows;
+
+		/* **A FILE OF ITS OWN, BECAUSE EARLIER SECTIONS MOVED AND RENAMED THE OTHERS.** The menu is about "the item under
+		 * the pointer", so the probe makes one and reads the directory again rather than depending on what is left. */
+		makeFile([root stringByAppendingPathComponent:@"menu.txt"]);
+		[view reloadAfterChange];
+		notes = indexNamed(view, @"menu.txt");
+		check(notes >= 0, "the probe's own file is in the grid");
+
+		[view setFileOperations:operations];
+		[view selectIndex:notes];
+		menu = [view menuForEvent:mouse(NSRightMouseDown, centerOfIndex(view, notes))];
+		rows = (menu != nil) ? [menu itemArray] : nil;
+		check([rows count] == 7, "a right-click on an icon answers a menu of seven rows");
+		if ([rows count] == 7) {
+			NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"Cut", @"Copy", @"Rename", @"Move to Trash",
+									   nil];
+			NSInteger want[7] = { 0, -1, 1, 2, -1, 3, 4 };	/* -1 is a separator */
+			NSInteger i;
+			BOOL shape = YES;
+
+			for (i = 0; i < 7; i++) {
+				NSMenuItem *item = [rows objectAtIndex:(NSUInteger)i];
+
+				if (want[i] < 0) {
+					shape = shape && [item isSeparatorItem];
+				} else {
+					shape = shape && [[item title] isEqual:[titles objectAtIndex:(NSUInteger)want[i]]];
+				}
+			}
+			check(shape, "Get Info | Cut, Copy | Rename, Move to Trash, in that order with those separators");
+			check([[rows objectAtIndex:0] action] == @selector(getInfo:)
+			      && [[rows objectAtIndex:2] action] == @selector(cut:)
+			      && [[rows objectAtIndex:3] action] == @selector(copy:)
+			      && [[rows objectAtIndex:5] action] == @selector(rename:)
+			      && [[rows objectAtIndex:6] action] == @selector(moveToTrash:),
+			      "and each row sends its own command");
+			check([[rows objectAtIndex:0] target] == view && [[rows objectAtIndex:6] target] == view,
+			      "every row is aimed at the view the click landed in, not left to the responder chain");
+
+			/* **AND THE ONE ROW WITH NO FEATURE IS GREY RATHER THAN ABSENT.** `-update` is the same walk a menu bar does
+			 * before it tracks, so this is the picture a person gets: Get Info is W8's, and the four commands W6 and this
+			 * stage gave the surfaces are live. */
+			[menu update];
+			check(![[rows objectAtIndex:0] isEnabled], "Get Info is grey until W8 gives it a window");
+			check([[rows objectAtIndex:2] isEnabled] && [[rows objectAtIndex:3] isEnabled]
+			      && [[rows objectAtIndex:5] isEnabled] && [[rows objectAtIndex:6] isEnabled],
+			      "Cut, Copy, Rename and Move to Trash are live for a single selected item");
+		}
+
+		/* ---- CUT AND PASTE: THE ONE PAIR A CUT NEEDS TO MEAN ANYTHING ---- */
+		{
+			WSItemModel *thereModel = [[WSItemModel alloc] initWithDirectory:target];
+			WSIconView *there = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 400.0)
+								       model:thereModel];
+			NSWindow *thereWindow = [[NSWindow alloc]
+				initWithContentRect:NSMakeRect(500.0, 0.0, 400.0, 400.0)
+					  styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:NO];
+			BOOL wasCut = NO;
+			NSArray *offered;
+
+			[thereWindow setContentView:there];
+			[there setFileOperations:operations];
+			/* A FILE OF ITS OWN, because this one LEAVES: the rows below are still about `menu.txt`. */
+			makeFile([root stringByAppendingPathComponent:@"cut.txt"]);
+			[view reloadAfterChange];
+			[view selectIndex:indexNamed(view, @"cut.txt")];
+			[view cut:nil];
+			offered = WSItemClipboardPaths(&wasCut);
+			check([offered count] == 1 && wasCut,
+			      "Cut offers the path on the pasteboard and marks the offer as one to take away");
+			[there paste:nil];
+			check(![[NSFileManager defaultManager] fileExistsAtPath:
+								[ root stringByAppendingPathComponent:@"cut.txt"]]
+				      && [[NSFileManager defaultManager] fileExistsAtPath:
+								[ target stringByAppendingPathComponent:@"cut.txt"]],
+				      "and a paste in another grid MOVES it there, which is what a cut promised");
+			{
+				BOOL stillCut = YES;
+
+				(void)WSItemClipboardPaths(&stillCut);
+				check(!stillCut, "and the cut is used up: a second paste copies rather than moves");
+			}
+			[view reloadAfterChange];
+			[there release];
+			[thereModel release];
+			[thereWindow release];
+		}
+
+		/* ---- **THE GROUP'S MENU, AND THE TWO THINGS A CLICK CAN DO TO A GROUP.** A click on one of several HELD icons
+		 * keeps the group (it must, or a group's menu could never be reached: the pointer is always over one of them);
+		 * a click outside the group narrows to what it landed on. */
+		{
+			NSMenu *grouped;
+			NSArray *groupRows;
+
+			[view selectAll:nil];
+			grouped = [view menuForEvent:mouse(NSRightMouseDown, centerOfIndex(view, notes))];
+			groupRows = (grouped != nil) ? [grouped itemArray] : nil;
+			check([[view selectedIndexes] count] == (NSUInteger)[view itemCount],
+			      "a right-click on one of several held icons keeps the group");
+			check([groupRows count] == 7, "and answers the group's own menu");
+			if ([groupRows count] == 7) {
+				NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"New Folder with Selection", @"Cut",
+									   @"Copy", @"Move to Trash", nil];
+				NSInteger want[7] = { 0, 1, -1, 2, 3, -1, 4 }; /* -1 is a separator */
+				NSInteger i;
+				BOOL shape = YES;
+
+				for (i = 0; i < 7; i++) {
+					NSMenuItem *item = [groupRows objectAtIndex:(NSUInteger)i];
+
+					if (want[i] < 0) {
+						shape = shape && [item isSeparatorItem];
+					} else {
+						shape = shape && [[item title] isEqual:[titles objectAtIndex:(NSUInteger)want[i]]];
+					}
+				}
+				check(shape, "Get Info, New Folder with Selection | Cut, Copy | Move to Trash");
+				check([[groupRows objectAtIndex:1] action] == @selector(newFolderWithSelection:)
+				      && [[groupRows objectAtIndex:6] action] == @selector(moveToTrash:),
+				      "and the group's rows send the group's commands");
+				check([[groupRows objectAtIndex:1] target] == view,
+				      "aimed at the grid the click landed in");
+				check([grouped indexOfItemWithTitle:@"Rename"] == (NSInteger)NSNotFound,
+				      "and an offer to rename MANY names is not one of them");
+			}
+
+			/* A click OUTSIDE the group narrows to what it landed on. The group is two NAMED items and the click is a
+			 * third, so which ones the grid happens to sort where cannot change what this measures. */
+			{
+				NSInteger a = indexNamed(view, @"Documents");
+				NSInteger b = notes;
+				NSInteger third = -1;
+				NSInteger i;
+
+				for (i = 0; i < [view itemCount]; i++) {
+					if (i != a && i != b) {
+						third = i;
+						break;
+					}
+				}
+				check(a >= 0 && b >= 0 && third >= 0, "the probe has three distinct icons to click");
+				if (third >= 0) {
+					[view selectIndexes:[NSIndexSet indexSetWithIndexesInRange:NSMakeRange(0, 0)]];
+					[view selectIndex:a];
+					[view keyDown:key(NSRightArrowFunctionKey, NSShiftKeyMask)];
+					menu = [view menuForEvent:mouse(NSRightMouseDown, centerOfIndex(view, third))];
+					check([[view selectedIndexes] count] == 1 && [view selectedIndex] == third
+					      && [menu numberOfItems] == 7
+					      && [menu indexOfItemWithTitle:@"Rename"] != (NSInteger)NSNotFound,
+					      "and a right-click outside the group narrows to that icon's own menu");
+				}
+			}
+
+			/* **NEW FOLDER WITH SELECTION GATHERS THE GROUP INTO A FOLDER OF ITS OWN.** Two files of its own, because
+			 * this command TAKES what it gathers out of the grid — the rows below are still about `menu.txt`. */
+			{
+				NSString *made = [root stringByAppendingPathComponent:@"New Folder with Selection"];
+
+				makeFile([root stringByAppendingPathComponent:@"gather-a.txt"]);
+				makeFile([root stringByAppendingPathComponent:@"gather-b.txt"]);
+				[view reloadAfterChange];
+				[view selectIndex:indexNamed(view, @"gather-a.txt")];
+				[view keyDown:key(NSRightArrowFunctionKey, NSShiftKeyMask)];
+				check([[view selectedIndexes] count] == 2, "two files are held for the gather");
+				[view newFolderWithSelection:nil];
+				check([[NSFileManager defaultManager] fileExistsAtPath:made]
+				      && [[NSFileManager defaultManager]
+					  fileExistsAtPath:[made stringByAppendingPathComponent:@"gather-a.txt"]],
+				      "New Folder with Selection makes a folder and moves the group into it");
+				check([[view cg_selectedPaths] count] == 1
+				      && [[[view cg_selectedPaths] objectAtIndex:0] isEqual:made],
+				      "and the folder it made is what the grid holds");
+			}
+		}
+		/* ---- AND THE EMPTY GRID ASKS THE FOLDER'S OWN QUESTIONS ---- */
+		{
+			NSMenu *background = [view menuForEvent:mouse(NSRightMouseDown, NSMakePoint(390.0, 390.0))];
+			NSArray *bgRows = (background != nil) ? [background itemArray] : nil;
+
+			check([bgRows count] == 4, "a right-click on empty grid answers the folder's own menu, not nothing");
+			if ([bgRows count] == 4) {
+				check([[[bgRows objectAtIndex:0] title] isEqual:@"New Folder"]
+				      && [[bgRows objectAtIndex:1] isSeparatorItem]
+				      && [[[bgRows objectAtIndex:2] title] isEqual:@"Paste"]
+				      && [[[bgRows objectAtIndex:3] title] isEqual:@"Select All"],
+				      "New Folder | Paste, Select All — the reference file manager's rows and its separator");
+				check([[bgRows objectAtIndex:0] action] == @selector(newFolder:)
+				      && [[bgRows objectAtIndex:2] action] == @selector(paste:)
+				      && [[bgRows objectAtIndex:3] action] == @selector(selectAll:),
+				      "and each row sends its own command");
+				check([[bgRows objectAtIndex:0] target] == view && [[bgRows objectAtIndex:3] target] == view,
+				      "aimed at the grid the click landed in");
+				[background update];
+				check([[bgRows objectAtIndex:0] isEnabled] && [[bgRows objectAtIndex:3] isEnabled],
+				      "New Folder and Select All are live");
+			}
+
+			/* New Folder makes one in this grid's directory, and the new folder is what the hand is on. */
+			{
+				NSInteger before = [view itemCount];
+				NSInteger held;
+				int finishes = probe->finishes;
+
+				[view newFolder:nil];
+				held = [view selectedIndex];
+				check([view itemCount] == before + 1 && held >= 0
+				      && [[[[[view model] items] objectAtIndex:(NSUInteger)held] name]
+					  hasPrefix:@"untitled folder"],
+				      "New Folder makes a folder in the grid's directory and holds it");
+				check(probe->finishes > finishes,
+				      "and the window that owns the grid is told the OPERATION is over (it closes the progress plate)");
+			}
+
+			/* Select All holds everything the grid can show. */
+			[view selectIndex:-1];
+			[view selectAll:nil];
+			check([[view selectedIndexes] count] == (NSUInteger)[view itemCount],
+			      "Select All holds every item in the grid");
+		}
+
+		/* ---- COPY IS THE PATHS ON THE GENERAL PASTEBOARD ---- */
+		{
+			NSArray *onPasteboard;
+
+			[view selectIndex:notes];
+			[view copy:nil];
+			onPasteboard = [[NSPasteboard generalPasteboard] propertyListForType:NSFilenamesPboardType];
+			check([onPasteboard count] == 1
+			      && [[onPasteboard objectAtIndex:0] isEqual:[root stringByAppendingPathComponent:@"menu.txt"]],
+			      "Copy leaves the selected item's path on the general pasteboard, in the drag's own type");
+		}
+
+		/* ---- RENAME IS THE INLINE FIELD OVER THE LABEL ---- */
+		[view selectIndex:indexNamed(view, @"menu.txt")];
+		[view rename:nil];
+		check([view isRenaming] && [view cg_renameField] != nil,
+		      "Rename opens the inline field over the selected icon's label");
+		[[view cg_renameField] setStringValue:@"menu-renamed.txt"];
+		check([view commitRenaming]
+		      && [[NSFileManager defaultManager] fileExistsAtPath:[root stringByAppendingPathComponent:@"menu-renamed.txt"]],
+		      "and committing it renames the file on disk");
+
+		/* ---- MOVE TO TRASH GOES THROUGH W6'S OPERATION, INTO A TRASH OF THE PROBE'S OWN ---- */
+		{
+			NSInteger count = [view itemCount];
+			NSString *doomed = [root stringByAppendingPathComponent:@"menu-renamed.txt"];
+
+			[view selectIndex:indexNamed(view, @"menu-renamed.txt")];
+			[view moveToTrash:nil];
+			check(![[NSFileManager defaultManager] fileExistsAtPath:doomed]
+			      && [view itemCount] == count - 1,
+			      "Move to Trash takes the item off the grid and out of the directory");
+			check([[NSFileManager defaultManager] fileExistsAtPath:trashRoot],
+			      "and the probe's own trash received it, not the account's");
+		}
+
+		/* ---- AND THE DESKTOP OFFERS THE SAME MENU AND ANSWERS IT TOO ---- */
+		{
+			WSDesktopView *desktop = [[WSDesktopView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 520.0, 400.0)
+								     directory:root];
+			NSWindow *desktopWindow = [[NSWindow alloc]
+				initWithContentRect:NSMakeRect(0.0, 0.0, 520.0, 400.0)
+					  styleMask:NSBorderlessWindowMask
+					    backing:NSBackingStoreBuffered defer:NO];
+			NSArray *items = [[desktop model] items];
+			NSInteger index = -1;
+			NSInteger i;
+
+			[desktopWindow setContentView:desktop];
+			[desktop setFileOperations:operations];
+			for (i = 0; i < (NSInteger)[items count]; i++) {
+				if ([[[items objectAtIndex:(NSUInteger)i] name] isEqual:@"Archive"]) {
+					index = i;
+					break;
+				}
+			}
+			check(index >= 0, "the desktop's grid holds the folder the next checks act on");
+			if (index >= 0) {
+				NSPoint cell = [[[desktop cg_positions] objectAtIndex:(NSUInteger)index] pointValue];
+				NSPoint click = NSMakePoint(cell.x + 32.0, 400.0 - (cell.y + 32.0));
+				NSMenu *desktopMenu = [desktop menuForEvent:mouse(NSRightMouseDown, click)];
+
+				check(desktopMenu != nil && [desktopMenu numberOfItems] == 7,
+				      "the desktop's right-click raises the same seven-row menu");
+				check([[desktop cg_selection] count] == 1,
+				      "and it selects the icon under the pointer first");
+
+				/* The desktop's rename is a field over the label, which on this unflipped view hangs BELOW the icon. */
+				[desktop rename:nil];
+				check([desktop isRenaming] && [desktop cg_renameField] != nil,
+				      "Rename on the desktop opens a field over the icon's name");
+				{
+					NSRect field = [[desktop cg_renameField] frame];
+					NSRect wash = [desktop cg_highlightRectAtIndex:index];
+
+					check(near(NSMidX(field), NSMidX(wash))
+					      && NSMinY(field) >= NSMinY(wash) && NSMaxY(field) <= NSMaxY(wash),
+					      "and the field sits where the name is drawn: centred, inside the cell's foot");
+				}
+				[[desktop cg_renameField] setStringValue:@"Archive-renamed"];
+				check([desktop commitRenaming]
+				      && [[NSFileManager defaultManager] fileExistsAtPath:
+								[ root stringByAppendingPathComponent:@"Archive-renamed"]],
+				      "and committing it renames the folder on disk");
+				check([[desktop cg_selection] count] == 1,
+				      "the renamed item is what the desktop holds afterwards");
+
+				/* **AND THE EMPTY DESKTOP ASKS THE SAME THREE QUESTIONS.** The band this click is nowhere near:
+				 * the grid places its icons from the top right, so the bottom-left corner is a cell nothing holds. */
+				{
+					NSMenu *background = [desktop menuForEvent:mouse(NSRightMouseDown,
+											 NSMakePoint(20.0, 20.0))];
+					NSArray *bgRows = (background != nil) ? [background itemArray] : nil;
+					NSInteger items = (NSInteger)[[[desktop model] items] count];
+
+					check([bgRows count] == 4
+					      && [[[bgRows objectAtIndex:0] title] isEqual:@"New Folder"]
+					      && [[[bgRows objectAtIndex:3] title] isEqual:@"Select All"],
+					      "the empty desktop answers the folder's menu, as its grid does");
+					[desktop newFolder:nil];
+					check((NSInteger)[[[desktop model] items] count] == items + 1
+					      && [[desktop cg_selection] count] == 1,
+					      "New Folder makes one in the desktop's directory and holds it");
+					[desktop selectAll:nil];
+					check([[desktop cg_selection] count] == [[desktop cg_positions] count],
+					      "Select All holds every icon the desktop can show");
+
+					/* **AND THE GROUP'S MENU IS THE SAME LIST HERE**, which is the whole point of one builder: two icons
+					 * held, a click on one of them, and the rows are the group's rather than one item's. */
+					{
+						NSArray *two = [desktop cg_positions];
+
+						if ([two count] >= 2) {
+							NSArray *items = [[desktop model] items];
+							NSArray *held = [NSArray arrayWithObjects:
+								[[items objectAtIndex:0] path], [[items objectAtIndex:1] path], nil];
+							NSPoint cell = [[two objectAtIndex:0] pointValue];
+							NSMenu *group;
+
+							[desktop cg_selectPaths:held];
+							group = [desktop menuForEvent:mouse(NSRightMouseDown,
+											   NSMakePoint(cell.x + 32.0,
+												       400.0 - (cell.y + 32.0)))];
+							check([[desktop cg_selection] count] == 2
+							      && [group numberOfItems] == 7
+							      && [group indexOfItemWithTitle:@"New Folder with Selection"]
+								  != (NSInteger)NSNotFound,
+							      "the desktop's group menu is the same list, with New Folder with Selection");
+						}
+					}
+				}
+			}
+
+			[desktop release];
+			[desktopWindow release];
+		}
+
+		[operations release];
+		[trash release];
+		[[NSFileManager defaultManager] removeItemAtPath:trashRoot error:NULL];
 	}
 
 	/* 10. OPENING FROM THE KEYBOARD GOES THROUGH THE DELEGATE. */

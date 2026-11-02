@@ -19,6 +19,49 @@ the **List** mode is W4's `WSListView` (Name, Date Modified, Size, Kind, disclos
 panel showing the selected item. Under the views is W6's `WSFileOperations`: New Folder, Duplicate, Rename,
 Move/Copy, Move to Trash, Put Back, Empty Trash and Compress, with Undo, a progress window and a conflict panel.
 
+**AND A RIGHT-CLICK RAISES THE MENU FOR WHAT THE POINTER FOUND.** `WSContextMenu` builds three of them, and ALL FOUR
+surfaces answer the same three — a file window's grid (`WSIconView`), the desktop (`WSDesktopView`), the List
+(`WSListView`) and the Columns (`WSColumnView`, whose menu is the browser's own right-click):
+
+- **one icon**: Get Info, —, Cut, Copy, —, Rename, Move to Trash;
+- **one icon of several held**: Get Info, New Folder with Selection, —, Cut, Copy, —, Move to Trash (no Rename: one name
+  for many is a question, not a command);
+- **the empty grid**: New Folder, —, Paste, Select All.
+
+A click on an icon that is NOT part of the held group narrows the selection to it first, and a click on the background
+leaves the selection alone. The commands behind the rows are the ones this tree already had — the inline
+rename field, W6's trash, and the pasteboard `WSItemDrag` writes — plus Paste, which a Cut needs to mean anything; Get
+Info is W8's and is drawn grey until then, the same way the menu bar says what Workspace cannot do yet.
+
+**AND A RIGHT-CLICK ON THE EMPTY GRID RAISES THE FOLDER'S OWN.** New Folder, a separator, Paste, Select All — the rows the
+reference file manager shows when the pointer is over nothing, about the directory the grid is showing. The two menus are
+chosen by what the pointer found rather than by one menu made to fit both, and a click on the background leaves the
+selection alone so Paste and New Folder stay useful with something held somewhere else.
+
+The gesture is the **AppKit's**, not each view's: `-[NSView rightMouseDown:]` asks `-menuForEvent:` and opens the answer,
+which is why a view only has to answer a question. `appkit-context-menu` measures that pair, `workspace-icon-view`
+measures the three menus, the narrowing, and each command, and the list and column suites measure their own menus.
+
+**AND THE COMMANDS THEMSELVES ARE THE WINDOW'S, NOT A VIEW'S.** Cut, Copy, Paste, Rename, New Folder with Selection and
+Select All live on `WSFileWindowController`, because it already answers `-selectedItems` per view mode and owns the
+operation manager, the progress plate and the undo stack — so the List and the Columns raise menus aimed at IT
+(`WSContextMenuCommandTarget`) and there is one implementation of Paste rather than four. The icon grid and the desktop
+still answer their own, being the first responder; Rename is grey in Column mode, where a cell has no editor, and Select
+All is grey there too, where the browser has no such door.
+
+**AND DRAG AND DROP WORKS IN ALL FOUR.** The List is an `NSOutlineView`, so the tier's own table drag asks its data
+source to write the rows and to validate and accept a drop — four answers, no fifth drag implementation. The Columns are
+an `NSBrowser`, whose columns are tables whose data source is the browser: the browser now FORWARDS those four questions
+to its delegate (`-browser:writeRowsWithIndexes:inColumn:toPasteboard:` and the validate/accept pair), and
+`-registerForDraggedTypes:` on the browser is applied to every column's table, including the ones made later. A drop on a
+folder row goes INTO it; anywhere else goes into the folder that row lives in, or into the folder the grid is showing.
+
+**AND A COMMAND THE GRID PERFORMS ENDS WHERE THE WINDOW'S OWN COMMANDS END.** The operation manager a grid is handed
+belongs to its window — the progress plate is the window's, its undo manager is the window's — so the view reports the
+ending through `-iconViewDidFinishOperation:` and the controller runs the same `-finishOperation` its own menu rows do.
+Without it the plate was opened by the handler and closed by nobody: a half-transparent rounded panel left in the middle
+of the window after New Folder with Selection.
+
 **AND THE MENU BAR CARRIES THE TIME.** `WSMenuBarClock` is an `NSStatusItem` — the strip's third surface, and the only
 one an application may put something in — so the clock is drawn by Workspace and PACKED BY THE SERVER against the
 screen's right edge, behind a view whose width moves with the digits. It is a status item and not a window: it stays
@@ -55,7 +98,7 @@ reaches the question; the Dock raises them, back to front, and they keep the ord
 
 ### What is measured, not assumed
 
-`ctest` runs **fourteen tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
+`ctest` runs **nineteen tests**. `workspace-desktop` is the pixel suite — `tests/run-desktop.sh` + `tests/check.py` —
 against **Agora's own window server**, headless: it runs the **bundle's** executable (the bundle path is part of what
 W0 proves), places a **normal** window over the desktop with the server's own test client, and reads the server's
 screenshot. **9 checks, 0 fail**:
@@ -67,8 +110,13 @@ screenshot. **9 checks, 0 fail**:
 
 The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**70 checks**); the icon view's `workspace-icon-view` (**57 checks**); the list view's
-`workspace-list-view` (**33 checks**); the column view's `workspace-column-view` (**28 checks**); and W6's
+(**93 checks** — including the folder it watches for changes made outside it); the icon view's
+`workspace-icon-view` (**147 checks** — the grid, the keyboard, the modifiers, the
+rename, the drag and the three context menus); the list view's
+`workspace-list-view` (**53 checks** — the ordering, the modifiers, the click that must not move, the triangle that
+must not drag, the tree across a reload, the rename, the undoable drop, the context
+menu and the drag); the column view's `workspace-column-view` (**52 checks** — the columns, the reload that keeps
+them, the multi-row selection, the preview, the menu and the drag); and W6's
 `workspace-file-ops` (**28 checks**) and `workspace-trash` (**19 checks**); and the print system's
 `workspace-printing` (**24 checks**). The file-window through printing suites are the proofs below.
 
@@ -220,8 +268,9 @@ the cell's WIDTH CENTRED ON THE ICON, not the cell**: the cell begins at the ico
 right, so a name centred on the cell sat a padded half-cell to the right of the folder it named. Both surfaces had
 that off-centre; both now centre on the icon and clip to the band that follows it.
 
-**SELECTION IS THE KEYBOARD'S AND THE POINTER'S.** A click selects; Shift extends from an anchor; Command toggles;
-Command-A selects all. Left/Right move by one item, Up/Down by one row of the grid's columns, Home/End go to the
+**SELECTION IS THE KEYBOARD'S AND THE POINTER'S.** A click selects; Shift extends from an anchor; Command toggles —
+and so does Control, which is how every desktop that is not a Mac spells "add this one too"; the same two modifiers
+work in List and Column mode, on the desktop, and as the additive press that begins a band. Command-A selects all. Left/Right move by one item, Up/Down by one row of the grid's columns, Home/End go to the
 ends, and the selected icon wears a focus ring while the view is first responder. TYPE-SELECT accumulates a prefix
 for one second (`d`, then `do`), starting after the selection and wrapping, and a new key after the timeout starts a
 new prefix.
@@ -271,7 +320,8 @@ A hovered folder for 0.6 s posts `WSIconViewRequestFolderWindowNotification`, an
 window — the same request a desktop folder double-click makes. W3 does not yet move the in-flight drag into that
 window automatically, and there is no rubber-band selection in the icon view; both are named rather than implied.
 
-`tests/icon_view.m` is the proof: order and document height; every keyboard movement and Shift/Command selection;
+`tests/icon_view.m` is the proof: order and document height; every keyboard movement and the Shift/Command/Control
+click selection;
 the prefix type-select; a rename that moves the file, a cancel and three refusals; the source's pasteboard and
 session; the five policy answers; Move, Copy and Link performed on two volumes; a conflict refused; a drop on a
 folder icon; the spring notification; and a real cross-window session.
@@ -469,9 +519,14 @@ the items it already moved (the conflict sheet is per destination, not a rollbac
 Contents"** — making an application bundle opaque is the right default, and the escape hatch into its `Contents` is
 the path bar (type the folder) or a terminal, not a menu row this tier has not built. The preview is still a fixed
 panel rather than a browser column (W9 for its content); the icon view's
-alias is a symbolic link until `WSAlias`; the list has no drag/drop (its rows do carry 16-point icons); the desktop is not
-LIVE (`libagora-watch` is built, but `WSItemModel` reloads on demand); a document's icon is its TYPE's generic; and
-the sidecar does not yet hold grid spacing or label placement.
+alias is a symbolic link until `WSAlias`; a document's icon is its TYPE's generic; and the sidecar does not yet hold grid
+spacing or label placement.
+
+**EVERY SURFACE IS LIVE NOW.** `libagora-watch`'s stream drives a `WSDirectoryWatcher` for each file window and for the
+desktop: the kernel's reader thread raises a flag, a 0.1 s main-thread timer takes it, and the view re-reads its folder —
+keeping the selection by path, and waiting for the end of a drag, a band or a rename before it moves anything. Before
+that, a folder made in a terminal never appeared, and neither did one made by the window's own New Folder: `WSItemModel`
+caches its directory and `-refresh` never re-read it, so the only way to see either was to navigate away and back.
 
 ## Build and run
 

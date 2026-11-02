@@ -16,6 +16,7 @@
  */
 #import "WSIconView.h"
 
+#import "WSContextMenu.h"
 #import "WSFileOperations.h"
 #import "WSIconLabel.h"
 #import "WSIconCell.h"
@@ -31,6 +32,7 @@
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSMenu.h>
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSText.h>
 #import <AppKit/NSTextField.h>
@@ -149,6 +151,37 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	[_selection removeAllIndexes];
 	_anchorIndex = -1;
 	[self layoutItems];
+}
+
+/* **A DIRECTORY THAT CHANGED IS NOT A NEW DIRECTORY.** `-setModel:` starts over — no selection, no anchor — which is
+ * right for a navigation and wrong for a refresh: a file appearing (a download finishing, another application writing,
+ * the watcher reporting) must not clear what a person has chosen. So the grid is laid out again and the selection is
+ * carried across BY PATH, which is the identity a reloaded `WSItem` keeps. */
+- (void)reloadData
+{
+	NSArray *items = [_model items];
+	NSMutableArray *paths = [[NSMutableArray alloc] init];
+	NSMutableIndexSet *keep = [[NSMutableIndexSet alloc] init];
+	NSUInteger index;
+
+	for (index = [_selection firstIndex]; index != NSNotFound; index = [_selection indexGreaterThanIndex:index]) {
+		if (index < [items count]) {
+			[paths addObject:[[items objectAtIndex:index] path]];
+		}
+	}
+	[self layoutItems];
+	[_selection removeAllIndexes];
+	items = [_model items];
+	for (index = 0; index < [items count]; index++) {
+		if ([paths containsObject:[[items objectAtIndex:index] path]]) {
+			[keep addIndex:index];
+		}
+	}
+	[_selection addIndexes:keep];
+	_anchorIndex = [self selectedIndex];
+	[keep release];
+	[paths release];
+	[self setNeedsDisplay:YES];
 }
 
 - (id <WSIconViewDelegate>)delegate { return _delegate; }
@@ -743,7 +776,9 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	NSInteger index = [self indexAtPoint:point];
 	NSUInteger flags = [event modifierFlags];
 	BOOL shift = (flags & NSShiftKeyMask) != 0;
-	BOOL command = (flags & NSCommandKeyMask) != 0;
+	/* **COMMAND AND CONTROL BOTH TOGGLE**, because one is the Mac's spelling of "add this one too" and the other is
+	 * every other desktop's: a person from Linux presses Control on an icon and expects it to join the selection. */
+	BOOL toggle = (flags & (NSCommandKeyMask | NSControlKeyMask)) != 0;
 
 	[[self window] makeFirstResponder:self];
 	if ([event clickCount] >= 2) {
@@ -758,7 +793,7 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 		 * that takes several icons at once impossible — the one thing a grid of icons is for. The band's selection is
 		 * applied when the button comes up (the desktop's own rule), so a drag across the grid does not repaint the
 		 * selection under the hand it is following. */
-		if (!shift && !command) {
+		if (!shift && !toggle) {
 			[self selectIndex:-1];
 		}
 		_anchorIndex = -1;
@@ -770,7 +805,7 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 		 * stopped following the hand, and letting go left it on the screen. The window's own doors take the pointer the
 		 * same way for a title-bar drag. */
 		[[self window] cg_setPointerCapture:YES];
-		_bandAdditive = (shift || command);
+		_bandAdditive = (shift || toggle);
 		_bandOrigin = point;
 		_bandRect = NSMakeRect(point.x, point.y, 0.0, 0.0);
 		[_bandBase release];
@@ -782,7 +817,7 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 			_anchorIndex = index;
 		}
 		[self extendSelectionToIndex:index];
-	} else if (command) {
+	} else if (toggle) {
 		NSIndexSet *before = [self snapshotSelection];
 
 		if ([_selection containsIndex:(NSUInteger)index]) {
@@ -876,6 +911,153 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 		return;
 	}
 	_pressing = NO;
+}
+
+/* ---- THE CONTEXT MENU, AND WHAT A SINGLE ITEM CAN ANSWER ---------------------------------------- */
+
+/* **A RIGHT-CLICK NAMES ITS ITEM, AND THE MENU IS ABOUT THAT ONE.** The click narrows the selection to the icon under the
+ * pointer first: the menu `WSContextMenu` builds is a single item's, so a right-click inside a group makes that icon the
+ * subject rather than offering commands that would have to mean five different things. The BACKGROUND's menu is not this
+ * stage's, so a click on empty grid answers nil and nothing opens. */
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+	NSInteger index;
+
+	if (event == nil) {
+		return nil;
+	}
+	index = [self indexAtPoint:[self convertPoint:[event locationInWindow] fromView:nil]];
+	if (index < 0) {
+		/* **NOTHING UNDER THE POINTER IS THE FOLDER'S MENU, NOT NO MENU.** The grid is always the view of a directory,
+		 * so a click on its empty space has three things to offer about that directory — and the selection is left
+		 * alone, because Paste and New Folder are useful WITH something held elsewhere. */
+		return [WSContextMenu menuForBackgroundWithTarget:self];
+	}
+	/* **A CLICK ON ONE OF SEVERAL HOLDS THE GROUP.** Narrowing to the icon under the pointer would make a group's menu
+	 * impossible to reach — the pointer must be somewhere, and it is always over one of the icons the menu is about. So
+	 * the selection is narrowed only when the click landed OUTSIDE it, which is the same rule a left-click follows. */
+	if (![_selection containsIndex:(NSUInteger)index]) {
+		[self selectIndex:index];
+	}
+	return ([_selection count] > 1)
+		? [WSContextMenu menuForMultipleItemsWithTarget:self]
+		: [WSContextMenu menuForSingleItemWithTarget:self];
+}
+
+/* **THE WINDOW THAT OWNS THIS GRID IS TOLD THE DIRECTORY CHANGED** — the same tidings a rename sends, because the status
+ * bar, the other view modes and the toolbar all read the window controller's refresh. A command the VIEW performs on the
+ * menu's behalf has to leave the window in the state the controller's own command would. */
+- (void)fn_didChangeModel
+{
+	if ([_delegate respondsToSelector:@selector(iconViewDidChangeModel:)]) {
+		[_delegate iconViewDidChangeModel:self];
+	}
+}
+
+/* **AND AN OPERATION IS THE WINDOW'S TO END, NOT ONLY TO NOTICE.** The manager this grid was handed is the window's, so
+ * the progress plate it opened is the window's to close; `-finishOperation` is that ending, and a window that answers
+ * neither door still gets the model tidings. */
+- (void)fn_didFinishOperation
+{
+	if ([_delegate respondsToSelector:@selector(iconViewDidFinishOperation:)]) {
+		[_delegate iconViewDidFinishOperation:self];
+	} else {
+		[self fn_didChangeModel];
+	}
+}
+
+/* NEW FOLDER IS W6'S OPERATION and the new folder is what is held afterwards, which is the reference file manager's own
+ * behaviour: the thing a person asked for is the thing their hand is on. */
+- (void)newFolder:(id)sender
+{
+	NSString *made;
+
+	(void)sender;
+	made = [_fileOperations createFolderInDirectory:[_model directory] name:nil error:NULL];
+	[self reloadAfterChange];
+	if (made != nil) {
+		[self cg_selectPaths:[NSArray arrayWithObject:made]];
+	}
+	[self fn_didFinishOperation];
+}
+
+/* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN**, which is the reference file manager's
+ * answer to "these belong together": the folder is made in this grid's directory (its name made unique by W6), the
+ * selection moves into it, and the folder is what the hand is left on. */
+- (void)newFolderWithSelection:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSString *made;
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	made = [_fileOperations createFolderInDirectory:[_model directory]
+						 name:@"New Folder with Selection" error:NULL];
+	if (made == nil) {
+		return;
+	}
+	(void)[_fileOperations movePaths:paths toDirectory:made error:NULL];
+	[self reloadAfterChange];
+	[self cg_selectPaths:[NSArray arrayWithObject:made]];
+	[self fn_didFinishOperation];
+}
+
+/* RENAME IS THE INLINE FIELD W3 ALREADY PUTS OVER THE LABEL — the menu's row is the same gesture as the Return key, so it
+ * is the same door rather than a second copy of the field. */
+- (void)rename:(id)sender
+{
+	(void)sender;
+	(void)[self beginRenamingSelectedItem];
+}
+
+/* COPY IS THE PATHS ON THE GENERAL PASTEBOARD, by the rule `WSItemDrag` writes once for both surfaces. */
+- (void)copy:(id)sender
+{
+	(void)sender;
+	WSItemCopyPathsToPasteboard([self cg_selectedPaths]);
+}
+
+/* **CUT IS THE SAME OFFER WITH "AND TAKE THEM" ON IT, AND PASTE IS WHAT HONOURS IT.** Without a paste a cut is a copy
+ * with a lie in it, so the pair arrives together: the paste moves what was cut and copies what was copied, into this
+ * grid's own directory, through the same W6 operations the rest of the menu uses. */
+- (void)cut:(id)sender
+{
+	(void)sender;
+	WSItemCutPathsToPasteboard([self cg_selectedPaths]);
+}
+
+- (void)paste:(id)sender
+{
+	BOOL wasCut = NO;
+	NSArray *paths = WSItemClipboardPaths(&wasCut);
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	if (wasCut) {
+		(void)[_fileOperations movePaths:paths toDirectory:[_model directory] error:NULL];
+		WSItemClipboardForget();
+	} else {
+		(void)[_fileOperations copyPaths:paths toDirectory:[_model directory] error:NULL];
+	}
+	[self reloadAfterChange];
+	[self fn_didFinishOperation];
+}
+
+/* MOVE TO TRASH IS W6'S OPERATION through the manager this view was handed — the same call the file window's own
+ * `-moveToTrash:` makes — and the grid then reads its directory again, keeping what is still there selected. */
+- (void)moveToTrash:(id)sender
+{
+	(void)sender;
+	if ([_selection count] == 0) {
+		return;
+	}
+	(void)[_fileOperations movePathsToTrash:[self cg_selectedPaths] error:NULL];
+	[self reloadAfterChange];
+	[self fn_didFinishOperation];
 }
 
 - (NSArray *)cg_selectedPaths
@@ -1068,7 +1250,7 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 - (BOOL)cg_performDropOfPaths:(NSArray *)paths intoDirectory:(NSString *)directory
 		    operation:(NSDragOperation)operation
 {
-	return WSItemDragPerform(paths, directory, operation);
+	return WSItemDragPerformWithOperations(paths, directory, operation, _fileOperations);
 }
 
 /* ---- SPRING-LOADED FOLDERS ------------------------------------------------------------------- */
@@ -1263,9 +1445,7 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 				break;
 			}
 		}
-		if ([_delegate respondsToSelector:@selector(iconViewDidChangeModel:)]) {
-			[_delegate iconViewDidChangeModel:self];
-		}
+		[self fn_didChangeModel];
 		renamed = YES;
 	}
 	[self setNeedsDisplay:YES];

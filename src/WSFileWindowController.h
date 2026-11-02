@@ -33,6 +33,7 @@
 @class NSSegmentedControl;
 @class NSTextField;
 @class WSColumnView;
+@class WSDirectoryWatcher;
 @class WSFileOperations;
 @class WSIconView;
 @class WSListView;
@@ -47,6 +48,7 @@
      NSSplitViewDelegate>
 {
 	NSString *_directory;			/* COPIED: the folder the model holds */
+	WSDirectoryWatcher *_watcher;		/* RETAINED: this folder's changes, as the kernel reports them */
 	WSItemModel *_model;			/* RETAINED */
 	WSHistory *_history;			/* RETAINED */
 	NSArray *_placeSections;		/* RETAINED: WSPlaceSection */
@@ -106,6 +108,17 @@
 - (NSInteger)viewMode;
 - (void)setViewMode:(NSInteger)mode;
 
+/* **THE SHARED COMMANDS A CONTEXT MENU ASKS OF WHICHEVER VIEW IS SHOWING** — Cut, Copy, Paste, Rename, New Folder
+ * with Selection and Select All, each acting on `-selectedItems` through this window's own operation manager. The
+ * views that implement their own (the desktop and the icon view) answer first, being the first responder; List and
+ * Column mode reach these. */
+- (void)cut:(nullable id)sender;
+- (void)copy:(nullable id)sender;
+- (void)paste:(nullable id)sender;
+- (void)rename:(nullable id)sender;
+- (void)newFolderWithSelection:(nullable id)sender;
+- (void)selectAll:(nullable id)sender;
+
 - (BOOL)validateMenuItem:(NSMenuItem *)menuItem;
 
 /* **THE TEST'S SEAMS.** The shell's parts are the point, so a probe names them rather than walking a view tree
@@ -117,6 +130,12 @@
 - (nullable WSListView *)cg_listView;
 - (nullable WSColumnView *)cg_columnView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
+/* **THE WINDOW'S EAR ON THE FILESYSTEM**, so a probe can turn the main thread's half of it without a run loop: the
+ * stream still does its own work on its own thread, and `-cg_drain` is the door the timer uses. */
+- (nullable WSDirectoryWatcher *)cg_watcher;
+/* The plate a file operation puts up while it runs, so a probe can see that the operation ENDED: the window is closed by
+ * `-finishOperation`, and a command that ran an operation without that ending left it on the glass. */
+- (nullable WSProgressWindow *)cg_progressWindow;
 
 /* **THE TOOLBAR'S WORDS, AS ONE APPLICATION-WIDE PREFERENCE** — the same arrangement Forge's project window has, because
  * it is the same question. `-cg_applyToolbarLabels` puts the remembered answer on this window's band; the two class

@@ -7,6 +7,8 @@
  */
 #import "WSItemDrag.h"
 
+#import "WSFileOperations.h"
+
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSPasteboard.h>
@@ -85,6 +87,44 @@ NSArray *WSItemDragPaths(id <NSDraggingInfo> info)
 	return [plist isKindOfClass:[NSArray class]] ? plist : nil;
 }
 
+/* **THE CUT IS A COPY PLUS ONE PROCESS-LOCAL FACT.** The pasteboard carries the paths and cannot say what the offer
+ * promises, so the promise is remembered here — the whole of what a cut is that a copy is not. */
+static BOOL s_clipboardIsCut;
+
+void WSItemCopyPathsToPasteboard(NSArray *paths)
+{
+	NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+
+	if ([paths count] == 0) {
+		return;
+	}
+	[pasteboard declareTypes:[NSArray arrayWithObject:NSFilenamesPboardType] owner:nil];
+	[pasteboard setPropertyList:paths forType:NSFilenamesPboardType];
+	s_clipboardIsCut = NO;
+}
+
+void WSItemCutPathsToPasteboard(NSArray *paths)
+{
+	WSItemCopyPathsToPasteboard(paths);
+	s_clipboardIsCut = ([paths count] > 0);
+}
+
+NSArray *WSItemClipboardPaths(BOOL *wasCut)
+{
+	id plist = [[NSPasteboard generalPasteboard] propertyListForType:NSFilenamesPboardType];
+
+	if (wasCut != NULL) {
+		*wasCut = s_clipboardIsCut;
+	}
+	return [plist isKindOfClass:[NSArray class]] ? plist : nil;
+}
+
+/* AND A CUT IS USED UP BY ITS PASTE: the second paste of the same offer has nothing left to take away. */
+void WSItemClipboardForget(void)
+{
+	s_clipboardIsCut = NO;
+}
+
 NSDragOperation WSItemDragOperationForVolume(BOOL sameVolume, NSDragOperation sourceMask, NSUInteger modifiers)
 {
 	BOOL option = (modifiers & NSAlternateKeyMask) != 0;
@@ -118,6 +158,16 @@ NSDragOperation WSItemDragOperation(NSArray *paths, NSString *target, NSDragOper
 		return NSDragOperationNone;
 	}
 	return WSItemDragOperationForVolume(fn_same_volume(paths, target), sourceMask, modifiers);
+}
+
+BOOL WSItemDragPerformWithOperations(NSArray *paths, NSString *target, NSDragOperation operation,
+				     WSFileOperations *operations)
+{
+	/* A MOVE IS THE ONE OPERATION THAT TAKES SOMETHING AWAY, so it is the one that has to be undoable. */
+	if (operations != nil && operation == NSDragOperationMove) {
+		return [operations movePathsForDrop:paths toDirectory:target error:NULL];
+	}
+	return WSItemDragPerform(paths, target, operation);
 }
 
 BOOL WSItemDragPerform(NSArray *paths, NSString *target, NSDragOperation operation)

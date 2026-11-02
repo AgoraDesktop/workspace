@@ -528,6 +528,32 @@ static void fn_put32(NSMutableData *data, uint32_t value)
 	return [destinations autorelease];
 }
 
+/* **THE DROP'S OWN MOVE.** `-movePaths:` resolves a conflict by keeping both, which is right for Paste and wrong for
+ * a drop: a file dragged onto a folder where the name is taken must be refused, not silently duplicated. So the
+ * preflight is this method's, in `WSItemDragPerform`'s own terms, and the move that follows is the one that records the
+ * undo. */
+- (BOOL)movePathsForDrop:(NSArray *)paths toDirectory:(NSString *)directory error:(NSError **)error
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSUInteger i;
+
+	if ([paths count] == 0 || directory == nil) {
+		return NO;
+	}
+	for (i = 0; i < [paths count]; i++) {
+		NSString *source = [paths objectAtIndex:i];
+		NSString *destination = [directory stringByAppendingPathComponent:[source lastPathComponent]];
+
+		if (![manager fileExistsAtPath:source] || [manager fileExistsAtPath:destination]) {
+			return NO;
+		}
+		if ([directory isEqual:source] || [directory hasPrefix:[source stringByAppendingString:@"/"]]) {
+			return NO;
+		}
+	}
+	return [self movePaths:paths toDirectory:directory error:error] != nil;
+}
+
 - (NSArray *)copyPaths:(NSArray *)paths toDirectory:(NSString *)directory error:(NSError **)error
 {
 	NSFileManager *manager = [NSFileManager defaultManager];

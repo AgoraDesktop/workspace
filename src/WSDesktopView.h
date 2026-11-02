@@ -21,9 +21,14 @@
 #import "WSItemDrag.h"
 
 @class NSMutableArray;
+@class NSMenu;
+@class WSDirectoryWatcher;
 @class NSString;
+@class NSTextField;
+@class WSFileOperations;
 @class WSItemModel;
 @class WSMetadataStore;
+@class WSTrash;
 
 
 /* **A FOLDER IS THE APPLICATION'S TO OPEN, NOT THIS VIEW'S.** The desktop posts this when a folder is
@@ -45,6 +50,15 @@ extern NSString *WSDesktopViewPathKey;
 	NSMutableArray *_icons;		/* NSBitmapImageRep, or NSNull until drawn */
 	NSMutableArray *_selection;	/* NSNumber indices into the items */
 
+	/* **THE FOLDER IS WATCHED, SO A FILE THAT LANDS HERE IS ON THE DESKTOP.** `libagora-watch`'s stream reports a change
+	 * and a timer takes it on the main thread; while a gesture is in flight the reload waits for the hand to let go
+	 * (`_pendingReload`), because re-placing every icon mid-drag would move what the person is moving. */
+	WSDirectoryWatcher *_watcher;	/* RETAINED */
+	BOOL _pendingReload;
+	/* **THE ANCHOR IS WHERE A SHIFT-CLICK EXTENDS FROM**, as it is in every grid that has one: the last icon a person
+	 * chose on its own. -1 means "nothing to extend from", which a press on the wallpaper sets. */
+	NSInteger _anchorIndex;
+
 	BOOL _dragging;
 	NSPoint _dragLast;		/* the last pointer position, in top-left coordinates */
 	BOOL _moved;
@@ -65,6 +79,19 @@ extern NSString *WSDesktopViewPathKey;
 	BOOL _rubberBanding;
 	NSPoint _rubberStart;
 	NSRect _rubberRect;
+
+	/* **THE OPERATIONS THE CONTEXT MENU PERFORMS, AND WHO OWNS THEM.** Trash and the operation manager are the
+	 * file system's, not a view's, so this view makes its own the way a file window's controller does — with NO undo
+	 * manager: a desktop has no Edit menu of its own, so a trashed icon is not undone from here (a file window's
+	 * operations keep theirs). */
+	WSTrash *_trash;		/* RETAINED */
+	WSFileOperations *_fileOperations;	/* RETAINED */
+
+	/* AND THE INLINE RENAME, over the label the same way a file window's grid puts it: the field lands where the name
+	 * is drawn, and the directory is read again when the name is committed. */
+	NSTextField *_renameField;	/* RETAINED while renaming */
+	NSInteger _renameIndex;
+	BOOL _renaming;
 }
 
 - (instancetype)initWithFrame:(NSRect)frame directory:(NSString *)directory;
@@ -82,6 +109,29 @@ extern NSString *WSDesktopViewPathKey;
 - (void)reload;
 /* The drag destination's answer: the files it moved are gone from here, so read the directory again. */
 - (void)reloadAfterChange;
+
+/* **THE CONTEXT MENU, AND WHAT ONE ICON CAN ANSWER.** `-menuForEvent:` is the AppKit's question, asked by `NSView`'s
+ * `-rightMouseDown:`; the click names the icon under the pointer and the menu is about that one. Rename, Copy and
+ * Move to Trash are implemented here exactly as a file window's grid implements them, so the two surfaces offer the
+ * same menu and mean the same things by it. */
+- (nullable NSMenu *)menuForEvent:(nullable NSEvent *)theEvent;
+- (void)rename:(nullable id)sender;
+- (BOOL)commitRenaming;
+- (void)cancelRenaming;
+- (void)copy:(nullable id)sender;
+- (void)cut:(nullable id)sender;
+- (void)paste:(nullable id)sender;
+- (void)moveToTrash:(nullable id)sender;
+/* And the empty desktop's two: make a folder in the desktop's directory, and hold everything on it. */
+- (void)newFolder:(nullable id)sender;
+- (void)selectAll:(nullable id)sender;
+- (void)newFolderWithSelection:(nullable id)sender;
+- (nullable NSTextField *)cg_renameField;
+- (BOOL)isRenaming;
+/* The operations a command performs, so a probe can hand in a trash of its own instead of the account's. Nil is
+ * "make my own", which is what the desktop window's view does. */
+- (nullable WSFileOperations *)fileOperations;
+- (void)setFileOperations:(nullable WSFileOperations *)operations;
 /* And the items a drop put here are the ones the hand meant, so they are the ones held. */
 - (void)cg_selectPaths:(NSArray *)paths;
 
@@ -90,6 +140,8 @@ extern NSString *WSDesktopViewPathKey;
 - (NSArray *)cg_selectedPaths;
 /* The area the grid places into — the work area when this view is the screen, its own bounds otherwise. */
 - (NSRect)cg_layoutBounds;
+/* **THE DESKTOP'S EAR ON THE FILESYSTEM**, so a probe can turn the main thread's half of it without a run loop. */
+- (nullable WSDirectoryWatcher *)cg_watcher;
 - (NSDraggingSession *)cg_beginDragWithEvent:(NSEvent *)event;
 - (NSDragOperation)cg_updateDropWithInfo:(id <NSDraggingInfo>)info;
 - (void)cg_dropSessionDidEnd:(NSPoint)screenPoint operation:(NSDragOperation)operation;

@@ -25,10 +25,12 @@
 #import "WSIconView.h"
 #import "WSListView.h"
 #import "WSHistory.h"
+#import "WSItemDrag.h"
 #import "WSItemIcons.h"
 #import "WSItemModel.h"
 #import "WSPlaces.h"
 #import "WSProgressWindow.h"
+#import "WSDirectoryWatcher.h"
 #import "WSTrash.h"
 
 #import <AppKit/NSApplication.h>
@@ -195,6 +197,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[content release];
 
 	_isTrashDirectory = [self fn_isTrashDirectory:_directory];
+	[self fn_watchDirectory];
 	[self buildPathBar];
 	[self buildContentAndSidebar];
 	[self buildStatusBar];
@@ -207,6 +210,8 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 
 - (void)dealloc
 {
+	[_watcher invalidate];
+	[_watcher release];
 	[_directory release];
 	[_model release];
 	[_history release];
@@ -416,12 +421,52 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	return [name hasPrefix:@".Trash-"];
 }
 
+/* **THE WINDOW WATCHES THE FOLDER IT IS SHOWING, AND ONLY THAT FOLDER.** `libagora-watch`'s stream is recursive, so a
+ * change inside a subfolder the list has expanded arrives too; a change anywhere else is another window's business.
+ * The watcher is replaced when the window navigates, because a stream for the directory somebody left is an ear on
+ * nothing. */
+- (void)fn_watchDirectory
+{
+	[_watcher invalidate];
+	[_watcher release];
+	_watcher = [[WSDirectoryWatcher alloc] initWithDirectory:_directory
+							  target:self
+							  action:@selector(fn_directoryDidChange:)];
+}
+
+/* **A CHANGE ON THE DISK IS A REFRESH, NOT A RELOAD OF THE WORLD.** Everything the window shows is read from the
+ * model, so the same `-refresh` a command uses is the right answer here: it re-reads the directory, keeps the selection
+ * and the view mode, and leaves the columns standing (see `WSColumnView -reloadData`). An operation of this window's
+ * own also ends in a refresh, so its two halves can arrive together — reading a directory twice is cheap and being out
+ * of date is not. */
+- (void)fn_directoryDidChange:(WSDirectoryWatcher *)watcher
+{
+	(void)watcher;
+	[self refresh];
+}
+
+- (WSDirectoryWatcher *)cg_watcher { return _watcher; }
+
 - (void)refresh
 {
-	NSInteger count = [self itemCount];
-	NSString *title = [_directory lastPathComponent];
+	NSInteger count;
+	NSString *title;
 
-	[_iconView setModel:_model];
+	/* **EVERY REFRESH READS THE FOLDER, AND THAT IS THE POINT OF IT.** `WSItemModel` reads its directory once and caches
+	 * the answer, so a refresh that only re-laid the views out showed the OLD contents: a folder made by this window's
+	 * own New Folder did not appear until a person navigated away and back, and nothing another application did appeared
+	 * at all. The model is re-read here, which is what every caller of this method actually means. */
+	[_model reload];
+	count = [self itemCount];
+	title = [_directory lastPathComponent];
+
+	/* **AND A READ-AGAIN FOLDER IS NOT A DIFFERENT FOLDER.** `-setModel:` starts the grid over (no selection), so it is
+	 * only for a navigation; a refresh lays the same model out again and keeps what a person had chosen. */
+	if ([_iconView model] != _model) {
+		[_iconView setModel:_model];
+	} else {
+		[_iconView reloadData];
+	}
 	if (_listView != nil) {
 		if ([_listView model] != _model) {
 			[_listView setModel:_model];
@@ -523,6 +568,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	_directory = [standard copy];
 	[_model release];
 	_model = [[WSItemModel alloc] initWithDirectory:_directory];
+	[self fn_watchDirectory];
 	[self refresh];
 }
 
@@ -624,6 +670,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		} else {
 			[_columnView setModel:_model];
 		}
+		/* **THE BROWSER MOVES THROUGH THE WINDOW'S OPERATIONS, SO A DROP IT PERFORMS IS UNDOABLE.** It has no undo
+		 * manager of its own, and the Edit menu that takes the move back is the window's. */
+		[_columnView setFileOperations:_fileOperations];
 		[_contentScroll setDocumentView:_columnView];
 		fn_resetContentScroll(_contentScroll);
 		[_columnView setFrameSize:[[_contentScroll contentView] bounds].size];
@@ -728,6 +777,15 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	(void)view;
 	[self refresh];
+}
+
+/* **AND A COMMAND THE GRID PERFORMED ENDS WHERE THIS WINDOW'S OWN COMMANDS END.** The operation manager the icon view was
+ * handed is this window's (`-setFileOperations:` at load), so the progress plate its handler opened is this window's to
+ * close — the grid cannot close it, and asking only for a refresh left that plate on the glass. */
+- (void)iconViewDidFinishOperation:(WSIconView *)view
+{
+	(void)view;
+	[self finishOperation];
 }
 
 /* ---- THE TOOLBAR ---------------------------------------------------------------------------- */
@@ -1001,6 +1059,94 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[self finishOperation];
 }
 
+/* ============================================================================================ *
+ * THE SHARED COMMANDS: WHAT A CONTEXT MENU ASKS OF WHICHEVER VIEW IS SHOWING.                      *
+ *                                                                                                *
+ * **THE WINDOW OWNS THESE BECAUSE THE WINDOW OWNS THE SELECTION'S MEANING**, not the pixels: `-selectedItems`
+ * already answers per view mode, `_fileOperations` is the window's manager (its progress plate and its undo
+ * manager), and `-finishOperation` is the ending every one of them owes. So a list row, a column cell and an icon
+ * all raise the same menu aimed at THIS object, and there is one implementation of Paste rather than four.
+ *
+ * **THE VIEWS THAT CAN ANSWER FOR THEMSELVES STILL DO.** `WSIconView` and `WSDesktopView` implement Cut, Copy,
+ * Paste, Rename and New Folder themselves — they were first and their tests measure them — so in Icon mode the
+ * first responder answers before the chain reaches here. In List and Column mode it does, because neither of those
+ * views has any of these commands.
+ * ============================================================================================ */
+
+- (void)cut:(id)sender
+{
+	(void)sender;
+	WSItemCutPathsToPasteboard([self selectedPaths]);
+}
+
+- (void)copy:(id)sender
+{
+	(void)sender;
+	WSItemCopyPathsToPasteboard([self selectedPaths]);
+}
+
+- (void)paste:(id)sender
+{
+	BOOL wasCut = NO;
+	NSArray *paths = WSItemClipboardPaths(&wasCut);
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	if (wasCut) {
+		(void)[_fileOperations movePaths:paths toDirectory:_directory error:NULL];
+		WSItemClipboardForget();
+	} else {
+		(void)[_fileOperations copyPaths:paths toDirectory:_directory error:NULL];
+	}
+	[self finishOperation];
+}
+
+/* **RENAME IS THE SHOWING VIEW'S OWN FIELD, AND THE COLUMN VIEW HAS NONE.** A browser cell has no editor in this tier,
+ * so the row is grey there (`-validateMenuItem:` says so) rather than a command that would silently do nothing. */
+- (void)rename:(id)sender
+{
+	(void)sender;
+	if (_viewMode == 0) {
+		(void)[_iconView beginRenamingSelectedItem];
+	} else if (_viewMode == 1) {
+		(void)[_listView beginEditingSelectedName];
+	}
+}
+
+/* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN**, the reference file manager's own way to
+ * make a set out of a selection: the folder is made in the window's directory (its name made unique by W6) and the
+ * selection moves into it. */
+- (void)newFolderWithSelection:(id)sender
+{
+	NSArray *paths = [self selectedPaths];
+	NSString *made;
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	made = [_fileOperations createFolderInDirectory:_directory name:@"New Folder with Selection" error:NULL];
+	if (made == nil) {
+		return;
+	}
+	(void)[_fileOperations movePaths:paths toDirectory:made error:NULL];
+	[self finishOperation];
+}
+
+/* AND SELECT ALL IS THE SHOWING VIEW'S, because "all" is a fact about a grid, a tree or a column rather than about the
+ * window. A browser has no such door, so the row is grey in Column mode. */
+- (void)selectAll:(id)sender
+{
+	(void)sender;
+	if (_viewMode == 0) {
+		[_iconView selectAll:nil];
+	} else if (_viewMode == 1) {
+		[_listView selectAll:nil];
+	}
+}
+
 - (void)moveToTrash:(id)sender
 {
 	(void)sender;
@@ -1081,6 +1227,23 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	if (action == @selector(newFolder:)) {
 		return YES;
 	}
+	if (action == @selector(newFolderWithSelection:)) {
+		return [[self selectedItems] count] > 0;
+	}
+	if (action == @selector(cut:) || action == @selector(copy:)) {
+		return [[self selectedItems] count] > 0;
+	}
+	if (action == @selector(paste:)) {
+		return [WSItemClipboardPaths(NULL) count] > 0;
+	}
+	if (action == @selector(rename:)) {
+		return _viewMode != 2 && [[self selectedItems] count] == 1;
+	}
+	if (action == @selector(selectAll:)) {
+		/* **A BROWSER HAS NO SELECT-ALL IN THIS TIER**, so the row is grey rather than a command that would do
+		 * nothing: the icon grid and the tree both have the door, the column browser does not. */
+		return _viewMode != 2 && [self itemCount] > 0;
+	}
 	if (action == @selector(printSelection:)) {
 		return [[self printablePaths] count] > 0;
 	}
@@ -1145,6 +1308,13 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 - (WSIconView *)cg_iconView { return _iconView; }
 - (WSListView *)cg_listView { return _listView; }
 - (WSColumnView *)cg_columnView { return _columnView; }
+/* The plate a file operation puts up while it runs, so a probe can see that the operation ENDED: the window is closed
+ * by `-finishOperation`, and a command that ran an operation without that ending left it on the glass. */
+- (WSProgressWindow *)cg_progressWindow
+{
+	return _progressWindow;
+}
+
 - (NSSegmentedControl *)cg_viewSwitcher { return _viewSwitcher; }
 - (NSSplitView *)cg_splitView { return _split; }
 
