@@ -19,10 +19,9 @@
 	<string>Workspace</string>
 	<key>CFBundleExecutable</key>
 	<string>Workspace</string>
-	<!-- **THE ICON IS NAMED AND NOT CARRIED.** Icon Services looks for `Contents/Resources/Workspace.icns` and, when the
-	     bundle has none, answers for an application from the theme in charge — which is where a desktop's art belongs
-	     now that the default theme is the user's rendered Flat-Remix rather than art this repository vendored. The
-	     declaration stays so an installation that drops its own `Workspace.icns` in is read the ordinary way. -->
+	<!-- **THE ICON, WHICH IS THE HOME FOLDER'S.** Read by Icon Services from `Contents/Resources/Workspace.icns`; the art
+	     is the vendored Flat-Remix-Accent theme's `user-home`, packed into an `.icns` so the bundle has ONE icon at every
+	     size rather than one PNG that every caller scales. Derived, not a dependency: the recipe is in PROVENANCE.md. -->
 	<key>CFBundleIconFile</key>
 	<string>Workspace</string>
 	<key>CFBundlePackageType</key>

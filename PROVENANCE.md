@@ -404,16 +404,35 @@ This repository was relicensed to **LGPL-3.0-or-later** (libraries) and **GPL-3.
 2026-10-22; the per-file `SPDX-License-Identifier` header is the authority. There is no third-party code in this
 component, so there is no other split to record.
 
-## The bundle icon: none, deliberately
+## The bundle icon (`Resources/Workspace.icns`)
 
-**`Resources/Workspace.icns` WAS DERIVED FROST ART AND IS GONE.** The Dock reads an application's icon from its bundle
-(`CFBundleIconFile` → `Contents/Resources/Workspace.icns`); Workspace's used to be the Frost theme's **Home folder**, packed
-from that theme's PNGs. The theme this desktop runs is now the Flat-Remix the user renders — GPL-3.0, which this
-repository does not carry — so packing a new icon from it would put that licence in the tree, and keeping the Frost one
-would keep art for a theme nothing runs.
+**DERIVED FROM THE VENDORED FLAT-REMIX-ACCENT THEME, NOT A NEW WORK OF ART.** The Dock draws an application's icon from
+its bundle (`CFBundleIconFile` -> `Contents/Resources/Workspace.icns`), and Workspace's is the theme's **Home folder** —
+the project's choice rather than upstream's, because Workspace is the desktop and the file manager's door to the user's
+files. It was Frost's Home folder until Frost was removed; the theme that replaced it supplies the same place name.
 
-So the bundle carries no icon file and `CFBundleIconFile` still names one: Icon Services answers for an application
-through the theme in charge, which is the same door every other icon takes. A machine with the theme gets its application
-art; a machine without it gets the drawn generic. An installation that wants a Workspace tile of its own drops a
-`Workspace.icns` into `Resources/` and it is read the ordinary way — that is a decision for whoever ships it, not art this
-tree should invent.
+| | |
+|---|---|
+| Source art | `libagora-iconservices/themes/Flat-Remix-Accent/<size>/places/user-home.png` (Flat-Remix, GPL-3.0 — see `libagora-iconservices/themes/Flat-Remix-Accent/PROVENANCE.md`) |
+| Sizes packed | 16pt@2x (`ic11`), 32pt@2x (`ic12`), 128 (`ic07`), 256 (`ic08`), 512 (`ic09`) |
+| Container | an `.icns` whose entries are the theme's PNG bytes; no re-encoding, so the art is byte-identical to the theme's |
+| Licence | **GPL-3.0**, travelling with the theme it comes from — which composes with this program's own GPL-3.0-or-later |
+
+The recipe is the whole of it — no tool, no encoder:
+
+```sh
+python3 - <<'ICNS'
+import struct
+base = "libagora-iconservices/themes/Flat-Remix-Accent"
+entries = [("ic11", f"{base}/16x16@2x/places/user-home.png"),
+           ("ic12", f"{base}/32x32@2x/places/user-home.png"),
+           ("ic07", f"{base}/128x128/places/user-home.png"),
+           ("ic08", f"{base}/256x256/places/user-home.png"),
+           ("ic09", f"{base}/256x256@2x/places/user-home.png")]
+body = b"".join(t.encode() + struct.pack(">I", (d := open(p, "rb").read()).__len__() + 8) + d for t, p in entries)
+open("workspace/Resources/Workspace.icns", "wb").write(b"icns" + struct.pack(">I", len(body) + 8) + body)
+ICNS
+```
+
+`libagora-iconservices`' `.icns` reader takes the PNG-bearing entries and reads each image's own size, so the type codes
+are the container's convention and the art is the theme's.

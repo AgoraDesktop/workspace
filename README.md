@@ -497,17 +497,17 @@ src/
   WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions and the icon size
   WSPlaces.m               the sidebar's PLACES and DEVICES, and the desktop path
 Info.plist.in              the bundle's Info.plist
-Resources/                   empty: the bundle's tile is the theme's application art now (PROVENANCE.md)
+Resources/Workspace.icns   the bundle's icon: the vendored theme's Home folder art, packed at five sizes (PROVENANCE.md)
 tests/                     the pixel suite (run-desktop.sh + check.py) and twelve offscreen suites
 ```
 
 ## What is deliberately not here yet
 
-**The bundle carries no icon of its own, and that is a decision rather than an omission.** It used to carry a
-`Workspace.icns` packed from the Frost theme's Home folder; the theme this desktop runs is the Flat-Remix the user
-renders (GPL-3.0, never vendored), so a new one could not be committed and the old one would be art for a theme nothing
-runs. `CFBundleIconFile` still names one, and Icon Services answers through the theme in charge — a machine with the theme
-gets its application art, one without gets the drawn generic. [`PROVENANCE.md`](PROVENANCE.md) records the removal.
+**The Dock draws Workspace from `Resources/Workspace.icns`**, which is the **Home folder** of the vendored
+Flat-Remix-Accent theme — chosen rather than inherited, because Workspace is the desktop and the door to the user's
+files. It is derived art, packed with the recipe in [`PROVENANCE.md`](PROVENANCE.md); the bundle declares it with
+`CFBundleIconFile`, so the icon is read the way the Mac reads one and the Dock needs no special case for its own file
+manager.
 
 The plan's later stages: the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
 (W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon
