@@ -110,7 +110,8 @@ screenshot. **9 checks, 0 fail**:
 
 The other eleven are offscreen. `workspace-desktop-layout`, `workspace-metadata-store`, `workspace-main-menu`,
 `workspace-go-menu`; the shell's own `workspace-history` (**15 checks**) and `workspace-file-window`
-(**108 checks** — including the folder it watches for changes made outside it, and the trash's Put Back row); the icon view's
+(**112 checks** — including the folder it watches for changes made outside it, and the trash's Put Back row in all
+three modes); the icon view's
 `workspace-icon-view` (**147 checks** — the grid, the keyboard, the modifiers, the
 rename, the drag and the three context menus); the list view's
 `workspace-list-view` (**53 checks** — the ordering, the modifiers, the click that must not move, the triangle that

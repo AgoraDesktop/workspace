@@ -225,14 +225,54 @@ int main(void)
 			[inTrash refresh];
 		}
 
-		/* AND THE COMMAND ITSELF PUTS IT WHERE IT CAME FROM. */
+		/* **AND THE GRID, WHICH RAISES ITS OWN MENU.** The icon view answers Cut, Copy, Rename and Move to Trash itself,
+		 * so its menu is aimed at the VIEW rather than at the window — and a view that cannot say it is showing the trash
+		 * offered an ordinary folder's rows in the bin. It says so now, and the command is forwarded to the window that
+		 * holds the records. ICON MODE IS WHERE THIS WAS MISSING; the list and the browser already reached the window. */
+		{
+			WSIconView *grid = [inTrash cg_iconView];
+			NSRect cell = [grid cg_highlightRectAtIndex:0];
+			NSEvent *right = [NSEvent mouseEventWithType:NSRightMouseDown
+							    location:[grid convertPoint:NSMakePoint(NSMidX(cell),
+												    NSMidY(cell))
+										toView:nil]
+						       modifierFlags:0 timestamp:0.0
+							windowNumber:[[inTrash window] windowNumber]
+							     context:nil eventNumber:0 clickCount:1 pressure:1.0f];
+			NSMenu *iconMenu = [grid menuForEvent:right];
+
+			check([grid isTrashDirectory], "the grid says it is showing the trash");
+			check([[iconMenu itemArray] count] > 0
+			      && [[[[iconMenu itemArray] objectAtIndex:0] title] isEqual:@"Put Back"]
+			      && [[[iconMenu itemArray] objectAtIndex:0] target] == grid,
+			      "so its own menu begins with Put Back, aimed at the grid");
+			check([iconMenu indexOfItemWithTitle:@"Move to Trash"] == (NSInteger)NSNotFound,
+			      "and offers no Move to Trash there either");
+		}
+
+		/* AND THE COMMAND ITSELF PUTS IT WHERE IT CAME FROM — through the GRID's row, which forwards it. */
 		[[inTrash cg_iconView] selectIndex:0];
 		row = [[NSMenuItem alloc] initWithTitle:@"Put Back" action:@selector(putBack:) keyEquivalent:@""];
 		check([inTrash validateMenuItem:row], "the window answers the row while it is showing the trash");
 		check(![first validateMenuItem:row], "and refuses it everywhere else");
 		[row release];
-		[[inTrash cg_iconView] selectIndex:0];
-		[inTrash putBack:nil];
+		/* **AND THE COMMAND ITSELF RUNS THROUGH THE MENU ROW**, which is the dispatch a click takes: the row's target
+		 * and action, not a call to the command. The grid's menu is aimed at the GRID, so this is also the proof that
+		 * the grid forwards Put Back to the window that holds the records. */
+		{
+			NSRect cell = [[inTrash cg_iconView] cg_highlightRectAtIndex:0];
+			NSEvent *right = [NSEvent mouseEventWithType:NSRightMouseDown
+							    location:[[inTrash cg_iconView]
+									convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell))
+									   toView:nil]
+						       modifierFlags:0 timestamp:0.0
+							windowNumber:[[inTrash window] windowNumber]
+							     context:nil eventNumber:0 clickCount:1 pressure:1.0f];
+			NSMenu *iconMenu = [[inTrash cg_iconView] menuForEvent:right];
+
+			check([iconMenu performActionForItemAtIndex:0],
+			      "the menu's first row dispatches: Put Back, through the grid, to the window");
+		}
 		check([[NSFileManager defaultManager] fileExistsAtPath:doomed],
 		      "Put Back puts the file back where it came from");
 		check([inTrash itemCount] == 0, "and the trash the window shows is empty again");

@@ -1060,6 +1060,30 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	[self fn_didFinishOperation];
 }
 
+/* **THE TRASH IS THE WINDOW'S FACT, NOT THE GRID'S.** The grid raises its own menu — Cut, Copy, Rename, Move to Trash
+ * are all commands it answers — so the menu is aimed at THIS view, and a view that cannot say whether it is showing the
+ * bin gets the menu of an ordinary folder even when it is one. The window's controller knows; the row appears when it
+ * says so, in the grid as it already did in the list and the browser. */
+- (BOOL)isTrashDirectory
+{
+	id delegate = [[self window] delegate];
+
+	return (delegate != nil && [delegate respondsToSelector:@selector(isTrashDirectory)]
+		&& [delegate isTrashDirectory]);
+}
+
+/* **AND THE WAY OUT OF IT IS THE WINDOW'S COMMAND.** Every other row here the grid answers itself, from the operations
+ * it was handed; Put Back needs the Put Back RECORD and the window is where that lives, so the row is forwarded to the
+ * controller rather than reimplemented — the same command the list and the browser reach directly. */
+- (void)putBack:(id)sender
+{
+	id delegate = [[self window] delegate];
+
+	if ([delegate respondsToSelector:@selector(putBack:)]) {
+		[delegate performSelector:@selector(putBack:) withObject:sender];
+	}
+}
+
 - (NSArray *)cg_selectedPaths
 {
 	NSMutableArray *paths = [[NSMutableArray alloc] init];

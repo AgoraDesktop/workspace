@@ -151,6 +151,10 @@ extern NSString *WSIconViewFolderPathKey;
 - (void)cut:(nullable id)sender;
 - (void)paste:(nullable id)sender;
 - (void)moveToTrash:(nullable id)sender;
+/* **THE TRASH'S TWO DOORS, ANSWERED BY THE WINDOW.** A grid in a Trash window says so (its menu then offers Put Back and
+ * not Move to Trash), and the command is forwarded to the controller, which holds the Put Back records. */
+- (BOOL)isTrashDirectory;
+- (void)putBack:(nullable id)sender;
 /* And the empty grid's two: make a folder in this grid's directory, and hold everything in it. */
 - (void)newFolder:(nullable id)sender;
 - (void)selectAll:(nullable id)sender;
