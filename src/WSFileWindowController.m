@@ -475,10 +475,33 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	if (_directory != nil) {
 		[paths addObject:_directory];
 	}
-	/* ONLY THE LIST HAS EXPANDED ROWS. The grid shows one folder and the browser one column per level, and neither
-	 * keeps a tree open, so neither adds a path. */
+	/* **THE LIST'S OPEN SUBTREES AND THE BROWSER'S OPEN COLUMNS.** A grid shows one folder and adds nothing; a tree keeps
+	 * its expanded rows open, and a browser keeps one column per level — both are places on the glass, so both are
+	 * watched. Without the browser's half a change in a column several levels down was invisible until something else
+	 * refreshed the window: MEASURED as "column view is slow to notice changes in the filesystem". */
 	if (_viewMode == 1 && _listView != nil) {
-		[paths addObjectsFromArray:[_listView cg_expandedPaths]];
+		NSArray *expanded = [_listView cg_expandedPaths];
+		NSUInteger i;
+
+		for (i = 0; expanded != nil && i < [expanded count]; i++) {
+			NSString *path = [expanded objectAtIndex:i];
+
+			if (path != nil && ![paths containsObject:path]) {
+				[paths addObject:path];
+			}
+		}
+	} else if (_viewMode == 2 && _columnView != nil) {
+		NSArray *open = [_columnView cg_visibleDirectories];
+		NSUInteger i;
+
+		/* THE SAME FOLDER IS ONE WATCH: column zero lists the window's own folder, which is already in the list. */
+		for (i = 0; open != nil && i < [open count]; i++) {
+			NSString *path = [open objectAtIndex:i];
+
+			if (path != nil && ![paths containsObject:path]) {
+				[paths addObject:path];
+			}
+		}
 	}
 	return paths;
 }
@@ -812,6 +835,12 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	(void)view;
 	[self openItem:item];
+}
+
+- (void)columnViewDidChangeVisibleDirectories:(WSColumnView *)view
+{
+	(void)view;
+	[_watcher setPaths:[self fn_watchedPaths]];
 }
 
 - (void)columnViewDidChangeModel:(WSColumnView *)view

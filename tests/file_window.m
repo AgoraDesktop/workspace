@@ -330,6 +330,40 @@ int main(void)
 		[first setViewMode:0];
 	}
 
+	/* **AND THE BROWSER WATCHES THE FOLDER EVERY COLUMN SHOWS.** A column several levels down is on the glass, so a
+	 * change in its folder has to arrive without anything else refreshing the window — MEASURED as "column view is slow
+	 * to notice changes in the filesystem", because only the window's own folder was watched. Selecting a row opens the
+	 * column beside it, and that column's folder joins the watches just as an expanded list row does. */
+	{
+		[first navigateToDirectory:root];
+		[first cg_useColumnView:nil];
+		{
+			WSColumnView *columns = [first cg_columnView];
+			NSBrowser *browser = [columns cg_browser];
+			NSArray *paths = [[first cg_watcher] paths];
+			NSArray *visible = [columns cg_visibleDirectories];
+
+			check([paths containsObject:root], "the browser watches the folder column zero shows");
+			check(visible != nil && [visible count] >= 1 && [[visible objectAtIndex:0] isEqual:root],
+			      "and it says that is the only folder it is showing");
+
+			[browser selectRow:0 inColumn:0];
+			/* **THE ANNOUNCEMENT WAITS ONE TURN OF THE RUN LOOP**, because the browser grows the column after its
+			 * delegate answers; a window's event loop turns that turn before the person's next breath. */
+			[[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+			paths = [[first cg_watcher] paths];
+			visible = [columns cg_visibleDirectories];
+			printf("  (note: with column one open the browser watches %lu folder(s))\n",
+			       (unsigned long)[paths count]);
+			check([visible containsObject:folderA],
+			      "selecting a folder makes the column beside it a folder on the glass");
+			check([paths containsObject:folderA],
+			      "so that column's folder is watched too, without anything refreshing the window");
+			check([paths containsObject:root], "and the folder column zero shows stays watched");
+		}
+		[first cg_useIconView:nil];
+	}
+
 	/* **THE VIEW SWITCHER IS PINNED TO THE RIGHT OF THE WINDOW, AND THE SPACE BEFORE IT IS WHAT A RESIZE OPENS.** The
 	 * toolbar's default identifiers put one flexible spacer between Forward and the switcher, so the switcher must end
 	 * at the band's trailing edge, and stay there when the window grows. MEASURED through the band's own pointer door,

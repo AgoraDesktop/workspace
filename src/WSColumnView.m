@@ -323,6 +323,32 @@ static NSString *fn_size_string(WSItem *item)
 	return ([parent path] != nil) ? [parent path] : [_model directory];
 }
 
+- (NSArray *)cg_visibleDirectories
+{
+	NSMutableArray *paths = [NSMutableArray array];
+	NSInteger count = [_browser cg_activeColumnCount];
+	NSInteger selected = [_browser selectedColumn];
+	NSInteger i;
+
+	/* **THE COLUMN A CLICK JUST OPENED COUNTS, EVEN BEFORE THE BROWSER HAS GROWN IT.** The browser makes the column
+	 * beside a selection after its delegate answers, so a set computed in the delegate's own turn would still be the
+	 * old one; the selected column is the newest folder on the glass and is included by its index. */
+	if (selected + 2 > count) {
+		count = selected + 2;
+	}
+	if (count > [_browser cg_columnCount]) {
+		count = [_browser cg_columnCount];	/* the pool's own bound, which a stale index cannot ask past */
+	}
+	for (i = 0; i < count; i++) {
+		NSString *directory = [self cg_directoryForColumn:i];
+
+		if (directory != nil && ![paths containsObject:directory]) {
+			[paths addObject:directory];
+		}
+	}
+	return paths;
+}
+
 - (void)cg_prepareCommandsForColumn:(NSInteger)column
 {
 	NSString *directory = [[self cg_directoryForColumn:column] copy];
@@ -498,6 +524,7 @@ static NSString *fn_size_string(WSItem *item)
 - (void)updatePreviewForItem:(WSItem *)item
 {
 	[_preview setItem:item];
+	[self fn_visibleDirectoriesMayHaveChanged];
 }
 
 /* ---- THE BROWSER'S DELEGATE ------------------------------------------------------------------ */
@@ -569,6 +596,26 @@ static NSString *fn_size_string(WSItem *item)
 {
 	(void)sender;
 	[self updatePreviewForItem:[self selectedItem]];
+}
+
+/* **A SELECTION IS A NEW COLUMN BESIDE IT, SO THE FOLDERS ON THE GLASS JUST CHANGED.** The window watches what the view
+ * shows — the same rule that makes an expanded list row a watch — and it cannot be told inside the selection itself,
+ * because the browser grows the column AFTER its delegate answers. So the announcement waits one turn of the run loop,
+ * by which time the browser has settled; `-setPaths:` does nothing when the set is the same, so a click that opens
+ * nothing costs one comparison. MEASURED as "column view is slow to notice changes in the filesystem": only the window's
+ * own folder was watched, so a change in an open column arrived when something else happened to refresh. */
+- (void)fn_announceVisibleDirectories
+{
+	if ([_viewDelegate respondsToSelector:@selector(columnViewDidChangeVisibleDirectories:)]) {
+		[_viewDelegate columnViewDidChangeVisibleDirectories:self];
+	}
+}
+
+- (void)fn_visibleDirectoriesMayHaveChanged
+{
+	[NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(fn_announceVisibleDirectories)
+						   object:nil];
+	[self performSelector:@selector(fn_announceVisibleDirectories) withObject:nil afterDelay:0.0];
 }
 
 /* ---- THE DRAG, OUT AND IN --------------------------------------------------------------------- */

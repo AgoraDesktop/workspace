@@ -32,6 +32,10 @@
 @optional
 - (void)columnView:(WSColumnView *)view openItem:(WSItem *)item;
 - (void)columnViewDidChangeModel:(WSColumnView *)view;
+/* **AND WHICH FOLDERS IT IS SHOWING CAN CHANGE WITHOUT THE MODEL CHANGING.** Selecting a row opens the column beside it,
+ * and that column lists a folder the window did not have on screen a moment ago: the window watches what it shows, so it
+ * has to be told. */
+- (void)columnViewDidChangeVisibleDirectories:(WSColumnView *)view;
 @end
 
 @interface WSColumnView : NSView <NSBrowserDelegate>
@@ -63,6 +67,10 @@
 
 /* **THE COLUMN A MENU WAS RAISED IN, SAID BEFORE THE MENU EXISTS.** The browser's right-click records the directory that
  * column lists here; every command the menu sends then asks `-cg_commandDirectory` rather than the window's folder. */
+/* **THE FOLDERS THE OPEN COLUMNS ARE SHOWING**, in column order and without repeats: what a window has to watch for a
+ * browser to be live. The on-screen columns are the active ones — the pool's unused slots are not showing anything. */
+- (NSArray *)cg_visibleDirectories;
+
 - (void)cg_prepareCommandsForColumn:(NSInteger)column;
 - (nullable NSString *)cg_commandDirectory;
 
