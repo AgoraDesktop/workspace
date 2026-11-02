@@ -832,7 +832,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		 * **AND THE PICTURES ARE ASKED FOR AS `toolbar:` AND NOT AS A BARE NAME.** `toolbar:` means "the theme that holds
 		 * the UI's symbols", so the band asks for the 24-point outline the rest of this desktop draws and a machine with
 		 * another icon theme still gets its own. A bare `grid-dots` would be answered by whichever theme is in charge,
-		 * which for `Frost` is a FILLED folder-shaped set and not this outline at all. */
+		 * which for a place theme is a FILLED folder-shaped set and not this outline at all. */
 		NSArray *symbols = [NSArray arrayWithObjects:@"toolbar:grid-dots", @"toolbar:menu-2",
 							     @"toolbar:columns-3", nil];
 

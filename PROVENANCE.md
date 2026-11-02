@@ -9,7 +9,7 @@ third-party code to licence.
 | the window levels | `libagora-drawing`'s `CGWindowLevel.h` (`kCGDesktopWindowLevel`) |
 | the wallpaper's endpoints | `window-server/ARGENTUM.md`'s own samples — `(108,55,29)` and `(18,14,5)` |
 | the compositor it is a client of | `../window-server`, as `agora_shell` through the AppKit's seam |
-| the icon art | **Frost v0.3.1** (MIT), vendored in `../libagora-iconservices/themes/Frost` and reached through Icon Services |
+| the icon art | the desktop's theme, named by `libagora-iconservices` and rendered per machine (`demo/flat-remix-accent.sh`); no art is carried here |
 | third-party code | **none** |
 | licence | MIT, per file (`LICENSE`) |
 
@@ -40,9 +40,9 @@ Cocoa's bottom-left appears only in the view's drawing and hit-testing, converte
 
 **An icon is an `IconRef` from `libagora-iconservices` (F2), cached per item.** `AGIconCreateWithURL` already
 prefers an application bundle's declared icon and falls back to the type's generic; a document's own icon is a
-later step. **The art is Frost**: `libagora-iconservices` vendors the MIT theme and the demo points
-`AGORA_ICON_THEME` at the checkout's `themes/Frost`, so the desktop's folders and file types are Frost's even
-before the library is installed. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built, and
+later step. **The art is the theme in charge**: `libagora-iconservices` names `share/icons/Flat-Remix-Accent` by
+default and the demo points `AGORA_ICON_THEME` at the copy in the install prefix, so the desktop's folders and file types
+come from the rendered theme — and from the drawn generics on a machine that has not rendered it. And the desktop is **not LIVE yet**: `libagora-watch` (F3) is built, and
 wiring its stream to `WSItemModel` is the step after this surface.
 
 **And the labels are centred GEOMETRICALLY, because the text system does not honour ALIGNMENT.** MEASURED, the
@@ -404,35 +404,16 @@ This repository was relicensed to **LGPL-3.0-or-later** (libraries) and **GPL-3.
 2026-10-22; the per-file `SPDX-License-Identifier` header is the authority. There is no third-party code in this
 component, so there is no other split to record.
 
-## The bundle icon (`Resources/Workspace.icns`)
+## The bundle icon: none, deliberately
 
-**DERIVED FROM THE VENDORED FROST THEME, NOT A NEW WORK OF ART.** The Dock draws an application's icon from its
-bundle (`CFBundleIconFile` → `Contents/Resources/Workspace.icns`), and Workspace's is the **Home folder** —
-the project's choice rather than Frost's, because Workspace is the desktop and the file manager's door to the
-user's files.
+**`Resources/Workspace.icns` WAS DERIVED FROST ART AND IS GONE.** The Dock reads an application's icon from its bundle
+(`CFBundleIconFile` → `Contents/Resources/Workspace.icns`); Workspace's used to be the Frost theme's **Home folder**, packed
+from that theme's PNGs. The theme this desktop runs is now the Flat-Remix the user renders — GPL-3.0, which this
+repository does not carry — so packing a new icon from it would put that licence in the tree, and keeping the Frost one
+would keep art for a theme nothing runs.
 
-| | |
-|---|---|
-| Source art | `libagora-iconservices/themes/Frost/<size>/places/user-home.png` (Frost v0.3.1, MIT — see `libagora-iconservices/themes/PROVENANCE.md`) |
-| Sizes packed | 16pt@2x (`ic11`), 32pt@2x (`ic12`), 128 (`ic07`), 256 (`ic08`), 512 (`ic09`) |
-| Container | an `.icns` whose entries are the theme's PNG bytes, written by the recipe below; no re-encoding, so the art is byte-identical to the theme's |
-| Licence | MIT, travelling with Frost's art |
-
-The recipe is the whole of it — no tool, no encoder:
-
-```sh
-python3 - <<'PY'
-import struct
-base = "libagora-iconservices/themes/Frost"
-entries = [("ic11", f"{base}/16x16@2x/places/user-home.png"),
-           ("ic12", f"{base}/32x32@2x/places/user-home.png"),
-           ("ic07", f"{base}/128x128/places/user-home.png"),
-           ("ic08", f"{base}/256x256/places/user-home.png"),
-           ("ic09", f"{base}/256x256@2x/places/user-home.png")]
-body = b"".join(t.encode() + struct.pack(">I", (d := open(p, "rb").read()).__len__() + 8) + d for t, p in entries)
-open("workspace/Resources/Workspace.icns", "wb").write(b"icns" + struct.pack(">I", len(body) + 8) + body)
-PY
-```
-
-`libagora-iconservices`' `.icns` reader takes the PNG-bearing entries and reads each image's own size, so the type
-codes are the container's convention and the art is the theme's.
+So the bundle carries no icon file and `CFBundleIconFile` still names one: Icon Services answers for an application
+through the theme in charge, which is the same door every other icon takes. A machine with the theme gets its application
+art; a machine without it gets the drawn generic. An installation that wants a Workspace tile of its own drops a
+`Workspace.icns` into `Resources/` and it is read the ordinary way — that is a decision for whoever ships it, not art this
+tree should invent.

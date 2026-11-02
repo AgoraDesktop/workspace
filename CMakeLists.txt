@@ -142,13 +142,11 @@ add_custom_command(TARGET Workspace POST_BUILD
             "${_bundle}/Contents/${_bundle_platform}/${_bundle_arch}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:Workspace>"
             "${WORKSPACE_BUNDLE_EXECUTABLE}"
-    # **AND THE BUNDLE'S ICON, WHERE `CFBundleIconFile` SAYS IT IS.** `Contents/Resources/Workspace.icns` is Home
-    # folder art from the vendored Frost theme, packed at five sizes; Icon Services reads it for the Dock's tile and
-    # for anything else that shows the application.
-    COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bundle}/Contents/Resources"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Workspace.icns"
-            "${_bundle}/Contents/Resources/Workspace.icns"
+    # **AND THE BUNDLE CARRIES NO ICON OF ITS OWN.** `Contents/Resources/Workspace.icns` was Home folder art packed from
+    # the Frost theme; Frost is gone (the desktop's default theme is the Flat-Remix the user renders, and its art is
+    # GPL-3 and not vendored), so the tile is whatever Icon Services answers for an application — the art of the theme in
+    # charge, or the drawn generic when there is none. `CFBundleIconFile` is still declared in `Info.plist`; a bundle
+    # whose Resources carry no such file resolves through the theme, which is the same door the rest of the AppKit uses.
     VERBATIM)
 
 # **THE TESTS ARE A DEVELOPMENT ARTEFACT, AND A RELEASE DOES NOT BUILD THEM.** `include(CTest)` is what defines
@@ -213,6 +211,5 @@ install(TARGETS Workspace
 install(FILES "${_bundle}/Contents/Info.plist"
     DESTINATION "${_bundle_install}/Contents")
 
-# AND THE ICON, WHERE `CFBundleIconFile` SAYS IT IS — the installed tile reads it from the same relative path.
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Workspace.icns"
-    DESTINATION "${_bundle_install}/Contents/Resources")
+# **AND THERE IS NO ICON FILE TO INSTALL**, for the reason the bundle step gives: the tile comes from the theme in
+# charge rather than from art this repository carries.
