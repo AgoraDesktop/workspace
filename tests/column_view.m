@@ -251,10 +251,21 @@ int main(void)
 	check([[[view cg_previewItem] name] isEqual:@"notes.txt"], "and the preview is that file");
 	check([[WSItemKind kindForItem:[view cg_previewItem]] length] > 0, "with a non-empty Kind");
 
-	/* AN EMPTY BRANCH OPENS NO COLUMN, BUT STILL PREVIEWS. */
+	/* **AN EMPTY BRANCH OPENS ITS OWN COLUMN, EMPTY, WITH ITS NAME ON IT.** A folder with nothing in it is still a place
+	 * a person went: Apple's browser shows the column beside it with a blank list, and counting only columns that have
+	 * rows hid it — "when the selected directory is empty, there is no column shown for it". */
 	[browser selectRow:1 inColumn:0];
-	check([browser cg_activeColumnCount] == 1, "an empty folder opens no column");
-	check([[[view cg_previewItem] name] isEqual:@"B Folder"], "but it is the preview's item");
+	check([browser cg_activeColumnCount] == 2 && [browser numberOfRowsInColumn:1] == 0,
+	      "an empty folder opens a column beside it, with no rows in it");
+	check([[browser titleOfColumn:1] isEqual:@"B Folder"],
+	      "and that column is titled for the empty folder, which is the place the person opened");
+	check([[[view cg_previewItem] name] isEqual:@"B Folder"], "and it is the preview's item");
+
+	/* **AND THE FIRST COLUMN IS NAMED FOR THE FOLDER THE WINDOW SHOWS.** It has no column to its left to take a name
+	 * from, and answering nil left the leftmost header blank. */
+	check([[browser titleOfColumn:0] isEqual:[root lastPathComponent]],
+	      "the first column is titled for the folder the window shows");
+	check([[browser titleOfColumn:0] length] > 0, "so no column in the browser is left without a header");
 
 	/* THE VIEW'S OWN OPEN DOOR REACHES THE DELEGATE. */
 	[browser selectRow:0 inColumn:0];

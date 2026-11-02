@@ -516,8 +516,12 @@ static NSString *fn_size_string(WSItem *item)
 	WSItem *parent;
 
 	(void)sender;
+	/* **THE FIRST COLUMN IS NAMED FOR THE FOLDER THE WINDOW SHOWS**, because that is what it lists: the rest are named
+	 * for the item selected in the column to their left, and column zero has no column to its left. Answering nil left
+	 * the leftmost header blank — "the first column is not showing any header text" — while every column after it had a
+	 * title. */
 	if (column <= 0) {
-		return nil;
+		return [[_model directory] lastPathComponent];
 	}
 	parent = [self itemAtRow:[_browser selectedRowInColumn:column - 1] column:column - 1];
 	return [parent name];
