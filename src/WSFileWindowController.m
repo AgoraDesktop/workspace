@@ -1098,6 +1098,11 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	[_progressWindow hide];
 	[self refresh];
+	/* **AND THE WINDOW IS PAINTED NOW, NOT WHEN THE RUN LOOP NEXT COMES ROUND.** A command that arrived through a menu's
+	 * tracking loop ends with the rows already in the model and the damage merely recorded: MEASURED, a folder created
+	 * from the context menu was on disk at once, was in the model 29 ms later, and appeared on the glass a beat after
+	 * that. Flushing the damage here makes the answer to "where did it go" the same frame as the command. */
+	[[self window] displayIfNeeded];
 }
 
 /* **THE LISTING IS THE SELECTION OR THE FOLDER.** A file manager prints what it is showing: with items selected, those
