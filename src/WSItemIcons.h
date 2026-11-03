@@ -33,6 +33,10 @@
 /* Whether the path's extension is a type the tier decodes: PNG or JPEG, which is what `NSBitmapImageRep` reads. */
 + (BOOL)isImageFile:(nullable NSString *)path;
 
+/* **HOW MANY PICTURES HAVE BEEN DECODED**, which is the number that decides whether browsing is usable: a thumbnail is
+ * one decode and must not be one per draw, nor one per size. A probe counts it; nothing in the application asks. */
++ (NSInteger)cg_thumbnailDecodeCount;
+
 @end
 
 #endif /* WORKSPACE_WSITEMICONS_H */
