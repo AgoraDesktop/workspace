@@ -89,6 +89,12 @@ static NSString * const WSToolbarLabelsKey = @"WSShowToolbarLabels";
  * half, and it is not written here: opening a window with List because the last one was switched to List would make the
  * default meaningless. */
 static NSString * const WSDefaultViewModeKey = @"WSDefaultViewMode";
+/* **THE PLACES PANE'S WIDTH, AS THE PERSON DRAGGED IT.** `WS_SIDEBAR_WIDTH` is what a window nobody has dragged shows; a
+ * drag writes the pane's own width here and every later window opens at it. A width outside the range a window can
+ * usefully have is refused rather than stored, so a stray value cannot make the list unreadable. */
+static NSString * const WSSidebarWidthKey = @"WSSidebarWidth";
+#define WS_SIDEBAR_MIN_WIDTH 140.0
+#define WS_SIDEBAR_MAX_WIDTH 400.0
 
 /* ============================================================================================ *
  * THE SIDEBAR'S CELL — a text field cell that draws the place's picture beside its title.      *
@@ -258,14 +264,18 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	 * columns use: a person can drag it, and the three rings say so. */
 	[_split setDividerStyle:NSSplitViewDividerStylePaneSplitter];
 
-	_sidebarScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WS_SIDEBAR_WIDTH, 500.0)];
+	{
+		CGFloat remembered = [WSFileWindowController cg_sidebarWidth];
+
+		_sidebarScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, remembered, 500.0)];
+	}
 	[_sidebarScroll setHasVerticalScroller:YES];
 	[_sidebarScroll setAutohidesScrollers:YES];
 	[_sidebarScroll setBorderType:NSNoBorder];
 	[_sidebarScroll setDrawsBackground:YES];
 	_sidebar = [[NSOutlineView alloc] initWithFrame:[[_sidebarScroll contentView] bounds]];
 	column = [[NSTableColumn alloc] initWithIdentifier:@"place"];
-	[column setWidth:WS_SIDEBAR_WIDTH - 20.0];
+	[column setWidth:[WSFileWindowController cg_sidebarWidth] - 20.0];
 	{
 		WSPlaceCell *cell = [[WSPlaceCell alloc] init];
 
@@ -294,8 +304,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	}
 	[_sidebarScroll setDocumentView:_sidebar];
 
-	_contentScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(WS_SIDEBAR_WIDTH, 0.0,
-									 900.0 - WS_SIDEBAR_WIDTH, 500.0)];
+	_contentScroll = [[NSScrollView alloc] initWithFrame:
+		NSMakeRect([WSFileWindowController cg_sidebarWidth], 0.0,
+			   900.0 - [WSFileWindowController cg_sidebarWidth], 500.0)];
 	[_contentScroll setHasVerticalScroller:YES];
 	/* **A BAR THE DOCUMENT DOES NOT NEED STEPS ASIDE, the same rule as the sidebar's and the browser's columns.
 	 * Without autohide a configured scroller is always a subview, so the icon grid wore a full-height bar in a
@@ -304,7 +315,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_contentScroll setBorderType:NSNoBorder];
 	[_contentScroll setDrawsBackground:YES];
 	_iconView = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0,
-								     900.0 - WS_SIDEBAR_WIDTH, 500.0)
+								     900.0 - [WSFileWindowController cg_sidebarWidth], 500.0)
 						    model:_model];
 	[_iconView setDelegate:(id <WSIconViewDelegate>)self];
 	[_iconView setFileOperations:_fileOperations];
@@ -314,7 +325,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_split addSubview:_sidebarScroll];
 	[_split addSubview:_contentScroll];
 	[_split adjustSubviews];
-	[_split setPosition:WS_SIDEBAR_WIDTH ofDividerAtIndex:0];
+	[_split setPosition:[WSFileWindowController cg_sidebarWidth] ofDividerAtIndex:0];
 
 	if (!_isTrashDirectory) {
 		[[window contentView] addSubview:_pathBar];
@@ -1418,6 +1429,12 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	if ([_split cg_isDraggingDivider]) {
 		return;
 	}
+	/* **AND THE PLACES PANE'S WIDTH IS THE PERSON'S, ONCE THEY HAVE DRAGGED IT.** The pass that reaches here after a drag
+	 * writes the pane's own width down; a window resize also reaches here and writes the same number again, which is a
+	 * comparison `-cg_setSidebarWidth:` makes cheap rather than a second path. */
+	if (_sidebarScroll != nil && [_sidebarScroll superview] == _split) {
+		[WSFileWindowController cg_setSidebarWidth:NSWidth([_sidebarScroll frame])];
+	}
 	[self refreshContentSizes];
 }
 
@@ -1502,6 +1519,29 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 
 /* **THE DEFAULT VIEW MODE: 0 Icon, 1 List, 2 Column**, and anything else in the defaults reads as Icon rather than as a
  * window with no view at all. */
++ (CGFloat)cg_sidebarWidth
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+	double width;
+
+	if (defaults == nil || [defaults objectForKey:WSSidebarWidthKey] == nil) {
+		return WS_SIDEBAR_WIDTH;
+	}
+	width = [defaults doubleForKey:WSSidebarWidthKey];
+	if (width < WS_SIDEBAR_MIN_WIDTH || width > WS_SIDEBAR_MAX_WIDTH) {
+		return WS_SIDEBAR_WIDTH;
+	}
+	return (CGFloat)width;
+}
+
++ (void)cg_setSidebarWidth:(CGFloat)width
+{
+	if (width < WS_SIDEBAR_MIN_WIDTH || width > WS_SIDEBAR_MAX_WIDTH) {
+		return;
+	}
+	[[NSUserDefaults standardUserDefaults] setDouble:(double)width forKey:WSSidebarWidthKey];
+}
+
 + (NSInteger)cg_defaultViewMode
 {
 	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];

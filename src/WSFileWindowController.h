@@ -159,6 +159,11 @@
 
 /* **THE VIEW A NEW WINDOW OPENS IN** — 0 Icon, 1 List, 2 Column — kept in the standard defaults under
  * `WSDefaultViewMode`. The Preferences window writes it; a file window reads it once, when it is made. */
+/* **THE PLACES PANE'S WIDTH**, kept in the standard defaults under `WSSidebarWidth`: what a window opens at, and what a
+ * divider drag writes. A width outside the useful range is refused rather than stored. */
++ (CGFloat)cg_sidebarWidth;
++ (void)cg_setSidebarWidth:(CGFloat)width;
+
 + (NSInteger)cg_defaultViewMode;
 + (void)cg_setDefaultViewMode:(NSInteger)mode;
 + (void)cg_setToolbarLabelsVisible:(BOOL)visible;

@@ -127,8 +127,13 @@ int main(void)
 	 * before anything asks — so the check that a window "nobody has chosen for" shows its words is about a FRESH store
 	 * rather than about whatever this machine, or a previous run of this probe, happened to leave in the real one. */
 	{
-		NSString *config = [root stringByAppendingPathComponent:@"config"];
+		/* **AND OUTSIDE THE FIXTURE.** The store is a directory of files, and a window that writes a preference during its
+		 * life would put one INSIDE the folder this probe counts — MEASURED, a sidebar width saved on a resize made the
+		 * fixture hold five items where it holds four. */
+		NSString *config = [@"/tmp" stringByAppendingPathComponent:
+			[NSString stringWithFormat:@"agora-file-window-config-%d", (int)getpid()]];
 
+		[[NSFileManager defaultManager] removeItemAtPath:config error:NULL];
 		[[NSFileManager defaultManager] createDirectoryAtPath:config withIntermediateDirectories:YES
 							   attributes:nil error:NULL];
 		setenv("AGORA_CONFIG_ROOT", [config UTF8String], 1);
@@ -919,6 +924,46 @@ int main(void)
 		      "a folder made by the window's own command is in the model at once");
 		[watched close];
 		[watched release];
+	}
+
+	/* **THE PLACES PANE AND THE COLUMNS KEEP THE WIDTHS A PERSON DRAGGED.** Two stores, one idea: a width that a drag
+	 * changed and the next window forgot is a window that argues with its user. The pane's width is the window's own
+	 * preference; a browser column's is `NSBrowser`'s autosave, which does nothing until it is given a name — MEASURED,
+	 * a column dragged wider came back at 220 in the next window. */
+	{
+		WSFileWindowController *third;
+		WSColumnView *columns;
+		CGFloat paneWidth;
+
+		[WSFileWindowController cg_setSidebarWidth:260.0];
+		third = [[WSFileWindowController alloc] initWithDirectory:root];
+		paneWidth = NSWidth([[[[third cg_splitView] subviews] objectAtIndex:0] frame]);
+		printf("  (note: the places pane opens %.0f wide after 260 was remembered)\n", (double)paneWidth);
+		check(near(paneWidth, 260.0), "a window opens with the places pane at the width last dragged");
+		[third close];
+		[third release];
+
+		[first cg_useColumnView:nil];
+		columns = [first cg_columnView];
+		[[columns cg_browser] setWidth:300.0 ofColumn:0];
+		check(near([[columns cg_browser] widthOfColumn:0], 300.0), "a column can be dragged wider");
+		[first cg_useIconView:nil];
+		{
+			WSFileWindowController *fourth = [[WSFileWindowController alloc] initWithDirectory:root];
+
+			[fourth cg_useColumnView:nil];
+			printf("  (note: the next window's first column is %.0f wide)\n",
+			       (double)[[[fourth cg_columnView] cg_browser] widthOfColumn:0]);
+			check(near([[[fourth cg_columnView] cg_browser] widthOfColumn:0], 300.0),
+			      "and the next window opens its first column at that width");
+			[fourth close];
+			[fourth release];
+		}
+		/* THE FIXTURE GOES BACK TO THE WIDTHS IT STARTED WITH, for the probes that measure them. */
+		[WSFileWindowController cg_setSidebarWidth:220.0];
+		[first cg_useColumnView:nil];
+		[[[first cg_columnView] cg_browser] setWidth:220.0 ofColumn:0];
+		[first cg_useIconView:nil];
 	}
 
 	/* **THE DEFAULT VIEW IS WHAT A NEW WINDOW OPENS IN.** The preference is a person's answer to "how do I browse", and

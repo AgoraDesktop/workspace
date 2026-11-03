@@ -216,6 +216,16 @@ static NSString *fn_size_string(WSItem *item)
 								      frame.size.height)];
 		[_browser setDelegate:self];
 		[_browser setColumnWidth:220.0];
+		/* **THE COLUMN WIDTHS ARE REMEMBERED, AND THE BROWSER ALREADY KNOWS HOW.** `-setColumnsAutosaveName:` reads the
+		 * widths a person dragged out of the standard defaults and `-setWidth:ofColumn:` writes them back on every change;
+		 * without a name none of it happens, which is why a column dragged wider came back at 220 in the next window. The
+		 * name is the APPLICATION's rather than the window's: one person browses one way, and Apple's autosave name is
+		 * per name for the same reason.
+		 *
+		 * **AND IT GOES AFTER THE DEFAULT WIDTH, NOT BEFORE.** `-setColumnWidth:` sets the width new columns get AND
+		 * rewrites every column it already has, so naming the autosave first loaded the remembered widths and then had
+		 * them replaced by 220 — MEASURED, the next window ignored the drag it had just saved. */
+		[_browser setColumnsAutosaveName:@"WorkspaceFileWindow"];
 		[_browser setMinColumnWidth:120.0];
 		[_browser setMaxVisibleColumns:3];
 		[_browser setSeparatesColumns:YES];
