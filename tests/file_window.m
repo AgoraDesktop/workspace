@@ -15,6 +15,8 @@
 #import "WSFileOperations.h"
 #import "WSIconView.h"
 #import "WSFileWindowController.h"
+
+#import <AppKit/NSSearchField.h>
 #import "WSHairlineView.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
@@ -160,6 +162,23 @@ int main(void)
 	check([[[[first cg_pathControl] URL] path] isEqual:root], "the path bar holds the same folder");
 	check([[[first window] title] isEqual:[root lastPathComponent]],
 	      "the title is the folder's own name");
+	{
+		/* **AND THE SEARCH FIELD IS IN THE TOOLBAR AND FILTERS THE MODEL.** Typing is the field's own business; what is
+		 * measured here is the half this window owns — the query reaching `WSItemModel` and everything that reads the
+		 * model hearing the answer. The status bar is the witness a person sees, and it reads the model's count. */
+		NSSearchField *search = [first cg_searchField];
+
+		check(search != nil, "the toolbar has a search field");
+		[search setStringValue:@"b.t"];
+		[application sendAction:[search action] to:[search target] from:search];
+		check([first itemCount] == 1, "typing a name narrows the folder to the items whose names contain it");
+		check([[[first cg_statusField] stringValue] isEqual:@"1 item"],
+		      "and the status bar counts what the folder now shows");
+		[search setStringValue:@""];
+		[application sendAction:[search action] to:[search target] from:search];
+		check([first itemCount] == 4 && [[[first cg_statusField] stringValue] isEqual:@"4 items"],
+		      "and emptying the field gives the whole folder back");
+	}
 	{
 		/* **THE TRASH IS A PLACE AND NOT A PATH.** A window on it says `Trash` and its path bar shows nothing: where the
 		 * directory sits is the file manager's business, and `.Trash` under somebody's home says nothing true. */

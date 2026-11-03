@@ -44,6 +44,7 @@
 #import <AppKit/NSPathComponentCell.h>
 #import <AppKit/NSPathControl.h>
 #import <AppKit/NSScrollView.h>
+#import <AppKit/NSSearchField.h>
 #import <AppKit/NSSegmentedControl.h>
 #import <AppKit/NSSplitView.h>
 #import <AppKit/NSWorkspace.h>
@@ -78,6 +79,10 @@ static NSString * const WSFileWindowToolbarIdentifier = @"WorkspaceFileWindowToo
 static NSString * const WSBackItemIdentifier = @"WorkspaceBack";
 static NSString * const WSForwardItemIdentifier = @"WorkspaceForward";
 static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
+/* **THE SEARCH FIELD IS ITS OWN ITEM AND SITS TO THE SWITCHER'S RIGHT**, which is where a Mac's file window keeps it: the
+ * view switch says HOW the folder is drawn and the field says WHICH of it, so the two read left to right as one
+ * sentence — and the field is last because it grows. */
+static NSString * const WSSearchFieldItemIdentifier = @"WorkspaceSearchField";
 /* **THE ONE PREFERENCE A TOOLBAR HAS: WHETHER ITS ITEMS SAY THEIR WORDS.** A file window's band is a Back, a Forward
  * and a mode switch, so the words are useful the first time and clutter every time after — which is why the View menu
  * offers to put them away and the answer is remembered. The key lives here rather than in a preferences class because
@@ -711,6 +716,10 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		[self refresh];
 		return;
 	}
+	/* **A NEW FOLDER IS A NEW QUESTION, SO THE FIELD LETS GO OF THE OLD ONE.** The model below is made fresh and
+	 * unfiltered; a field still reading `b.t` over a folder it has not filtered would be a search box that lies about
+	 * what the window is showing. */
+	[_searchField setStringValue:@""];
 	[_directory release];
 	_directory = [standard copy];
 	[_model release];
@@ -1025,6 +1034,32 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		[item setMaxSize:[_viewSwitcher frame].size];
 		return item;
 	}
+	if ([identifier isEqualToString:WSSearchFieldItemIdentifier]) {
+		/* **A SEARCH FIELD IS THE FIELD, NOT A BUTTON WITH AN ICON.** `NSSearchField` is what carries the magnifier, the
+		 * clear circle and the recents menu, so the toolbar supplies a VIEW — the same shape the switcher above uses —
+		 * and everything a person types is the cell's business.
+		 *
+		 * **AND IT FILTERS AS THEY TYPE.** `-sendsWholeSearchString:` NO with `-sendsSearchStringImmediately:` YES is the
+		 * pair that asks the cell to send on every keystroke; left alone the cell waits for Return, which is a search
+		 * field that appears to do nothing until a person gives up and presses a key they were not told about. */
+		_searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 24.0)];
+		/* THE PLACEHOLDER IS THE CELL'S, AND THE FIELD DOES NOT FORWARD IT IN THIS TIER — MEASURED: the message reaches
+		 * NSSearchField and it raises "not implemented", which takes the window with it. */
+		[[_searchField cell] setPlaceholderString:@"Search"];
+		[[_searchField cell] setSendsWholeSearchString:NO];
+		[[_searchField cell] setSendsSearchStringImmediately:YES];
+		[_searchField setTarget:self];
+		[_searchField setAction:@selector(searchFieldChanged:)];
+		[_searchField setToolTip:@"Filter this folder by name"];
+
+		item = [[[NSToolbarItem alloc] initWithItemIdentifier:identifier] autorelease];
+		[item setLabel:@"Search"];
+		[item setPaletteLabel:@"Search"];
+		[item setView:_searchField];
+		[item setMinSize:NSMakeSize(120.0, 24.0)];
+		[item setMaxSize:NSMakeSize(320.0, 24.0)];
+		return item;
+	}
 	return nil;	/* the spacers are the toolbar's own */
 }
 
@@ -1032,15 +1067,17 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	(void)toolbar;
 	return [NSArray arrayWithObjects:WSBackItemIdentifier, WSForwardItemIdentifier,
-					 NSToolbarFlexibleSpaceItemIdentifier, WSViewSwitcherItemIdentifier, nil];
+					 NSToolbarFlexibleSpaceItemIdentifier, WSViewSwitcherItemIdentifier,
+					 WSSearchFieldItemIdentifier, nil];
 }
 
 - (NSArray *)toolbarAllowedItemIdentifiers:(NSToolbar *)toolbar
 {
 	(void)toolbar;
 	return [NSArray arrayWithObjects:WSBackItemIdentifier, WSForwardItemIdentifier,
-					 WSViewSwitcherItemIdentifier, NSToolbarSeparatorItemIdentifier,
-					 NSToolbarSpaceItemIdentifier, NSToolbarFlexibleSpaceItemIdentifier, nil];
+					 WSViewSwitcherItemIdentifier, WSSearchFieldItemIdentifier,
+					 NSToolbarSeparatorItemIdentifier, NSToolbarSpaceItemIdentifier,
+					 NSToolbarFlexibleSpaceItemIdentifier, nil];
 }
 
 - (BOOL)validateToolbarItem:(NSToolbarItem *)item
@@ -1610,6 +1647,28 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	return _progressWindow;
 }
 
+- (void)searchFieldChanged:(id)sender
+{
+	(void)sender;
+	/* **THE FILTER IS THE MODEL'S AND THE WINDOW ONLY HANDS IT OVER.** `-setNameFilter:` changes what `-items` answers,
+	 * and every view keeps the rows it was given — so the model goes back to whichever view is showing, through the same
+	 * `-setModel:` navigation uses. The status bar and the path bar read the model already, so their counts follow
+	 * without being told. */
+	[_model setNameFilter:[_searchField stringValue]];
+	if (_viewMode == 0) {
+		[_iconView setModel:_model];
+		[self refreshIconFrame];
+	} else if (_viewMode == 1 && _listView != nil) {
+		[_listView setModel:_model];
+		[_listView reloadData];
+		[_listView tile];
+	} else if (_viewMode == 2 && _columnView != nil) {
+		[_columnView setModel:_model];
+	}
+	[self refresh];
+}
+
+- (NSSearchField *)cg_searchField { return _searchField; }
 - (NSSegmentedControl *)cg_viewSwitcher { return _viewSwitcher; }
 - (NSSplitView *)cg_splitView { return _split; }
 

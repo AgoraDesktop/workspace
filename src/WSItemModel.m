@@ -182,7 +182,39 @@ static NSComparisonResult fn_natural_compare(NSString *left, NSString *right)
 }
 
 - (NSString *)directory { return _directory; }
-- (NSArray *)items { return _items; }
+
+- (NSArray *)items
+{
+	NSMutableArray *matching;
+	NSUInteger i;
+
+	if (_nameFilter == nil || [_nameFilter length] == 0) {
+		return _items;
+	}
+	matching = [NSMutableArray array];
+	for (i = 0; i < [_items count]; i++) {
+		WSItem *item = [_items objectAtIndex:i];
+
+		if ([[item name] rangeOfString:_nameFilter options:NSCaseInsensitiveSearch].location != NSNotFound) {
+			[matching addObject:item];
+		}
+	}
+	return matching;
+}
+
+- (void)setNameFilter:(NSString *)filter
+{
+	NSString *copy = (filter != nil && [filter length] > 0) ? [filter copy] : nil;
+
+	if (copy == _nameFilter) {
+		[copy release];
+		return;
+	}
+	[_nameFilter release];
+	_nameFilter = copy;
+}
+
+- (NSString *)nameFilter { return _nameFilter; }
 
 - (BOOL)reload
 {
@@ -218,6 +250,7 @@ static NSComparisonResult fn_natural_compare(NSString *left, NSString *right)
 
 - (void)dealloc
 {
+	[_nameFilter release];
 	[_directory release];
 	[_items release];
 	[super dealloc];

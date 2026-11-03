@@ -30,6 +30,7 @@
 @class NSMenuItem;
 @class NSPathControl;
 @class NSScrollView;
+@class NSSearchField;
 @class NSSegmentedControl;
 @class NSTextField;
 @class WSColumnView;
@@ -77,6 +78,9 @@
 	WSHairlineView *_statusRule;		/* RETAINED by the content view */
 	NSToolbar *_toolbar;			/* RETAINED by the window */
 	NSSegmentedControl *_viewSwitcher;	/* RETAINED by its toolbar item */
+	/* **AND THE SEARCH FIELD BESIDE IT, RETAINED BY ITS OWN TOOLBAR ITEM.** It holds the query while the window lives;
+	 * the FILTER is the model's (`-setNameFilter:`), because the content view and both bars read the model. */
+	NSSearchField *_searchField;
 
 	BOOL _syncingSidebar;
 }
@@ -135,6 +139,8 @@
 - (nullable WSListView *)cg_listView;
 - (nullable WSColumnView *)cg_columnView;
 - (nullable NSSegmentedControl *)cg_viewSwitcher;
+/* The window's search field, for a test that types into it. Nil before the toolbar is built. */
+- (nullable NSSearchField *)cg_searchField;
 
 /* **WHETHER THIS WINDOW IS SHOWING THE TRASH**, which is what puts "Put Back" in its context menus and keeps "Move to
  * Trash" out of them: an item in the bin has a way back, not a way further in. The context menu asks this of whatever

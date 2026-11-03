@@ -69,10 +69,20 @@
 {
 	NSString *_directory;
 	NSArray *_items;
+	/* **AND THE SEARCH FIELD'S QUERY, WHICH IS THE MODEL'S BECAUSE `-items` IS WHAT EVERY VIEW DRAWS FROM.** A window's
+	 * content view, its status bar's count and its path bar all read this model, so a filter held in the field (or in
+	 * the controller) would be a second answer to "what is in this folder". Empty or nil means no filter. */
+	NSString *_nameFilter;
 }
 - (instancetype)initWithDirectory:(NSString *)directory;
 - (NSString *)directory;
+/* **THE ITEMS THIS FOLDER HOLDS — ALL OF THEM, OR THE ONES THAT MATCH `-nameFilter:`.** The filter is a
+ * case-insensitive CONTAINS on the name: a search field asks a question, and a prefix match would fail `report.pdf` for
+ * `port`. A view that cached its rows keeps them, so a caller that changes the filter hands the model back to the view
+ * (`-setModel:`), which is the same door navigation uses. */
 - (NSArray *)items;			/* NSArray<WSItem *> */
+- (void)setNameFilter:(nullable NSString *)filter;
+- (nullable NSString *)nameFilter;
 - (BOOL)reload;
 @end
 
