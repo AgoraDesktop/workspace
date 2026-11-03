@@ -542,6 +542,33 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	[[NSColor whiteColor] setFill];
 	[[NSBezierPath bezierPathWithRect:[self bounds]] fill];
 
+	/* **A DRAW THAT WILL DECODE A PILE OF PICTURES SAYS "WORKING" FIRST.** The pointer is the compositor's, and the
+	 * request crosses with a flush, so the shape is on the glass before the decodes start rather than after them. A
+	 * threshold of two is what "a pile" means: one or two are a frame's work, and a pointer that flickers is worse than a
+	 * wait that is not announced. */
+	{
+		NSInteger pending = 0;
+		NSWindow *window = [self window];
+
+		for (i = 0; i < count; i++) {
+			if (!NSIsEmptyRect(dirtyRect) && !NSIntersectsRect(dirtyRect, [self highlightRectAtIndex:i])) {
+				continue;
+			}
+			/* **ONLY A PICTURE IS A DECODE.** A document's icon is a lookup Icon Services answers from the type; that is
+			 * fast enough to be part of the frame, and a wait announced for it would flicker over every folder in the
+			 * file manager. */
+			if (i < (NSInteger)[_icons count] && [_icons objectAtIndex:(NSUInteger)i] == [NSNull null]
+			    && [WSItemIcons isImageFile:[[items objectAtIndex:(NSUInteger)i] path]]) {
+				pending++;
+			}
+		}
+		if (pending > 2 && window != nil) {
+			[window cg_applyCursor:[NSCursor busyButClickableCursor]];
+			_busyCursorUses++;
+			_busyCursorRestore = YES;
+		}
+	}
+
 	for (i = 0; i < count; i++) {
 		WSItem *item = [items objectAtIndex:(NSUInteger)i];
 		NSRect cellRect = [self cellRectAtIndex:i];
@@ -584,6 +611,11 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	 * wash under them would leave them looking untaken until the button came up. */
 	if (_banding) {
 		WSSelectionBandDraw(_bandRect);
+	}
+	if (_busyCursorRestore) {
+		/* THE POINTER A PERSON'S POSITION ASKS FOR, ONCE THE PICTURES ARE DONE. */
+		_busyCursorRestore = NO;
+		[[self window] cg_refreshCursorAtRestingPointer];
 	}
 
 	if (_dropOperation != NSDragOperationNone) {
@@ -1310,6 +1342,11 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	[_springTimer release];
 	_springTimer = nil;
 	[self cg_springOpen];
+}
+
+- (NSInteger)cg_busyCursorUses
+{
+	return _busyCursorUses;
 }
 
 - (void)cg_springOpen

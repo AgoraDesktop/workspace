@@ -77,6 +77,29 @@ static BOOL makeDirectory(NSString *path)
 								  attributes:nil error:NULL];
 }
 
+/* **A PICTURE OF A KNOWN SIZE**, which is all this probe needs: the icon path decodes it, and a decode is what the
+ * wait is for. */
+static BOOL writePNG(NSString *path, int width, int height)
+{
+	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+	NSData *png;
+	BOOL ok;
+	int x, y;
+
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			[rep setColor:[NSColor colorWithCalibratedRed:(CGFloat)x / width green:(CGFloat)y / height
+								blue:0.5 alpha:1.0] atX:x y:y];
+		}
+	}
+	png = [rep representationUsingType:NSPNGFileType properties:nil];
+	ok = (png != nil) && [png writeToFile:path atomically:YES];
+	[rep release];
+	return ok;
+}
+
 static BOOL makeFile(NSString *path)
 {
 	return [[NSFileManager defaultManager] createFileAtPath:path contents:[NSData data] attributes:nil];
@@ -381,6 +404,58 @@ int main(void)
 		      "a long name is cut in the middle with an ellipsis");
 		check([longName sizeWithAttributes:attributes].width <= 76.01,
 		      "and the cut label fits the cell it is drawn in");
+	}
+
+	/* **A DRAW THAT IS ABOUT TO DECODE A PILE OF PICTURES SAYS "WORKING" FIRST.** A folder of photographs costs a decode
+	 * per cell the first time it is shown — seconds of it — and a pointer that stays an arrow through that reads as a
+	 * hung window. The shape is the compositor's, so what is measured here is the REQUEST: the view's count of draws
+	 * that put the busy pointer up. A grid of documents must not ask for one, because nothing is being decoded. */
+	{
+		NSString *pictures = [root stringByAppendingPathComponent:@"Pictures"];
+		NSString *papers = [root stringByAppendingPathComponent:@"Papers"];
+		WSItemModel *pictureModel;
+		WSItemModel *paperModel;
+		WSIconView *pictureView;
+		WSIconView *paperView;
+		NSWindow *pictureWindow;
+		NSWindow *paperWindow;
+		int k;
+
+		[[NSFileManager defaultManager] createDirectoryAtPath:pictures withIntermediateDirectories:YES
+								   attributes:nil error:NULL];
+		[[NSFileManager defaultManager] createDirectoryAtPath:papers withIntermediateDirectories:YES
+								   attributes:nil error:NULL];
+		for (k = 0; k < 6; k++) {
+			writePNG([pictures stringByAppendingPathComponent:
+				[NSString stringWithFormat:@"p%d.png", k]], 24, 16);
+			makeFile([papers stringByAppendingPathComponent:
+				[NSString stringWithFormat:@"d%d.txt", k]]);
+		}
+		pictureModel = [[WSItemModel alloc] initWithDirectory:pictures];
+		paperModel = [[WSItemModel alloc] initWithDirectory:papers];
+		pictureView = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 480.0, 320.0) model:pictureModel];
+		paperView = [[WSIconView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 480.0, 320.0) model:paperModel];
+		pictureWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 480.0, 320.0)
+			styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+		paperWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 480.0, 320.0)
+			styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+		[pictureWindow setContentView:pictureView];
+		[paperWindow setContentView:paperView];
+
+		[pictureView displayRect:[pictureView bounds]];
+		[paperView displayRect:[paperView bounds]];
+		printf("  (note: a grid of six pictures asked for the wait %ld time(s); six documents %ld time(s)\n",
+		       (long)[pictureView cg_busyCursorUses], (long)[paperView cg_busyCursorUses]);
+		check([pictureView cg_busyCursorUses] == 1,
+		      "a grid that decodes six pictures puts the busy pointer up for the draw");
+		check([paperView cg_busyCursorUses] == 0,
+		      "a grid of documents does not, because it decodes nothing");
+		[pictureView release];
+		[paperView release];
+		[pictureWindow release];
+		[paperWindow release];
+		[pictureModel release];
+		[paperModel release];
 	}
 
 	/* 1. THE GRID IS THE DESKTOP'S ENGINE IN THE FILE WINDOW'S ORDER. */

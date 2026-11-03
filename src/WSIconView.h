@@ -67,6 +67,11 @@ extern NSString *WSIconViewFolderPathKey;
 	id <WSIconViewDelegate> _delegate;	/* NOT RETAINED */
 	NSMutableArray *_positions;		/* RETAINED: NSValue NSPoint, top-left */
 	NSMutableArray *_icons;			/* RETAINED: NSImage or NSNull */
+	/* **HOW MANY DRAWS HAVE SAID "WORKING".** A grid of photographs decodes a picture per cell the first time it is
+	 * shown, which is seconds on a folder of them, and the pointer says so while it happens. The count is a probe's
+	 * door: the alternative is a test that cannot see the one thing the change is about. */
+	NSInteger _busyCursorUses;
+	BOOL _busyCursorRestore;		/* the pointer is showing the wait and is to be put back when the draw ends */
 	NSMutableIndexSet *_selection;		/* RETAINED */
 	NSInteger _anchorIndex;			/* where a Shift-selection started */
 	NSInteger _iconSize;
@@ -172,6 +177,9 @@ extern NSString *WSIconViewFolderPathKey;
 		    operation:(NSDragOperation)operation;
 - (nullable NSDraggingSession *)cg_beginDragWithEvent:(NSEvent *)event;
 - (void)cg_springOpen;
+/* **HOW MANY DRAWS SAID "WORKING"**, which is what a probe can see of the pointer: the shape itself belongs to the
+ * compositor, so the door is the request. */
+- (NSInteger)cg_busyCursorUses;
 
 @end
 
