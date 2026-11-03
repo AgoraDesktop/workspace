@@ -83,6 +83,12 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
  * view switch says HOW the folder is drawn and the field says WHICH of it, so the two read left to right as one
  * sentence — and the field is last because it grows. */
 static NSString * const WSSearchFieldItemIdentifier = @"WorkspaceSearchField";
+/* **AND A WIDER BREAK AFTER THE ARROWS THAN THE TOOLBAR'S OWN SPACE ITEM GIVES.** `NSToolbarSpaceItemIdentifier` is
+ * eight points — the width every toolbar's spacer has, and not a number this window may change for everybody — so the
+ * break between the navigation pair and the view switch is a BLANK VIEW of its own, five spacers wide. It carries no
+ * label and no action: it is width. */
+static NSString * const WSSwitcherSpacerItemIdentifier = @"WorkspaceSwitcherSpacer";
+#define WS_SWITCHER_SPACER_WIDTH 40.0
 /* **THE ONE PREFERENCE A TOOLBAR HAS: WHETHER ITS ITEMS SAY THEIR WORDS.** A file window's band is a Back, a Forward
  * and a mode switch, so the words are useful the first time and clutter every time after — which is why the View menu
  * offers to put them away and the answer is remembered. The key lives here rather than in a preferences class because
@@ -1060,6 +1066,16 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		[item setMaxSize:NSMakeSize(320.0, 24.0)];
 		return item;
 	}
+	if ([identifier isEqualToString:WSSwitcherSpacerItemIdentifier]) {
+		NSView *blank = [[[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WS_SWITCHER_SPACER_WIDTH, 24.0)]
+			autorelease];
+
+		item = [[[NSToolbarItem alloc] initWithItemIdentifier:identifier] autorelease];
+		[item setView:blank];
+		[item setMinSize:NSMakeSize(WS_SWITCHER_SPACER_WIDTH, 24.0)];
+		[item setMaxSize:NSMakeSize(WS_SWITCHER_SPACER_WIDTH, 24.0)];
+		return item;
+	}
 	return nil;	/* the spacers are the toolbar's own */
 }
 
@@ -1068,11 +1084,11 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	(void)toolbar;
 	/* **THE SWITCHER BELONGS WITH THE NAVIGATION, AND THE SEARCH FIELD TAKES THE FAR END.** Back and Forward are one
 	 * pair of arrows and the three-way switch is a different kind of choice, so a FIXED SPACE stands between them: it
-	 * is the width the toolbar gives a spacer rather than a gap somebody tuned, and it keeps the arrows reading as
-	 * arrows. The flexible space then pushes the field to the right, which is where a Mac's file window keeps it and the
+	 * is a blank view `WS_SWITCHER_SPACER_WIDTH` points wide (the toolbar's own spacer is eight, and this one is five
+	 * of them), and it keeps the arrows reading as arrows. The flexible space then pushes the field to the right, which is where a Mac's file window keeps it and the
 	 * only place it has room to be typed in. */
 	return [NSArray arrayWithObjects:WSBackItemIdentifier, WSForwardItemIdentifier,
-					 NSToolbarSpaceItemIdentifier, WSViewSwitcherItemIdentifier,
+					 WSSwitcherSpacerItemIdentifier, WSViewSwitcherItemIdentifier,
 					 NSToolbarFlexibleSpaceItemIdentifier, WSSearchFieldItemIdentifier, nil];
 }
 
@@ -1081,7 +1097,8 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	(void)toolbar;
 	return [NSArray arrayWithObjects:WSBackItemIdentifier, WSForwardItemIdentifier,
 					 WSViewSwitcherItemIdentifier, WSSearchFieldItemIdentifier,
-					 NSToolbarSeparatorItemIdentifier, NSToolbarSpaceItemIdentifier,
+					 WSSwitcherSpacerItemIdentifier, NSToolbarSeparatorItemIdentifier,
+					 NSToolbarSpaceItemIdentifier,
 					 NSToolbarFlexibleSpaceItemIdentifier, nil];
 }
 
