@@ -539,6 +539,46 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 
 - (WSDirectoryWatcher *)cg_watcher { return _watcher; }
 
+/* **WHAT THE BREADCRUMB AND THE TITLE SAY THE WINDOW IS SHOWING.** In Icon and List mode that is the folder the window
+ * holds. **IN COLUMN MODE IT IS THE FOLDER THE RIGHTMOST COLUMN LISTS**: a browser shows a chain of folders at once, and
+ * the one a person has walked into is the one on the right — the path bar reading the leftmost column meant the crumbs
+ * stopped at the window's own folder however deep the columns went, which is the one thing a breadcrumb is for. The
+ * window's own folder is still `_directory`: the model, the watchers, Back and Forward and every command are about it, and
+ * this changes what is SAID rather than where the window is. */
+- (NSString *)fn_displayDirectory
+{
+	NSArray *open;
+
+	if (_viewMode != 2 || _columnView == nil) {
+		return _directory;
+	}
+	open = [_columnView cg_visibleDirectories];
+	if (open == nil || [open count] == 0) {
+		return _directory;
+	}
+	return [open lastObject];
+}
+
+/* THE STRIP AND THE TITLE, WHICH ARE ONE ANSWER IN TWO PLACES: the places that change what the columns show call this
+ * instead of re-reading the whole folder. */
+- (void)fn_updatePathBarAndTitle
+{
+	NSString *shown = [self fn_displayDirectory];
+	NSString *title = (shown != nil) ? [shown lastPathComponent] : nil;
+
+	if (_isTrashDirectory) {
+		[[self window] setTitle:@"Trash"];
+		return;
+	}
+	if (!_isTrashDirectory) {
+		[_pathBar setURL:[NSURL fileURLWithPath:shown]];
+	}
+	if (title == nil || [title length] == 0) {
+		title = shown;
+	}
+	[[self window] setTitle:title];
+}
+
 - (void)refresh
 {
 	NSInteger count;
@@ -550,7 +590,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	 * at all. The model is re-read here, which is what every caller of this method actually means. */
 	[_model reload];
 	count = [self itemCount];
-	title = [_directory lastPathComponent];
+	title = [[self fn_displayDirectory] lastPathComponent];
 
 	/* **AND A READ-AGAIN FOLDER IS NOT A DIFFERENT FOLDER.** `-setModel:` starts the grid over (no selection), so it is
 	 * only for a navigation; a refresh lays the same model out again and keeps what a person had chosen. */
@@ -586,12 +626,12 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	/* **THE TRASH SHOWS NO PATH, BECAUSE ITS WINDOW HAS NO BAR.** The strip is not built for one (see
 	 * `installStripConstraints`), so there is nothing here to empty. */
 	if (!_isTrashDirectory) {
-		[_pathBar setURL:[NSURL fileURLWithPath:_directory]];
+		[_pathBar setURL:[NSURL fileURLWithPath:[self fn_displayDirectory]]];
 	}
 	[_status setStringValue:[NSString stringWithFormat:@"%ld %@", (long)count,
 				  (count == 1) ? @"item" : @"items"]];
 	if (title == nil || [title length] == 0) {
-		title = _directory;
+		title = [self fn_displayDirectory];
 	}
 	if (_isTrashDirectory) {
 		title = @"Trash";
@@ -852,6 +892,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	(void)view;
 	[_watcher setPaths:[self fn_watchedPaths]];
+	/* **AND THE CRUMBS FOLLOW THE COLUMNS.** Walking into a folder in a browser changes what the window is showing without
+	 * changing the folder it holds, so the strip is updated here rather than by a refresh — the model has not changed. */
+	[self fn_updatePathBarAndTitle];
 }
 
 - (void)columnViewDidChangeModel:(WSColumnView *)view

@@ -473,7 +473,36 @@ int main(void)
 		[first cg_useColumnView:nil];
 		columns = [first cg_columnView];
 		browser = [columns cg_browser];
-		[browser selectRow:0 inColumn:0];
+
+		/* **THE CRUMBS FOLLOW THE RIGHTMOST COLUMN.** A browser shows a chain of folders at once, and the one a person has
+		 * walked into is the one on the right: the window holds the folder it opened on, but what it SAYS it is showing has
+		 * to be the deepest column's. MEASURED before this: the path bar read the leftmost column however deep the columns
+		 * went, which is the one thing a breadcrumb is for. A click is a selection AND the action the browser sends after
+		 * it (`-doClick:`, which is what `NSBrowser`'s own button path does), and the announcement that follows is one
+		 * run-loop turn later, because the browser grows the column after its delegate answers. */
+		[first navigateToDirectory:root];	/* the crumbs start where the window is */
+		{
+			NSRunLoop *loop = [NSRunLoop currentRunLoop];
+
+			[browser selectRow:0 inColumn:0];
+			[browser doClick:nil];
+			[loop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+			check([[[first cg_pathControl] URL] path] != nil
+			      && [[[[first cg_pathControl] URL] path] isEqual:folderA],
+			      "selecting a folder in a column makes the crumbs show THAT folder");
+			check([[[first window] title] isEqual:[folderA lastPathComponent]],
+			      "and the title follows with it");
+			check([[first directory] isEqual:root],
+			      "while the window itself still holds the folder it opened on");
+			[browser selectRow:-1 inColumn:0];
+			[browser doClick:nil];
+			[loop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+			check([[[[first cg_pathControl] URL] path] isEqual:root],
+			      "and deselecting it puts the crumbs back where the window is");
+			[browser selectRow:0 inColumn:0];
+			[browser doClick:nil];
+			[loop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+		}
 		check([browser numberOfRowsInColumn:1] == 0, "the folder selected in column zero is empty, so column one is too");
 		{
 			NSRect strip = [browser titleFrameOfColumn:1];
