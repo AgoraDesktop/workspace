@@ -1066,8 +1066,12 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 - (NSArray *)toolbarDefaultItemIdentifiers:(NSToolbar *)toolbar
 {
 	(void)toolbar;
+	/* **THE SWITCHER BELONGS WITH THE NAVIGATION, AND THE SEARCH FIELD TAKES THE FAR END.** Back, Forward and the
+	 * three-way switch are the same kind of thing — where and how this window looks at a folder — so they read as one
+	 * group on the left; the flexible space then pushes the field to the right, which is where a Mac's file window keeps
+	 * it and the only place it has room to be typed in. */
 	return [NSArray arrayWithObjects:WSBackItemIdentifier, WSForwardItemIdentifier,
-					 NSToolbarFlexibleSpaceItemIdentifier, WSViewSwitcherItemIdentifier,
+					 WSViewSwitcherItemIdentifier, NSToolbarFlexibleSpaceItemIdentifier,
 					 WSSearchFieldItemIdentifier, nil];
 }
 
