@@ -7,6 +7,8 @@
  */
 #import "WSListView.h"
 
+#import <AppKit/NSCursor.h>
+
 #import "WSContextMenu.h"
 #import "WSFileOperations.h"
 #import "WSItemIcons.h"
@@ -403,6 +405,43 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		return [self kindForItem:entry];
 	}
 	return nil;
+}
+
+- (NSInteger)cg_busyCursorUses
+{
+	return _busyCursorUses;
+}
+
+/* **A DRAW THAT WILL DECODE A PILE OF PICTURES SAYS "WORKING" FIRST.** A list of a folder of photographs asks for an icon
+ * per visible row and each one is a decode the first time; the pointer is the compositor's, and the request crosses with a
+ * flush, so the shape is on the glass before the work rather than after it. The threshold is the same two the grid uses:
+ * one or two are a frame's work, and a pointer that flickers is worse than a wait that is not announced. Only a picture
+ * counts — a document's icon is a lookup Icon Services answers from the type, part of the frame. */
+- (void)drawRect:(NSRect)dirtyRect
+{
+	NSRange visible = [self rowsInRect:dirtyRect];
+	NSWindow *window = [self window];
+	NSInteger pending = 0;
+	NSUInteger row;
+
+	for (row = visible.location; row < NSMaxRange(visible) && visible.length > 0; row++) {
+		WSItem *entry = (id)[self itemAtRow:(NSInteger)row];
+
+		if (entry != nil && ![WSItemIcons cg_hasThumbnailForPath:[entry path] size:16]) {
+			pending++;
+		}
+	}
+	if (pending > 2 && window != nil) {
+		[window cg_applyCursor:[NSCursor busyButClickableCursor]];
+		_busyCursorUses++;
+		_busyCursorRestore = YES;
+	}
+	[super drawRect:dirtyRect];
+	if (_busyCursorRestore) {
+		/* THE POINTER A PERSON'S POSITION ASKS FOR, ONCE THE PICTURES ARE DECODED. */
+		_busyCursorRestore = NO;
+		[[self window] cg_refreshCursorAtRestingPointer];
+	}
 }
 
 /* **THE ROW'S ICON IS THE CELL'S IMAGE, and it is set per row because the table reuses one cell for the

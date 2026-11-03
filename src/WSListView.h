@@ -55,12 +55,17 @@
 	BOOL _sortAscending;
 	BOOL _restoringExpansion;
 	WSFileOperations *_fileOperations;	/* RETAINED: the rename manager */
+	/* **HOW MANY DRAWS HAVE SAID "WORKING"**, the same probe door the icon grid has: the shape belongs to the compositor,
+	 * so the request is what a view can be measured by. */
+	NSInteger _busyCursorUses;
+	BOOL _busyCursorRestore;
 }
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
 - (void)setModel:(WSItemModel *)model;
 - (nullable WSItemModel *)model;
 
+- (NSInteger)cg_busyCursorUses;
 - (nullable id <WSListViewDelegate>)listDelegate;
 - (void)setListDelegate:(nullable id <WSListViewDelegate>)delegate;
 - (void)setFileOperations:(nullable WSFileOperations *)operations;

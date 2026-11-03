@@ -154,6 +154,23 @@ static NSImage *fn_working_image(NSString *path, NSInteger working)
 	       || [extension isEqualToString:@"jpeg"];
 }
 
++ (BOOL)cg_hasThumbnailForPath:(NSString *)path size:(NSInteger)size
+{
+	NSString *key;
+	NSInteger workingSize;
+
+	if (path == nil || size <= 0 || ![self isImageFile:path]) {
+		return YES;	/* nothing to decode: a document's icon is a lookup, not a wait */
+	}
+	key = [NSString stringWithFormat:@"%@|%ld", path, (long)size];
+	if (sThumbnails != nil && [sThumbnails objectForKey:key] != nil) {
+		return YES;
+	}
+	workingSize = (size > WS_THUMBNAIL_WORKING) ? size : WS_THUMBNAIL_WORKING;
+	key = [NSString stringWithFormat:@"%@|%ld", path, (long)workingSize];
+	return (sWorking != nil && [sWorking objectForKey:key] != nil);
+}
+
 + (NSInteger)cg_thumbnailDecodeCount
 {
 	return sDecodes;

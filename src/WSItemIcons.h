@@ -33,6 +33,11 @@
 /* Whether the path's extension is a type the tier decodes: PNG or JPEG, which is what `NSBitmapImageRep` reads. */
 + (BOOL)isImageFile:(nullable NSString *)path;
 
+/* **WHETHER A THUMBNAIL IS ALREADY IN HAND**, which is the question a view asks before a draw that would otherwise be a
+ * pile of decodes: "will this cost the person a wait?". True when either the finished thumbnail or the picture behind it
+ * has been made. */
++ (BOOL)cg_hasThumbnailForPath:(nullable NSString *)path size:(NSInteger)size;
+
 /* **HOW MANY PICTURES HAVE BEEN DECODED**, which is the number that decides whether browsing is usable: a thumbnail is
  * one decode and must not be one per draw, nor one per size. A probe counts it; nothing in the application asks. */
 + (NSInteger)cg_thumbnailDecodeCount;

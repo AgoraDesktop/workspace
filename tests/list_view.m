@@ -52,6 +52,28 @@ static BOOL makeDirectory(NSString *path)
 								  attributes:nil error:NULL];
 }
 
+/* **A PICTURE OF A KNOWN SIZE**: a decode is what the wait is for, and a PNG of twenty-four by sixteen pixels is one. */
+static BOOL writePNG(NSString *path, int width, int height)
+{
+	NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+	NSData *png;
+	BOOL ok;
+	int x, y;
+
+	for (y = 0; y < height; y++) {
+		for (x = 0; x < width; x++) {
+			[rep setColor:[NSColor colorWithCalibratedRed:(CGFloat)x / width green:(CGFloat)y / height
+								blue:0.5 alpha:1.0] atX:x y:y];
+		}
+	}
+	png = [rep representationUsingType:NSPNGFileType properties:nil];
+	ok = (png != nil) && [png writeToFile:path atomically:YES];
+	[rep release];
+	return ok;
+}
+
 static BOOL makeFile(NSString *path, NSUInteger bytes)
 {
 	NSMutableData *data = [NSMutableData dataWithLength:bytes];
@@ -264,6 +286,72 @@ int main(void)
 	[scroll setDocumentView:list];
 	[window setContentView:scroll];
 	[list reloadData];
+
+	/* **A LIST THAT IS ABOUT TO DECODE A PILE OF PICTURES SAYS "WORKING" FIRST.** A folder of photographs asks for an
+	 * icon per visible row, and the first draw of each row is a decode: MEASURED at 9 ms a picture, which for a window of
+	 * rows is a wait a person can see. The shape belongs to the compositor, so what is measured here is the REQUEST. A
+	 * list of documents asks for none, because their icons are lookups rather than decodes. */
+	{
+		/* **A TREE OF ITS OWN**, so the list this probe has been measuring keeps the rows it had. */
+		NSString *waitRoot = [@"/tmp" stringByAppendingPathComponent:
+			[NSString stringWithFormat:@"agora-list-wait-%d", (int)getpid()]];
+		NSString *pictures = [waitRoot stringByAppendingPathComponent:@"Pictures"];
+		NSString *papers = [waitRoot stringByAppendingPathComponent:@"Papers"];
+		WSItemModel *pictureModel;
+		WSItemModel *paperModel;
+		WSListView *pictureList;
+		WSListView *paperList;
+		NSScrollView *pictureScroll;
+		NSScrollView *paperScroll;
+		NSWindow *pictureWindow;
+		int k;
+
+		[[NSFileManager defaultManager] createDirectoryAtPath:waitRoot withIntermediateDirectories:YES
+								   attributes:nil error:NULL];
+		[[NSFileManager defaultManager] createDirectoryAtPath:pictures withIntermediateDirectories:YES
+								   attributes:nil error:NULL];
+		[[NSFileManager defaultManager] createDirectoryAtPath:papers withIntermediateDirectories:YES
+								   attributes:nil error:NULL];
+		for (k = 0; k < 6; k++) {
+			writePNG([pictures stringByAppendingPathComponent:
+				[NSString stringWithFormat:@"p%d.png", k]], 24, 16);
+			makeFile([papers stringByAppendingPathComponent:
+				[NSString stringWithFormat:@"d%d.txt", k]], 4);
+		}
+		pictureModel = [[WSItemModel alloc] initWithDirectory:pictures];
+		paperModel = [[WSItemModel alloc] initWithDirectory:papers];
+		pictureList = [[WSListView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 200.0) model:pictureModel];
+		paperList = [[WSListView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 200.0) model:paperModel];
+		pictureScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 200.0)];
+		paperScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 400.0, 200.0)];
+		[pictureScroll setDocumentView:pictureList];
+		[paperScroll setDocumentView:paperList];
+		pictureWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 200.0)
+			styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+		[pictureWindow setContentView:pictureScroll];
+		{
+			NSWindow *paperWindow = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 400.0, 200.0)
+				styleMask:NSBorderlessWindowMask backing:NSBackingStoreBuffered defer:YES];
+
+			[paperWindow setContentView:paperScroll];
+			[pictureList displayRect:[pictureList bounds]];
+			[paperList displayRect:[paperList bounds]];
+			printf("  (note: a list of six pictures asked for the wait %ld time(s); six documents %ld time(s)\n",
+			       (long)[pictureList cg_busyCursorUses], (long)[paperList cg_busyCursorUses]);
+			check([pictureList cg_busyCursorUses] == 1,
+			      "a list that decodes six pictures puts the busy pointer up for the draw");
+			check([paperList cg_busyCursorUses] == 0,
+			      "a list of documents does not, because it decodes nothing");
+			[paperWindow release];
+		}
+		[pictureWindow release];
+		[pictureScroll release];
+		[paperScroll release];
+		[pictureList release];
+		[paperList release];
+		[pictureModel release];
+		[paperModel release];
+	}
 
 	/* 1. NAME ORDER: DIRECTORIES FIRST, THEN NATURAL NUMBERS. */
 	check([list numberOfRows] == 9, "the outline shows the four folders and five files");
