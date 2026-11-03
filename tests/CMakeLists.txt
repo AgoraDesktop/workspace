@@ -124,6 +124,17 @@ add_test(NAME workspace-metadata-store COMMAND metadata_store)
 set_tests_properties(workspace-metadata-store PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
 
+# **AN IMAGE FILE IS ITS OWN PICTURE.** The thumbnail is made in-process — a PNG is written, the icon asked for, and
+# the pixels read back — so no composer and no screen are needed: what is measured is the picture that came out, its
+# orientation, the margins the aspect fit leaves, and the Icon Services fallback for everything that is not one.
+add_executable(item_icons item_icons.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m")
+target_include_directories(item_icons PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(item_icons PRIVATE AgoraApp::App AgoraIconServices::IconServices m)
+add_test(NAME workspace-item-icons COMMAND item_icons)
+set_tests_properties(workspace-item-icons PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
 # **THE MENU BAR'S CONTENTS, WHICH NEED THE APPKIT BUT NOT A COMPOSITOR.** `-setMainMenu:` builds the bar's
 # WINDOW from the region the compositor sends, so with no compositor there is no window to look at — but the MENU
 # is built first and entirely, and every decision this component made is in it: which menus there are, what the

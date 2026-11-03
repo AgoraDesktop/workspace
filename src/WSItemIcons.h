@@ -23,6 +23,16 @@
 /* Nil when Icon Services has nothing for the path; a caller draws what it has rather than a placeholder. */
 + (NSImage *)iconForPath:(NSString *)path isDirectory:(BOOL)isDirectory size:(NSInteger)size;
 
+/* **AN IMAGE FILE'S OWN PICTURE, FITTED INTO A SQUARE.** A file whose extension is one this tier decodes gets a
+ * thumbnail instead of the generic document icon: the picture, scaled to fit a `size`-point box with its aspect ratio
+ * kept and the leftover box left transparent, which is what every icon surface can draw into its square without
+ * knowing anything about pictures. Nil when the file is not an image this tier can read — the caller then falls back
+ * to Icon Services. */
++ (nullable NSImage *)thumbnailForPath:(NSString *)path size:(NSInteger)size;
+
+/* Whether the path's extension is a type the tier decodes: PNG or JPEG, which is what `NSBitmapImageRep` reads. */
++ (BOOL)isImageFile:(nullable NSString *)path;
+
 @end
 
 #endif /* WORKSPACE_WSITEMICONS_H */
