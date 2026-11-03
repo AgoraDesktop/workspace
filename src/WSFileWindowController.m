@@ -83,6 +83,12 @@ static NSString * const WSViewSwitcherItemIdentifier = @"WorkspaceViewSwitcher";
  * offers to put them away and the answer is remembered. The key lives here rather than in a preferences class because
  * the toolbar is what reads it. */
 static NSString * const WSToolbarLabelsKey = @"WSShowToolbarLabels";
+/* **WHICH VIEW A FILE WINDOW OPENS IN, WHICH IS A PREFERENCE RATHER THAN A PER-WINDOW CHOICE.** A person browses their
+ * folders in one of the three ways almost always, and choosing it again in every new window is the tax that preference
+ * exists to remove. The View menu and the toolbar switch still change the WINDOW they are in — that is the per-window
+ * half, and it is not written here: opening a window with List because the last one was switched to List would make the
+ * default meaningless. */
+static NSString * const WSDefaultViewModeKey = @"WSDefaultViewMode";
 
 /* ============================================================================================ *
  * THE SIDEBAR'S CELL — a text field cell that draws the place's picture beside its title.      *
@@ -206,6 +212,11 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 
 	[self buildToolbar];
 	[self refresh];
+	/* **AND THEN THE PREFERENCE, THROUGH THE SAME DOOR THE SWITCHER USES.** Setting the field above only says which view
+	 * is wanted; building it is `-setViewMode:`'s job, and a window whose field said Column while its content was still
+	 * the icon grid would be a preference that changed a word and nothing else: MEASURED, exactly that. A caller that wants
+	 * another mode for this one window (`--list-view`, a test) sets it after this and wins. */
+	[self setViewMode:[WSFileWindowController cg_defaultViewMode]];
 	return self;
 }
 
@@ -1445,6 +1456,31 @@ static void fn_resetContentScroll(NSScrollView *scroll)
  * `NSToolbar`'s own vocabulary — `IconAndLabel` against `IconOnly` — so nothing here invents a second notion of a
  * toolbar's face.
  * ============================================================================================ */
+
+/* **THE DEFAULT VIEW MODE: 0 Icon, 1 List, 2 Column**, and anything else in the defaults reads as Icon rather than as a
+ * window with no view at all. */
++ (NSInteger)cg_defaultViewMode
+{
+	NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+	NSInteger mode;
+
+	if (defaults == nil || [defaults objectForKey:WSDefaultViewModeKey] == nil) {
+		return 0;
+	}
+	mode = [defaults integerForKey:WSDefaultViewModeKey];
+	if (mode < 0 || mode > 2) {
+		return 0;
+	}
+	return mode;
+}
+
++ (void)cg_setDefaultViewMode:(NSInteger)mode
+{
+	if (mode < 0 || mode > 2) {
+		return;
+	}
+	[[NSUserDefaults standardUserDefaults] setInteger:mode forKey:WSDefaultViewModeKey];
+}
 
 + (BOOL)cg_toolbarLabelsVisible
 {

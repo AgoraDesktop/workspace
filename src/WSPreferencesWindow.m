@@ -38,8 +38,11 @@ static const NSInteger WSPreferencesMaximumIconSize = 128;
 - (instancetype)initWithTarget:(id <WSPreferencesWindowTarget>)target
 		      iconSize:(NSInteger)iconSize
 		     directory:(NSString *)directory
+		      viewMode:(NSInteger)viewMode
 {
-	NSRect frame = NSMakeRect(0.0, 0.0, 420.0, 190.0);
+	/* **TALLER BY THE ROW THE VIEW SWITCH NEEDS**, and nothing else moved: the icon-size slider keeps its y, the folder
+	 * and the note keep theirs, and the new row sits above them. */
+	NSRect frame = NSMakeRect(0.0, 0.0, 420.0, 250.0);
 	NSView *content = [[[NSView alloc] initWithFrame:frame] autorelease];
 	NSWindow *window;
 	NSTextField *heading;
@@ -55,6 +58,7 @@ static const NSInteger WSPreferencesMaximumIconSize = 128;
 	}
 	_target = target;			/* assign: the application owns this window, not the other way round */
 	_iconSize = iconSize;
+	_viewMode = (viewMode >= 0 && viewMode <= 2) ? viewMode : 0;
 
 	window = [[NSWindow alloc] initWithContentRect:frame
 					     styleMask:NSTitledWindowMask | NSClosableWindowMask
@@ -69,6 +73,39 @@ static const NSInteger WSPreferencesMaximumIconSize = 128;
 	/* **EVERY LABEL IS AN UNEDITABLE, UNBEZELLED FIELD WITH NO BACKGROUND** — which is what a label is here: this
 	 * tier has no `NSTextField +labelWithString:`, and a field that draws its own white surface would read as
 	 * something a person could type into. */
+	{
+		NSTextField *viewHeading = [[NSTextField alloc] initWithFrame:NSMakeRect(20.0, 206.0, 200.0, 20.0)];
+		NSSegmentedControl *modes;
+		NSInteger segment;
+
+		[viewHeading setStringValue:@"Default view for new windows:"];
+		[viewHeading setEditable:NO];
+		[viewHeading setSelectable:NO];
+		[viewHeading setBezeled:NO];
+		[viewHeading setBordered:NO];
+		[viewHeading setDrawsBackground:NO];
+		[viewHeading setFont:[NSFont systemFontOfSize:12.0]];
+		[content addSubview:viewHeading];
+		[viewHeading release];
+
+		/* **THREE WORDS IN THE ORDER THE TOOLBAR SWITCHES THEM.** The toolbar's switch is three PICTURES because a band has
+		 * no room for a word; a preferences row has the room, and a word is what a preference should say. */
+		modes = [[NSSegmentedControl alloc] initWithFrame:NSMakeRect(20.0, 176.0, 240.0, 24.0)];
+		[modes setSegmentCount:3];
+		for (segment = 0; segment < 3; segment++) {
+			NSArray *labels = [NSArray arrayWithObjects:@"Icon", @"List", @"Column", nil];
+
+			[modes setLabel:[labels objectAtIndex:(NSUInteger)segment] forSegment:segment];
+			[modes setWidth:0.0 forSegment:segment];
+		}
+		[modes setSelectedSegment:_viewMode];
+		[modes setTarget:self];
+		[modes setAction:@selector(viewModeChanged:)];
+		[content addSubview:modes];
+		_viewModeControl = [modes retain];
+		[modes release];
+	}
+
 	heading = [[NSTextField alloc] initWithFrame:NSMakeRect(20.0, 140.0, 200.0, 20.0)];
 	[heading setStringValue:@"Desktop icon size:"];
 	[heading setEditable:NO];
@@ -148,12 +185,42 @@ static const NSInteger WSPreferencesMaximumIconSize = 128;
 {
 	[_slider release];
 	[_valueLabel release];
+	[_viewModeControl release];
 	[_window release];
 	[super dealloc];
 }
 
 /* The slider's own door, and the only place the value is read: the label is updated from it and the application is
  * told, so what is SHOWN and what is APPLIED cannot drift apart. */
+/* **THE VIEW SWITCH'S OWN DOOR**: the segment a person chose is the mode the target is told about, and it is kept here so
+ * `-viewMode` answers what the window shows rather than asking the control a second time. */
+- (void)viewModeChanged:(id)sender
+{
+	NSInteger segment = 0;
+
+	(void)sender;
+	if (_viewModeControl != nil) {
+		segment = (NSInteger)[_viewModeControl selectedSegment];
+	}
+	if (segment < 0 || segment > 2) {
+		return;
+	}
+	_viewMode = segment;
+	if (_target != nil && [_target respondsToSelector:@selector(preferencesWindow:didChangeViewMode:)]) {
+		[_target preferencesWindow:self didChangeViewMode:segment];
+	}
+}
+
+- (NSInteger)viewMode
+{
+	return _viewMode;
+}
+
+- (NSSegmentedControl *)cg_viewModeControl
+{
+	return _viewModeControl;
+}
+
 - (void)iconSizeChanged:(id)sender
 {
 	NSInteger size = (_slider != nil) ? (NSInteger)[_slider intValue] : _iconSize;

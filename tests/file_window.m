@@ -892,6 +892,28 @@ int main(void)
 		[watched release];
 	}
 
+	/* **THE DEFAULT VIEW IS WHAT A NEW WINDOW OPENS IN.** The preference is a person's answer to "how do I browse", and
+	 * the window reads it once, when it is made: MEASURED here through two windows, because a value read into a field
+	 * that no build path consults would look identical to one that is honoured. The probe's defaults are its own
+	 * (`AGORA_CONFIG_ROOT`), so the account's preferences are untouched. */
+	{
+		WSFileWindowController *third;
+
+		[WSFileWindowController cg_setDefaultViewMode:2];
+		third = [[WSFileWindowController alloc] initWithDirectory:root];
+		check([third viewMode] == 2 && [third cg_columnView] != nil,
+		      "a new window opens in the preferred view, with that view built");
+		[third close];
+		[third release];
+
+		[WSFileWindowController cg_setDefaultViewMode:0];
+		third = [[WSFileWindowController alloc] initWithDirectory:root];
+		check([third viewMode] == 0 && [third cg_iconView] != nil,
+		      "and back to Icon when the preference says Icon");
+		[third close];
+		[third release];
+	}
+
 	[backItem release];
 	[listItem release];
 	[columnItem release];

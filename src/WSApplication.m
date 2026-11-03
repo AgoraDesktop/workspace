@@ -379,7 +379,8 @@
 	if (_preferences == nil) {
 		_preferences = [[WSPreferencesWindow alloc] initWithTarget:self
 								  iconSize:[_desktop iconSize]
-								 directory:[WSApplication desktopDirectory]];
+								 directory:[WSApplication desktopDirectory]
+								  viewMode:[WSFileWindowController cg_defaultViewMode]];
 	}
 	[_preferences orderFront];
 }
@@ -388,6 +389,15 @@
 {
 	(void)window;
 	[_desktop setIconSize:size];
+}
+
+/* **THE DEFAULT VIEW IS WRITTEN WHERE A FILE WINDOW READS IT**, which is the standard defaults — no second copy here. The
+ * windows already on the glass keep the view they are in: this is a preference about the NEXT window, and switching an
+ * open window because a preference changed is the sort of surprise that makes a preference untrustworthy. */
+- (void)preferencesWindow:(id)window didChangeViewMode:(NSInteger)mode
+{
+	(void)window;
+	[WSFileWindowController cg_setDefaultViewMode:mode];
 }
 
 - (void)dealloc

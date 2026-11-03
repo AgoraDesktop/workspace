@@ -156,6 +156,11 @@
  * it is the same question. `-cg_applyToolbarLabels` puts the remembered answer on this window's band; the two class
  * doors read and write it; and `+cg_showToolbarLabelsStateOn:` is the tick the View menu asks for on its way to opening. */
 + (BOOL)cg_toolbarLabelsVisible;
+
+/* **THE VIEW A NEW WINDOW OPENS IN** — 0 Icon, 1 List, 2 Column — kept in the standard defaults under
+ * `WSDefaultViewMode`. The Preferences window writes it; a file window reads it once, when it is made. */
++ (NSInteger)cg_defaultViewMode;
++ (void)cg_setDefaultViewMode:(NSInteger)mode;
 + (void)cg_setToolbarLabelsVisible:(BOOL)visible;
 - (void)cg_applyToolbarLabels;
 + (void)cg_showToolbarLabelsStateOn:(nullable NSMenuItem *)item;

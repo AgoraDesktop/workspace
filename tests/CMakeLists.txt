@@ -135,6 +135,47 @@ add_test(NAME workspace-item-icons COMMAND item_icons)
 set_tests_properties(workspace-item-icons PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
 
+# **THE PREFERENCE THAT DECIDES WHICH VIEW A NEW WINDOW OPENS IN.** The window, its switch and the defaults are all
+# in-process, so no compositor is needed: what is measured is the choice, the callback it reaches, and the door a file
+# window reads when it is made.
+add_executable(preferences preferences.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPreferencesWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemDrag.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionBand.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconCell.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSSelectionOwner.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLabel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHistory.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSIconLayout.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+target_include_directories(preferences PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(preferences PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices
+    AgoraWatch::Watch
+    Foundation::Foundation
+    ZLIB::ZLIB
+    objc)
+add_test(NAME workspace-preferences COMMAND preferences)
+set_tests_properties(workspace-preferences PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
 # **THE MENU BAR'S CONTENTS, WHICH NEED THE APPKIT BUT NOT A COMPOSITOR.** `-setMainMenu:` builds the bar's
 # WINDOW from the region the compositor sends, so with no compositor there is no window to look at — but the MENU
 # is built first and entirely, and every decision this component made is in it: which menus there are, what the

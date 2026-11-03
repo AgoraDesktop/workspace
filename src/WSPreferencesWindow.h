@@ -18,6 +18,7 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSGeometry.h>
 
+@class NSSegmentedControl;
 @class NSSlider;
 @class NSTextField;
 @class NSWindow;
@@ -29,6 +30,9 @@
  * the message is the whole fix. */
 @protocol WSPreferencesWindowTarget <NSObject>
 - (void)preferencesWindow:(WSPreferencesWindow *)window didChangeIconSize:(NSInteger)size;
+/* **AND THE VIEW A NEW FILE WINDOW OPENS IN**: 0 Icon, 1 List, 2 Column. A preference about the NEXT window rather
+ * than about the one on screen, which is why it is here and not in a window's View menu. */
+- (void)preferencesWindow:(WSPreferencesWindow *)window didChangeViewMode:(NSInteger)mode;
 @end
 
 @interface WSPreferencesWindow : NSObject
@@ -37,18 +41,27 @@
 	id <WSPreferencesWindowTarget> _target;	/* NOT retained: the application that applies the change */
 	NSSlider *_slider;
 	NSTextField *_valueLabel;
+	NSSegmentedControl *_viewModeControl;	/* RETAINED: Icon / List / Column */
 	NSInteger _iconSize;
+	NSInteger _viewMode;
 }
 
-/* `target` is sent `-preferencesWindow:didChangeIconSize:` when the slider moves. It is NOT retained. */
+/* `target` is sent `-preferencesWindow:didChangeIconSize:` when the slider moves and
+ * `-preferencesWindow:didChangeViewMode:` when a view is chosen. It is NOT retained. */
 - (instancetype)initWithTarget:(id <WSPreferencesWindowTarget>)target
 		      iconSize:(NSInteger)iconSize
-		     directory:(NSString *)directory;
+		     directory:(NSString *)directory
+		      viewMode:(NSInteger)viewMode;
 
 - (void)orderFront;
 
 /* The size the slider currently shows, so a caller can assert what a drag would hand over. */
 - (NSInteger)iconSize;
+
+/* **THE VIEW SWITCH AS THE WINDOW SHOWS IT**, and the switch itself: a probe can set a segment and send the action the
+ * way a click does, which is the only way to measure that choosing one reaches the target. */
+- (NSInteger)viewMode;
+- (nullable NSSegmentedControl *)cg_viewModeControl;
 
 @end
 
