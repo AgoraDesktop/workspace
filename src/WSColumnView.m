@@ -33,7 +33,12 @@
 
 #include <time.h>
 
-#define WS_COLUMN_PREVIEW_WIDTH 240.0
+/* **A PANE ABOUT ONE ITEM, NOT A SECOND COLUMN.** 240 points held a 64-point picture and four short lines with a third of
+ * the width empty; 180 still holds the longest line a date can be and gives 60 points back to the columns, which is where
+ * a person browsing actually spends the window. */
+#define WS_COLUMN_PREVIEW_WIDTH 180.0
+/* AND WHAT THE PANE KEEPS CLEAR ON EACH SIDE, so a long name is cut inside the pane instead of spilling across it. */
+#define WS_COLUMN_PREVIEW_INSET 10.0
 
 static NSString *fn_date_string(NSDate *date)
 {
@@ -166,8 +171,17 @@ static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat p
 	if (text == nil || [text length] == 0) {
 		return;
 	}
+	CGFloat room = paneWidth - 2.0 * WS_COLUMN_PREVIEW_INSET;
+
 	size = [text sizeWithAttributes:attributes];
 	if (size.width <= 0.0) {
+		return;
+	}
+	/* **A LINE WIDER THAN THE PANE IS CUT INSIDE IT, NOT DRAWN ACROSS IT.** The pane is narrower now, and a file name can
+	 * be longer than any pane; a rect wider than the pane would run under the browser's own edge, so the rect is the room
+	 * the pane has and the centring is the pair of insets that room leaves. */
+	if (size.width > room) {
+		[text drawInRect:NSMakeRect(WS_COLUMN_PREVIEW_INSET, y, room, height) withAttributes:attributes];
 		return;
 	}
 	[text drawInRect:NSMakeRect((paneWidth - size.width) / 2.0 - 1.0, y, size.width + 2.0, height)
@@ -774,6 +788,11 @@ static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat p
 	if (item != nil && [_viewDelegate respondsToSelector:@selector(columnView:openItem:)]) {
 		[_viewDelegate columnView:self openItem:item];
 	}
+}
+
++ (CGFloat)cg_previewWidth
+{
+	return WS_COLUMN_PREVIEW_WIDTH;
 }
 
 - (NSBrowser *)cg_browser { return _browser; }

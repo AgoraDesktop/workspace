@@ -82,6 +82,8 @@
 /* **THE TEST'S SEAMS.** The browser is the platform object; the preview's item and text are what "the last column's
  * preview" means to a probe. */
 - (nullable NSBrowser *)cg_browser;
+/* **HOW WIDE THE PREVIEW PANE IS**, so a probe measures the pane the code draws rather than a number it copied. */
++ (CGFloat)cg_previewWidth;
 - (nullable WSItem *)cg_previewItem;
 - (nullable NSString *)cg_previewText;
 

@@ -472,7 +472,7 @@ int main(void)
 	 * which read as the top of a list rather than as a panel about one item. Rendered and counted, because "centred" is a
 	 * property of the ink: the pane's own pixels are measured, and the ink's middle must be the pane's middle. */
 	{
-		const NSInteger paneWidth = 240;
+		const NSInteger paneWidth = (NSInteger)[WSColumnView cg_previewWidth];
 		NSInteger width = (NSInteger)[view bounds].size.width;
 		NSInteger height = (NSInteger)[view bounds].size.height;
 		NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
@@ -509,6 +509,10 @@ int main(void)
 		      "and its ink is centred in the pane rather than against the left margin");
 		check(maxX >= minX && minX > left + 40,
 		      "so nothing begins at the old twenty-point margin");
+		/* **AND IT IS NARROWER THAN IT WAS.** 240 points held a 64-point picture and four short lines with a third of the
+		 * width empty; the pane is a column about one item, and the space belongs to the columns beside it. */
+		check(paneWidth <= 180, "the pane is no wider than the 180 points a picture and four lines need");
+
 		[rep release];
 	}
 
