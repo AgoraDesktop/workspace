@@ -14,6 +14,7 @@
 #import "WSItemModel.h"
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSBrowser.h>
 #import <AppKit/NSBrowserCell.h>
 #import <AppKit/NSDragging.h>
@@ -465,6 +466,50 @@ int main(void)
 
 		[window setDelegate:nil];
 		[commands release];
+	}
+
+	/* **THE PREVIEW PANE'S CONTENTS ARE CENTRED.** The picture and the four facts sat against a twenty-point left margin,
+	 * which read as the top of a list rather than as a panel about one item. Rendered and counted, because "centred" is a
+	 * property of the ink: the pane's own pixels are measured, and the ink's middle must be the pane's middle. */
+	{
+		const NSInteger paneWidth = 240;
+		NSInteger width = (NSInteger)[view bounds].size.width;
+		NSInteger height = (NSInteger)[view bounds].size.height;
+		NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL
+			pixelsWide:width pixelsHigh:height bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES
+			isPlanar:NO colorSpaceName:NSCalibratedRGBColorSpace
+			bytesPerRow:width * 4 bitsPerPixel:32];
+		NSGraphicsContext *context = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+		NSGraphicsContext *previous = [[NSGraphicsContext currentContext] retain];
+		NSInteger left = width - paneWidth;
+		NSInteger minX = width;
+		NSInteger maxX = -1;
+		NSInteger x, y;
+
+		/* THE PANE ALREADY HAS AN ITEM: the selection this probe has been making is what it draws. */
+		[NSGraphicsContext setCurrentContext:context];
+		[view displayRect:[view bounds]];
+		[NSGraphicsContext setCurrentContext:previous];
+		[previous release];
+		for (y = 0; y < height; y++) {
+			for (x = left; x < width; x++) {
+				NSColor *pixel = [[rep colorAtX:x y:y] colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
+
+				/* THE PANE'S OWN FACE IS 0.97 WHITE AND ITS LEFT RULE 0.78; anything darker is the item's. */
+				if (pixel != nil && [pixel redComponent] < 0.6) {
+					if (x < minX) minX = x;
+					if (x > maxX) maxX = x;
+				}
+			}
+		}
+		printf("  (note: the preview's ink runs %ld..%ld in a %ld-wide pane)\n",
+		       (long)(minX - left), (long)(maxX - left), (long)paneWidth);
+		check(maxX >= minX, "the preview draws something to measure");
+		check(maxX >= minX && labs(((minX + maxX) / 2) - (left + paneWidth / 2)) <= 4,
+		      "and its ink is centred in the pane rather than against the left margin");
+		check(maxX >= minX && minX > left + 40,
+		      "so nothing begins at the old twenty-point margin");
+		[rep release];
 	}
 
 	/* **AND A COLUMN IS A DRAG SOURCE AND A DROP DESTINATION, THROUGH THE BROWSER'S OWN FORWARDS.** The three answers go

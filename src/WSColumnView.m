@@ -156,6 +156,24 @@ static NSString *fn_size_string(WSItem *item)
 		fn_date_string([_item modificationDate])];
 }
 
+/* **A LINE CENTRED IN THE PANE, MEASURED AND DRAWN WHERE ITS OWN WIDTH PUTS IT.** The tier's `-drawInRect:` lays a line
+ * out from the rect's own origin, so a rect that is exactly as wide as the line and centred draws the line centred — and
+ * a point of slack on each side keeps a glyph's overhang from being clipped by the rect that measured it. */
+static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat paneWidth, NSDictionary *attributes)
+{
+	NSSize size;
+
+	if (text == nil || [text length] == 0) {
+		return;
+	}
+	size = [text sizeWithAttributes:attributes];
+	if (size.width <= 0.0) {
+		return;
+	}
+	[text drawInRect:NSMakeRect((paneWidth - size.width) / 2.0 - 1.0, y, size.width + 2.0, height)
+	  withAttributes:attributes];
+}
+
 - (void)drawRect:(NSRect)dirtyRect
 {
 	NSRect bounds = [self bounds];
@@ -170,30 +188,30 @@ static NSString *fn_size_string(WSItem *item)
 	[[NSColor colorWithCalibratedWhite:0.78 alpha:1.0] setFill];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, 0.0, 1.0, bounds.size.height)] fill];
 
+	/* **THE PANE'S CONTENTS ARE CENTRED, BECAUSE A PANE IS A COLUMN OF ONE THING.** The picture and the four facts sat
+	 * against a twenty-point left margin, which read as the top of a list that had been cut off rather than as a panel
+	 * about one item; a person looking at the rightmost column is looking at ONE thing, and the middle of the pane is
+	 * where one thing belongs. */
 	if (_item == nil) {
 		text = @"No Selection";
-		[text drawInRect:NSMakeRect(20.0, 24.0, bounds.size.width - 40.0, 20.0)
-			  withAttributes:[NSDictionary dictionaryWithObject:[NSColor darkGrayColor]
-								     forKey:NSForegroundColorAttributeName]];
+		fn_draw_centred(text, 24.0, 20.0, bounds.size.width,
+				[NSDictionary dictionaryWithObject:[NSColor darkGrayColor]
+							   forKey:NSForegroundColorAttributeName]);
 		return;
 	}
 
 	icon = [WSItemIcons iconForPath:[_item path] isDirectory:[_item isDirectory] size:64];
 	if (icon != nil) {
-		[icon drawInRect:NSMakeRect(20.0, 20.0, 64.0, 64.0)];
+		[icon drawInRect:NSMakeRect((bounds.size.width - 64.0) / 2.0, 20.0, 64.0, 64.0)];
 	}
 	nameAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
 		[NSColor blackColor], NSForegroundColorAttributeName, nil];
 	detailAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
 		[NSColor darkGrayColor], NSForegroundColorAttributeName, nil];
-	[[_item name] drawInRect:NSMakeRect(20.0, 96.0, bounds.size.width - 40.0, 20.0)
-		  withAttributes:nameAttributes];
-	[[WSItemKind kindForItem:_item] drawInRect:NSMakeRect(20.0, 124.0, bounds.size.width - 40.0, 18.0)
-				    withAttributes:detailAttributes];
-	[fn_size_string(_item) drawInRect:NSMakeRect(20.0, 146.0, bounds.size.width - 40.0, 18.0)
-			   withAttributes:detailAttributes];
-	[fn_date_string([_item modificationDate]) drawInRect:NSMakeRect(20.0, 168.0, bounds.size.width - 40.0, 18.0)
-				      withAttributes:detailAttributes];
+	fn_draw_centred([_item name], 96.0, 20.0, bounds.size.width, nameAttributes);
+	fn_draw_centred([WSItemKind kindForItem:_item], 124.0, 18.0, bounds.size.width, detailAttributes);
+	fn_draw_centred(fn_size_string(_item), 146.0, 18.0, bounds.size.width, detailAttributes);
+	fn_draw_centred(fn_date_string([_item modificationDate]), 168.0, 18.0, bounds.size.width, detailAttributes);
 }
 
 @end
