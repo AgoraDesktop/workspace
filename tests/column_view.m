@@ -267,6 +267,24 @@ int main(void)
 	      "the first column is titled for the folder the window shows");
 	check([[browser titleOfColumn:0] length] > 0, "so no column in the browser is left without a header");
 
+	/* **A DOUBLE-CLICK IS WHAT OPENS AN ITEM**, and a column's rows answer it through the browser's double action. */
+	{
+		NSTableView *table = [browser cg_tableForColumn:0];
+		NSRect cell = [browser frameOfRow:0 inColumn:0];
+		NSPoint inWindow = [browser convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell)) toView:nil];
+		NSEvent *down = [NSEvent mouseEventWithType:NSLeftMouseDown location:inWindow
+					       modifierFlags:0 timestamp:0.0 windowNumber:0 context:nil
+					      eventNumber:0 clickCount:2 pressure:1.0f];
+
+		probe->opened = nil;
+		[browser selectRow:0 inColumn:0];
+		[table mouseDown:down];
+		printf("  (debug: after a double click in column zero, opened = %s)\n",
+		       probe->opened != nil ? [probe->opened UTF8String] : "(nil)");
+		check(probe->opened != nil && [probe->opened isEqual:@"A Folder"],
+		      "a double-click in a column reaches the view's open door");
+	}
+
 	/* THE VIEW'S OWN OPEN DOOR REACHES THE DELEGATE. */
 	[browser selectRow:0 inColumn:0];
 	[view openSelectedItem];

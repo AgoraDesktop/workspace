@@ -103,9 +103,13 @@ static void WSFillApplicationMenu(NSMenu *menu, id target)
 	WSRow(menu, @"Hide Others", @selector(hideOtherApplications:), application, @"h",
 	      NSCommandKeyMask | NSAlternateKeyMask);
 	WSRow(menu, @"Show All", @selector(unhideAllApplications:), application, nil, 0);
-	[menu addItem:[NSMenuItem separatorItem]];
-	WSRow(menu, [NSString stringWithFormat:@"Quit %@", name], @selector(terminate:), application, @"q",
-	      NSCommandKeyMask);
+
+	/* **AND THERE IS NO QUIT ROW, BECAUSE THERE IS NOTHING TO QUIT.** The desktop is what everything else is drawn
+	 * over: ending it leaves a black screen with no way back, which is why the Dock's tile for Workspace offers a
+	 * RESTART rather than a Quit (`DockController.h` says so, and its menu has no Quit either). A row here would be the
+	 * one place in the interface that could end the session by accident — and Command-Q, which is where the hands go,
+	 * is exactly the accident. Commands that end the application are the dock's, and they replace it rather than
+	 * ending it. */
 }
 
 /* ---------------------------------------------------------------------------------------------------

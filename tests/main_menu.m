@@ -135,8 +135,24 @@ int main(void)
 		check(itemTitled(appMenu, [NSString stringWithFormat:@"Hide %@", name]) != nil, "and \"Hide <application>\"");
 		check(itemTitled(appMenu, @"Hide Others") != nil, "and \"Hide Others\"");
 		check(itemTitled(appMenu, @"Show All") != nil, "and \"Show All\"");
-		check(itemTitled(appMenu, [NSString stringWithFormat:@"Quit %@", name]) != nil,
-		      "and \"Quit <application>\"");
+		/* **NO QUIT ROW: THE DESKTOP IS NOT SOMETHING TO END.** Ending it leaves a black screen with no way back, so
+		 * the Dock's tile offers a restart instead; the menu follows the same rule, and Command-Q is exactly where a
+		 * hand would go by accident. */
+		check(itemTitled(appMenu, [NSString stringWithFormat:@"Quit %@", name]) == nil,
+		      "and NO \"Quit <application>\" row, because the desktop is restarted rather than quit");
+		{
+			NSInteger k;
+			BOOL anyQuit = NO;
+
+			for (k = 0; k < [appMenu numberOfItems]; k++) {
+				NSString *title = [[appMenu itemAtIndex:(NSUInteger)k] title];
+
+				if ([title hasPrefix:@"Quit"]) {
+					anyQuit = YES;
+				}
+			}
+			check(!anyQuit, "nor any other row that starts with Quit");
+		}
 		check([itemTitled(appMenu, @"Services") submenu] != nil, "the Services row carries a menu");
 
 		/* **AND NOTHING IN THE BAR NAMES ANOTHER APPLICATION'S PRODUCT.** Agora's file manager is Workspace, so
@@ -182,17 +198,22 @@ int main(void)
 		      ([item keyEquivalentModifierMask] & NSCommandKeyMask) != 0,
 		      "with Command-, as its shortcut");
 
-		item = itemTitled(appMenu, [NSString stringWithFormat:@"Quit %@", name]);
-		check(item != nil && [item target] == application && sel_isEqual([item action], @selector(terminate:)),
-		      "Quit goes to the application's own -terminate:");
+		/* **AND NOTHING IN THE MENU CLAIMS COMMAND-Q.** The row is gone, so the key a hand reaches for finds no item —
+		 * asked of the rows' own key equivalents, which is what the event's walk compares. */
+		{
+			NSInteger k;
+			BOOL commandQ = NO;
 
-		/* **THE MASK IS THE POINT OF THIS ONE.** Apple's item defaults to `NSCommandKeyMask`; this tier's leaves
-		 * it at ZERO, so a row built by the convenience factory and left alone would answer a BARE `q`. The walk
-		 * in `NSMenu -performKeyEquivalent:` compares the item's masked bits against the event's, so the check is
-		 * the mask and not a comment. */
-		check(item != nil && [[item keyEquivalent] isEqualToString:@"q"] &&
-		      ([item keyEquivalentModifierMask] & NSCommandKeyMask) != 0,
-		      "and its shortcut is COMMAND-Q, not a bare q");
+			for (k = 0; k < [appMenu numberOfItems]; k++) {
+				NSMenuItem *row = [appMenu itemAtIndex:(NSUInteger)k];
+
+				if ([[row keyEquivalent] isEqualToString:@"q"]
+				    && ([row keyEquivalentModifierMask] & NSCommandKeyMask) != 0) {
+					commandQ = YES;
+				}
+			}
+			check(!commandQ, "Command-Q is claimed by no row of the application menu");
+		}
 
 		item = itemTitled(appMenu, @"Hide Others");
 		check(item != nil && ([item keyEquivalentModifierMask] & NSCommandKeyMask) != 0 &&
@@ -225,8 +246,8 @@ int main(void)
 		check(item != nil && [item isEnabled], "About is ENABLED: its target answers its action");
 		item = itemTitled(appMenu, @"Preferences…");
 		check(item != nil && [item isEnabled], "Preferences is enabled for the same reason");
-		item = itemTitled(appMenu, [NSString stringWithFormat:@"Quit %@", name]);
-		check(item != nil && [item isEnabled], "Quit is enabled");
+		check(itemTitled(appMenu, [NSString stringWithFormat:@"Quit %@", name]) == nil,
+		      "and no Quit row appears when the walk runs either, because there is none");
 		item = itemTitled([itemTitled(appMenu, @"Services") submenu], @"No Services Apply");
 		check(item != nil && ![item isEnabled], "the Services placeholder is DISABLED, because nothing answers it");
 
