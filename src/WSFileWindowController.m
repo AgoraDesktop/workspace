@@ -75,6 +75,21 @@
 #define WS_STATUS_BAR_HEIGHT 22.0
 #define WS_SIDEBAR_WIDTH 220.0
 
+/* **THE PLACES PANE IS TINTED, AND THE TINT IS THE ACCENT'S OWN COLOUR RATHER THAN A SECOND GREY.** A sidebar that is
+ * the same white as the files beside it reads as another list; a light shade of the accent says which pane is the
+ * furniture and which is the work, with the same colour the SELECTION wears when one of its rows is chosen — so the
+ * pane and its highlight are one hue at two strengths. The fraction is the accent's share: a quarter is a tint a person
+ * can see against white and still dark enough for the rows' own ink to sit on. */
+#define WS_PLACES_TINT_FRACTION 0.25
+
+static NSColor *WSPlacesBackgroundColor(void)
+{
+	NSColor *tint = [[NSColor whiteColor] blendedColorWithFraction:WS_PLACES_TINT_FRACTION
+							       ofColor:[NSColor cg_accentColor]];
+
+	return (tint != nil) ? tint : [NSColor controlBackgroundColor];
+}
+
 static NSString * const WSFileWindowToolbarIdentifier = @"WorkspaceFileWindowToolbar";
 static NSString * const WSBackItemIdentifier = @"WorkspaceBack";
 static NSString * const WSForwardItemIdentifier = @"WorkspaceForward";
@@ -302,7 +317,10 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_sidebar setSelectionHighlightStyle:NSTableViewSelectionHighlightStyleSourceList];
 	[_sidebar setAllowsEmptySelection:YES];
 	[_sidebar setAllowsMultipleSelection:NO];
-	[_sidebar setBackgroundColor:[NSColor controlBackgroundColor]];
+	/* THE PANE AND ITS SCROLL VIEW ARE ONE SURFACE: the table paints its own rows and the scroll view shows through
+	 * below the last of them, so a tint on one and not the other would stop halfway down the sidebar. */
+	[_sidebar setBackgroundColor:WSPlacesBackgroundColor()];
+	[_sidebarScroll setBackgroundColor:WSPlacesBackgroundColor()];
 	[_sidebar setDataSource:self];
 	[_sidebar setDelegate:self];
 	[_sidebar reloadData];
