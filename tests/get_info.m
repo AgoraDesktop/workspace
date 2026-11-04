@@ -196,7 +196,13 @@ int main(void)
 			      "the Size field counts the file's bytes");
 			check([[[window cg_whereValue] stringValue] isEqual:where],
 			      "and the Where field names the folder");
-			check([[window cg_createdValue] stringValue] != nil, "the Created field always says something");
+			/* **NO CREATION DATE, NO ROW.** This substrate records no birth time, so the row is not shown at all — and
+			 * the rows under it move up by exactly one row, which is why the window is 17 points shorter than it would
+			 * be with the row. */
+			check([[window info] creationDate] == nil, "this file system reports no creation time");
+			check([[window cg_createdValue] isHidden], "so the Created row is not shown");
+			check([[window cg_modifiedValue] frame].origin.y == 3.0 * 17.0,
+			      "and Modified has moved up into its place");
 			check([[[window cg_modifiedValue] stringValue] isEqual:
 				[WSItemInfo dateDescription:[[window info] modificationDate]]],
 			      "the Modified field is the date the info read");
@@ -223,8 +229,8 @@ int main(void)
 				}
 				check(restFolded, "and every other section folded, so the window is short");
 				printf("  (note: the folded window's content is %g points tall\n", (double)folded);
-				check(folded > 300.0 && folded < 400.0,
-				      "a folded window is one section tall, not the whole inspector");
+				check(ABS(folded - 319.0) < 0.5,
+				      "a folded window is one section tall, less the row this file system has no answer for");
 
 				[window cg_setSectionAtIndex:3 collapsed:NO];
 				opened = [[[window window] contentView] frame].size.height;

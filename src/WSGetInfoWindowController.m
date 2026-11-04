@@ -436,6 +436,8 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[_commentsName release];
 	[_documentView release];
 	[_sections release];
+	[_generalBody release];
+	[_previewBody release];
 	[super dealloc];
 }
 
@@ -499,18 +501,22 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 }
 
 /* ONE ROW OF A SECTION: a right-aligned key and its value. Both are labels; the pair is what makes the column of
- * values line up without a grid. */
-- (void)cg_addRowTo:(NSView *)body key:(NSString *)key value:(NSTextField **)valueSlot y:(CGFloat)y
+ * values line up without a grid. **THE ROW IS BUILT, NOT PLACED** — its y is the caller's, because General re-stacks its
+ * rows whenever a fact it has no answer for is left out. */
+- (void)cg_addRowTo:(NSView *)body key:(NSString *)key keyOut:(NSTextField **)keySlot value:(NSTextField **)valueSlot
 {
 	NSTextField *keyLabel;
 	NSTextField *valueLabel;
 	CGFloat width = [body frame].size.width;
 
-	keyLabel = WSInfoLabel(key, 0.0, y, WSInfoKeyWidth, WSInfoRowHeight, 11.0);
+	keyLabel = WSInfoLabel(key, 0.0, 0.0, WSInfoKeyWidth, WSInfoRowHeight, 11.0);
 	[keyLabel setAlignment:NSRightTextAlignment];
 	[body addSubview:keyLabel];
-	valueLabel = WSInfoLabel(nil, WSInfoKeyWidth + 8.0, y, width - WSInfoKeyWidth - 8.0, WSInfoRowHeight, 11.0);
+	valueLabel = WSInfoLabel(nil, WSInfoKeyWidth + 8.0, 0.0, width - WSInfoKeyWidth - 8.0, WSInfoRowHeight, 11.0);
 	[body addSubview:valueLabel];
+	if (keySlot != NULL) {
+		*keySlot = keyLabel;
+	}
 	if (valueSlot != NULL) {
 		*valueSlot = valueLabel;
 	}
@@ -522,11 +528,11 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	WSInfoSectionView *section;
 	CGFloat y = 0.0;
 
-	[self cg_addRowTo:body key:@"Kind:" value:&_kindValue y:y]; y += WSInfoRowHeight;
-	[self cg_addRowTo:body key:@"Size:" value:&_sizeValue y:y]; y += WSInfoRowHeight;
-	[self cg_addRowTo:body key:@"Where:" value:&_whereValue y:y]; y += WSInfoRowHeight;
-	[self cg_addRowTo:body key:@"Created:" value:&_createdValue y:y]; y += WSInfoRowHeight;
-	[self cg_addRowTo:body key:@"Modified:" value:&_modifiedValue y:y]; y += WSInfoRowHeight + 6.0;
+	[self cg_addRowTo:body key:@"Kind:" keyOut:&_kindKey value:&_kindValue];
+	[self cg_addRowTo:body key:@"Size:" keyOut:&_sizeKey value:&_sizeValue];
+	[self cg_addRowTo:body key:@"Where:" keyOut:&_whereKey value:&_whereValue];
+	[self cg_addRowTo:body key:@"Created:" keyOut:&_createdKey value:&_createdValue];
+	[self cg_addRowTo:body key:@"Modified:" keyOut:&_modifiedKey value:&_modifiedValue];
 
 	/* **THE TWO BOXES ARE CHECKBOXES RATHER THAN SWITCHES**: the era's switch is a track with a knob, and the reference
 	 * file manager's own inspector draws these two as the boxes beside every other checkbox in the system. */
@@ -552,6 +558,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[_lockedButton setAction:@selector(lockedChanged:)];
 	[body addSubview:_lockedButton];
 	[_lockedButton release];
+	_generalBody = [body retain];
 
 	section = [[WSInfoSectionView alloc] initWithTitle:@"General" body:body target:self
 						   action:@selector(cg_sectionToggled:)];
@@ -564,7 +571,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WSInfoWindowWidth, 23.0)];
 	WSInfoSectionView *section;
 
-	[self cg_addRowTo:body key:@"Last opened:" value:&_lastOpenedValue y:0.0];
+	[self cg_addRowTo:body key:@"Last opened:" keyOut:NULL value:&_lastOpenedValue];
 	section = [[WSInfoSectionView alloc] initWithTitle:@"More Info" body:body target:self
 						   action:@selector(cg_sectionToggled:)];
 	[body release];
@@ -779,6 +786,43 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[_previewBody setFrameSize:NSMakeSize(paneWidth, shown.height + 12.0)];
 }
 
+/* **A ROW WITHOUT AN ANSWER IS NOT A ROW.** This substrate records no birth time, so `-creationDate` is nil for every
+ * item here; printing "Created: —" would be a line of the window that never has anything to say. The row is HIDDEN and
+ * the rows under it move up, and the body shrinks by exactly one row — which is also why the window (which fits its
+ * sections) gets 17 points shorter. The positions are computed from scratch on every pass rather than shifted, so a
+ * file system that DOES report a creation time gets its row back without a second code path. */
+- (void)cg_layoutGeneralRows
+{
+	NSTextField *keys[5];
+	NSTextField *values[5];
+	NSUInteger count = 0;
+	NSUInteger i;
+	BOOL hasCreation = ([_info creationDate] != nil);
+	CGFloat width = [_generalBody frame].size.width;
+	CGFloat y = 0.0;
+
+	keys[count] = _kindKey; values[count] = _kindValue; count++;
+	keys[count] = _sizeKey; values[count] = _sizeValue; count++;
+	keys[count] = _whereKey; values[count] = _whereValue; count++;
+	if (hasCreation) {
+		keys[count] = _createdKey; values[count] = _createdValue; count++;
+	}
+	keys[count] = _modifiedKey; values[count] = _modifiedValue; count++;
+
+	[_createdKey setHidden:!hasCreation];
+	[_createdValue setHidden:!hasCreation];
+	for (i = 0; i < count; i++) {
+		[keys[i] setFrame:NSMakeRect(0.0, y, WSInfoKeyWidth, WSInfoRowHeight)];
+		[values[i] setFrame:NSMakeRect(WSInfoKeyWidth + 8.0, y, width - WSInfoKeyWidth - 8.0, WSInfoRowHeight)];
+		y += WSInfoRowHeight;
+	}
+	y += 6.0;
+	[_sharedButton setFrame:NSMakeRect(WSInfoKeyWidth, y, width - WSInfoKeyWidth, 18.0)];
+	y += 20.0;
+	[_lockedButton setFrame:NSMakeRect(WSInfoKeyWidth, y, width - WSInfoKeyWidth, 18.0)];
+	[_generalBody setFrameSize:NSMakeSize(width, y + 18.0 + 11.0)];
+}
+
 - (void)cg_updateFields
 {
 	NSString *detail;
@@ -803,6 +847,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[_whereValue setStringValue:WSInfoValue([_info where])];
 	[_createdValue setStringValue:[WSItemInfo dateDescription:[_info creationDate]]];
 	[_modifiedValue setStringValue:[WSItemInfo dateDescription:[_info modificationDate]]];
+	[self cg_layoutGeneralRows];
 	[_lastOpenedValue setStringValue:[WSItemInfo dateDescription:[_info lastOpenedDate]]];
 	[_lockedButton setState:[_info lockedState]];
 	[_nameField setStringValue:([_info isMultiple] ? @"" : WSInfoValue([_info name]))];

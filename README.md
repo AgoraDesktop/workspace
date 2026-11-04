@@ -467,8 +467,9 @@ its icon, which is square.
 There is no tag field (tags are not in the metadata store), no "Hide extension" (that is a Finder flag this substrate does
 not have), no `Open With` (F1) and no custom icon (F2). A folder's size is its own directory allocation, not the total of
 the tree below it — a recursive walk would block the window — while the item count IS measured, one listing and no
-descent. The creation date is the file system's when it reports one and this substrate records no birth time, so it reads
-"—". There are no ACLs to list, so the permissions table has no +/- and no gear. The inspector's own rename is not
+descent. **A fact the file system has no answer for is a row the window does not show** — this substrate records no birth
+time, so there is no Created row here at all, and the rows under it move up while the window gets 17 points shorter;
+a file system that does report one gets the row back with no second code path. There are no ACLs to list, so the permissions table has no +/- and no gear. The inspector's own rename is not
 undoable: its `WSFileOperations` has no undo manager, because the window outlives the one that opened it and an undo entry
 pointing at a dead window's manager would be worse than none.
 

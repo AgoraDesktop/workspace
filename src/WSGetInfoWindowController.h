@@ -47,12 +47,18 @@ NS_ASSUME_NONNULL_BEGIN
 	NSTextField *_headerName;
 	NSTextField *_headerDetail;
 	NSTextField *_headerSize;
+	NSTextField *_kindKey;			/* the right-aligned "Kind:" column, kept so the rows can be re-stacked */
 	NSTextField *_kindValue;
+	NSTextField *_sizeKey;
 	NSTextField *_sizeValue;
+	NSTextField *_whereKey;
 	NSTextField *_whereValue;
+	NSTextField *_createdKey;
 	NSTextField *_createdValue;
+	NSTextField *_modifiedKey;
 	NSTextField *_modifiedValue;
 	NSTextField *_lastOpenedValue;
+	NSView *_generalBody;			/* RETAINED: the General section's body, whose height a missing row changes */
 	NSButton *_sharedButton;
 	NSButton *_lockedButton;
 	NSTextField *_nameField;
