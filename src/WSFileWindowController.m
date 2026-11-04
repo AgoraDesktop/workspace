@@ -22,6 +22,7 @@
 #import "WSColumnView.h"
 #import "WSConflictSheet.h"
 #import "WSFileOperations.h"
+#import "WSGetInfoWindowController.h"
 #import "WSIconView.h"
 #import "WSListView.h"
 #import "WSHistory.h"
@@ -103,6 +104,8 @@ static NSString * const WSSearchFieldItemIdentifier = @"WorkspaceSearchField";
  * break between the navigation pair and the view switch is a BLANK VIEW of its own, five spacers wide. It carries no
  * label and no action: it is width. */
 static NSString * const WSSwitcherSpacerItemIdentifier = @"WorkspaceSwitcherSpacer";
+/* THE SEARCH FIELD'S WIDTH, IN POINTS. */
+#define WS_SEARCH_FIELD_WIDTH 400.0
 #define WS_SWITCHER_SPACER_WIDTH 40.0
 /* **THE ONE PREFERENCE A TOOLBAR HAS: WHETHER ITS ITEMS SAY THEIR WORDS.** A file window's band is a Back, a Forward
  * and a mode switch, so the words are useful the first time and clutter every time after — which is why the View menu
@@ -1070,7 +1073,15 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		 * **AND IT FILTERS AS THEY TYPE.** `-sendsWholeSearchString:` NO with `-sendsSearchStringImmediately:` YES is the
 		 * pair that asks the cell to send on every keystroke; left alone the cell waits for Return, which is a search
 		 * field that appears to do nothing until a person gives up and presses a key they were not told about. */
-		_searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 200.0, 24.0)];
+		/* **FOUR HUNDRED POINTS, WHICH IS TWICE THE FIRST FIELD'S WIDTH** — a query is a word or two and a field that
+		 * shows six characters of it makes a person scroll their own search.
+		 *
+		 * **AND THE ITEM'S `minSize` IS WHAT ACTUALLY SETS THE WIDTH.** `NSToolbar` lays a custom view out at its
+		 * minimum width (`fn_custom_width`: the frame is the fallback only when the minimum is zero), which is the
+		 * fact MEASURED twice here: a minimum of 120 gave a 121-point field, and a minimum of half the new width gave
+		 * 201 whatever the view's frame said. The frame, the minimum and the ceiling are now all stated from one
+		 * number so they cannot drift. */
+		_searchField = [[NSSearchField alloc] initWithFrame:NSMakeRect(0.0, 0.0, WS_SEARCH_FIELD_WIDTH, 24.0)];
 		/* THE PLACEHOLDER IS THE CELL'S, AND THE FIELD DOES NOT FORWARD IT IN THIS TIER — MEASURED: the message reaches
 		 * NSSearchField and it raises "not implemented", which takes the window with it. */
 		[[_searchField cell] setPlaceholderString:@"Search"];
@@ -1084,8 +1095,8 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		[item setLabel:@"Search"];
 		[item setPaletteLabel:@"Search"];
 		[item setView:_searchField];
-		[item setMinSize:NSMakeSize(120.0, 24.0)];
-		[item setMaxSize:NSMakeSize(320.0, 24.0)];
+		[item setMinSize:NSMakeSize(WS_SEARCH_FIELD_WIDTH, 24.0)];
+		[item setMaxSize:NSMakeSize(WS_SEARCH_FIELD_WIDTH * 2.0, 24.0)];
 		return item;
 	}
 	if ([identifier isEqualToString:WSSwitcherSpacerItemIdentifier]) {
@@ -1375,6 +1386,21 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	}
 }
 
+/* **GET INFO IS THE WINDOW'S COMMAND FOR ITS SELECTION**, and it is the window's rather than a view's for the same reason
+ * every other command here is: the three views do not each keep their own idea of what is selected. The window the
+ * inspector opens belongs to `WSGetInfoWindowController`'s registry, so closing this window does not close it and asking
+ * twice does not stack two of them. */
+- (void)getInfo:(id)sender
+{
+	NSArray *paths = [self selectedPaths];
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	(void)[WSGetInfoWindowController infoWindowForPaths:paths];
+}
+
 /* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN**, the reference file manager's own way to
  * make a set out of a selection: the folder is made in the window's directory (its name made unique by W6) and the
  * selection moves into it. */
@@ -1549,6 +1575,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		return YES;
 	}
 	if (action == @selector(newFolderWithSelection:)) {
+		return [[self selectedItems] count] > 0;
+	}
+	if (action == @selector(getInfo:)) {
 		return [[self selectedItems] count] > 0;
 	}
 	if (action == @selector(cut:) || action == @selector(copy:)) {

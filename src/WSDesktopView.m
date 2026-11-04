@@ -26,6 +26,7 @@
 #import "WSIconLayout.h"
 #import "WSContextMenu.h"
 #import "WSFileOperations.h"
+#import "WSGetInfoWindowController.h"
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
 #import "WSItemIcons.h"
@@ -692,6 +693,20 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	if (made != nil) {
 		[self cg_selectPaths:[NSArray arrayWithObject:made]];
 	}
+}
+
+/* **GET INFO ON THE DESKTOP IS THE SAME WINDOW A FILE WINDOW'S COMMAND OPENS.** The registry in
+ * `WSGetInfoWindowController` is what makes that true: a person who asks about the same item from the desktop and from a
+ * window gets one inspector, brought forward, rather than two windows saying the same thing. */
+- (void)getInfo:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	(void)[WSGetInfoWindowController infoWindowForPaths:paths];
 }
 
 /* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN** — the desktop's copy of the file window's

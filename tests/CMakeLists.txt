@@ -144,6 +144,8 @@ add_executable(preferences preferences.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
@@ -267,6 +269,8 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
@@ -300,6 +304,8 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSProgressWindow.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
@@ -443,6 +449,8 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPrintService.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSApplication.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSAboutPanel.m"
@@ -489,4 +497,29 @@ target_link_libraries(printing PRIVATE
     objc)
 add_test(NAME workspace-printing COMMAND printing)
 set_tests_properties(workspace-printing PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
+
+# **GET INFO: THE FACTS, THE WINDOW, AND THE THREE THINGS IT WRITES.** No compositor is needed — `WSItemInfo` is a value
+# read from a temp tree, and the window is built from the AppKit alone — so the suite measures the summed bytes of a
+# selection, the mixed-value blanks, and the writes (rename, the Locked mode bit, the comment in the folder's sidecar)
+# where they land: on the disk.
+add_executable(get_info get_info.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+target_include_directories(get_info PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(get_info PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    AgoraLaunchServices::LaunchServices
+    Foundation::Foundation
+    ZLIB::ZLIB
+    objc)
+add_test(NAME workspace-get-info COMMAND get_info)
+set_tests_properties(workspace-get-info PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")

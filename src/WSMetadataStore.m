@@ -127,6 +127,7 @@
 {
 	[_directory release];
 	[_positions release];
+	[_comments release];
 	[super dealloc];
 }
 

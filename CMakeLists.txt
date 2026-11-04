@@ -51,6 +51,8 @@ add_executable(Workspace
     src/WSConflictSheet.m
     src/WSFileOperations.m
     src/WSFileWindowController.m
+    src/WSGetInfoWindowController.m
+    src/WSItemInfo.m
     src/WSPrintService.m
     src/WSPrintView.m
     src/WSHistory.m
