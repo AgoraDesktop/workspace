@@ -118,6 +118,21 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)privilegeForMode:(mode_t)mode class:(NSInteger)whichClass;	/* 0 owner, 1 group, 2 everyone */
 + (NSString *)summaryForMode:(mode_t)mode;			/* the owner's sentence */
 
+/* ---- AND THE OTHER DIRECTION, BECAUSE THE PRIVILEGE IS EDITABLE ------------------------------------------------
+ *
+ * A privilege is a choice of four, and the window offers exactly those four in a popup. The index is the popup's
+ * order — "Read & Write", "Read only", "Write only", "No access" — and it maps to the class's three mode bits and
+ * back, so the menu, the table's cell and the chmod all speak one vocabulary.
+ */
++ (NSArray *)privilegeTitles;
+- (NSInteger)privilegeIndexForClass:(NSInteger)whichClass;	/* NSNotFound when the selection is mixed */
++ (mode_t)modeForPrivilegeIndex:(NSInteger)index class:(NSInteger)whichClass;
+
+/* **THE WRITE, ON EVERY SELECTED PATH, KEEPING EVERY OTHER BIT.** One class's three bits are replaced and the rest of
+ * the mode is left alone, which is what the reference file manager's popup does and what stops a privilege change from
+ * silently making a file executable or stripping the setuid bit. NO when any path refused by the kernel. */
++ (BOOL)cg_setPrivilegeIndex:(NSInteger)index forClass:(NSInteger)whichClass paths:(NSArray *)paths;
+
 @end
 
 NS_ASSUME_NONNULL_END

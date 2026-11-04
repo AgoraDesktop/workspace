@@ -31,6 +31,7 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSScrollView.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTextContainer.h>
 #import <AppKit/NSTextField.h>
@@ -310,6 +311,69 @@ static NSString *WSInfoValue(NSString *value)
 	}
 	[self setFrame:NSMakeRect(0.0, 0.0, width, y)];
 	return y;
+}
+
+@end
+
+#pragma mark - The permissions table
+
+/* **A CLICK IN THE PRIVILEGE COLUMN IS THE POP-UP'S CLICK, NOT A ROW SELECTION.** `NSTableView -mouseDown:` selects and
+ * tracks a drag; a pop-up cell only opens through `-performClickOnCellAtColumn:row:`, which this tier already has (it
+ * is what the cell's own `-performClickWithFrame:inView:` is for). So the table answers that one column itself and hands
+ * everything else to the table — and it remembers WHICH ROW it opened, because the cell that reports the pick is shared
+ * by all three rows and the action arrives with the table as its sender. */
+/* **THE MENU IS THE WINDOW'S, AND THIS IS THE QUESTION IT ASKS.** A table cannot know what a privilege is; it knows a
+ * click landed in the Privilege column of a row, which is the whole of what the window needs to raise the four choices. */
+@protocol WSInfoPermissionMenuTarget <NSObject>
+- (void)permissionsTable:(NSTableView *)table showPrivilegeMenuForRow:(NSInteger)row atPoint:(NSPoint)point;
+@end
+
+@interface WSInfoPermissionTable : NSTableView
+{
+	NSInteger _cgPopupRow;
+}
+- (NSInteger)cg_popupRow;
+- (void)cg_setPopupRow:(NSInteger)row;
+@end
+
+@implementation WSInfoPermissionTable
+
+- (instancetype)initWithFrame:(NSRect)frame
+{
+	self = [super initWithFrame:frame];
+	if (self != nil) {
+		_cgPopupRow = -1;
+	}
+	return self;
+}
+
+- (NSInteger)cg_popupRow
+{
+	return _cgPopupRow;
+}
+
+- (void)cg_setPopupRow:(NSInteger)row
+{
+	_cgPopupRow = row;
+}
+
+- (void)mouseDown:(NSEvent *)event
+{
+	NSPoint point = [self convertPoint:[event locationInWindow] fromView:nil];
+	NSInteger row = [self rowAtPoint:point];
+	NSInteger column = [self columnAtPoint:point];
+	NSArray *columns = [self tableColumns];
+
+	if (row >= 0 && column >= 0 && (NSUInteger)column < [columns count]
+	    && [[[columns objectAtIndex:(NSUInteger)column] identifier] isEqual:@"Privilege"]
+	    && [[self delegate] respondsToSelector:@selector(permissionsTable:showPrivilegeMenuForRow:atPoint:)]) {
+		_cgPopupRow = row;
+		[(id <WSInfoPermissionMenuTarget>)[self delegate] permissionsTable:self
+							     showPrivilegeMenuForRow:row
+									   atPoint:point];
+		return;
+	}
+	[super mouseDown:event];
 }
 
 @end
@@ -660,7 +724,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 
 - (WSInfoSectionView *)cg_sharingSection
 {
-	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WSInfoWindowWidth, 104.0)];
+	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WSInfoWindowWidth, 118.0)];
 	WSInfoSectionView *section;
 	NSTableColumn *name;
 	NSTableColumn *privilege;
@@ -676,13 +740,13 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	 * view whose window is already scrolling installs its header — and takes its own frame — from the OUTER scroll view,
 	 * which MEASURED put the permissions table across the top of the window and its header over the window's own. The
 	 * inner scroll view is the table's own enclosure, and it is the one the header belongs to. */
-	tableScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 21.0, tableWidth, 78.0)];
+	tableScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 21.0, tableWidth, 90.0)];
 	[tableScroll setHasVerticalScroller:NO];
 	[tableScroll setHasHorizontalScroller:NO];
 	[tableScroll setAutohidesScrollers:YES];
 	[tableScroll setBorderType:NSBezelBorder];
 	[tableScroll setDrawsBackground:YES];
-	table = [[NSTableView alloc] initWithFrame:[[tableScroll contentView] bounds]];
+	table = [[WSInfoPermissionTable alloc] initWithFrame:[[tableScroll contentView] bounds]];
 	tableWidth -= 4.0;
 	name = [[NSTableColumn alloc] initWithIdentifier:@"Name"];
 	[name setWidth:tableWidth * 0.55];
@@ -690,9 +754,16 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[name release];
 	privilege = [[NSTableColumn alloc] initWithIdentifier:@"Privilege"];
 	[privilege setWidth:tableWidth * 0.45];
+	/* **THE CELL STAYS A PLAIN FIELD AND THE CHOICE IS A MENU, NOT A POP-UP CELL.** `NSPopUpButtonCell` draws its title
+	 * one line-height low inside a flipped table — MEASURED in a session: the words were cut in half by the row under
+	 * them — so a click in this column raises the four choices as an ordinary menu at the pointer instead. The value is
+	 * a string the field already draws correctly, and the menu is the same `-popUpMenuPositioningItem:atLocation:inView:`
+	 * a pop-up cell would use. */
 	[table addTableColumn:privilege];
 	[privilege release];
-	[table setRowHeight:20.0];
+	/* **THE HEADER AND THREE ROWS HAVE TO FIT THE TABLE.** 20-point rows under a 20-point header came to 80 in a
+	 * 78-point scroll view, so the third row was cut in half by the table's own frame. */
+	[table setRowHeight:22.0];
 	[table setAllowsEmptySelection:YES];
 	[table setAllowsMultipleSelection:NO];
 	[table setDataSource:self];
@@ -1070,6 +1141,61 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 		return [_info mixedPermissions] ? @"—" : [permission privilege];
 	}
 	return [permission name];
+}
+
+/* **THE FOUR CHOICES, AS A MENU, WITH THE ONE THAT IS TRUE TICKED.** A separate method so the menu can be read without
+ * being popped up: a probe checks the titles, the order and which one is on, and the popping is the one line a display
+ * is needed for. */
+- (NSMenu *)cg_privilegeMenuForRow:(NSInteger)row
+{
+	NSMenu *menu = [[[NSMenu alloc] initWithTitle:@"Privilege"] autorelease];
+	NSArray *titles = [WSItemInfo privilegeTitles];
+	NSInteger current = [_info privilegeIndexForClass:row];
+	NSUInteger i;
+
+	for (i = 0; i < [titles count]; i++) {
+		NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:[titles objectAtIndex:i]
+							     action:@selector(cg_privilegeChosen:)
+						      keyEquivalent:@""];
+
+		[item setTarget:self];
+		[item setTag:(NSInteger)i];
+		[item setState:((NSInteger)i == current) ? NSOnState : NSOffState];
+		[menu addItem:item];
+		[item release];
+	}
+	return menu;
+}
+
+- (void)permissionsTable:(NSTableView *)table showPrivilegeMenuForRow:(NSInteger)row atPoint:(NSPoint)point
+{
+	NSMenu *menu = [self cg_privilegeMenuForRow:row];
+
+	_cgMenuRow = row;
+	[menu popUpMenuPositioningItem:nil atLocation:point inView:table];
+}
+
+/* **THE PICK IS A CHMOD, AND THE WINDOW RE-READS AFTER IT.** The row IS the class — the table's three rows are the
+ * owner, the group and everyone, in that order — and the item's tag is the choice; `WSItemInfo` does the bits so the
+ * same door can be checked without a window. A refused chmod leaves the disk as it was, and the reload is what puts the
+ * cell back on the truth rather than on the choice that did not happen. */
+- (void)cg_privilegeChosen:(id)sender
+{
+	[self cg_applyPrivilegeIndex:[(NSMenuItem *)sender tag] forRow:_cgMenuRow];
+}
+
+- (void)cg_applyPrivilegeIndex:(NSInteger)index forRow:(NSInteger)row
+{
+	if (row < 0 || (NSUInteger)row >= [[_info permissions] count] || index < 0 || index > 3) {
+		return;
+	}
+	(void)[WSItemInfo cg_setPrivilegeIndex:index forClass:row paths:[_info paths]];
+	[self reload];
+}
+
+- (NSInteger)cg_privilegeIndexForRow:(NSInteger)row
+{
+	return [_info privilegeIndexForClass:row];
 }
 
 #pragma mark - The window's own life

@@ -19,6 +19,8 @@
 
 #import <AppKit/NSButton.h>
 #import <AppKit/NSImageView.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSTextField.h>
@@ -245,6 +247,44 @@ int main(void)
 				check([[[window window] contentView] frame].size.height < folded,
 				      "folding the last open section shrinks the window to its bands");
 				[window cg_setSectionAtIndex:0 collapsed:NO];
+			}
+
+			/* 6b2. THE PRIVILEGE IS A CHOICE, AND CHOOSING IS A CHMOD. The column's cell is a pop-up carrying the four
+			 * privileges, the row IS the class (owner, group, everyone), and applying one replaces that class's three
+			 * bits and leaves the rest of the mode alone. */
+			{
+				NSMenu *menu = [window cg_privilegeMenuForRow:0];
+
+				check(menu != nil && [menu numberOfItems] == 4,
+				      "a click in the privilege column raises four choices");
+				check([[[menu itemAtIndex:0] title] isEqual:@"Read & Write"]
+				      && [[[menu itemAtIndex:1] title] isEqual:@"Read only"]
+				      && [[[menu itemAtIndex:2] title] isEqual:@"Write only"]
+				      && [[[menu itemAtIndex:3] title] isEqual:@"No access"],
+				      "named the four ways a POSIX mode can answer");
+				check([[menu itemAtIndex:1] tag] == 1,
+				      "and each item carries the index that is its mode");
+				check([[menu itemAtIndex:0] state] == NSOnState
+				      && [[menu itemAtIndex:3] state] == NSOffState,
+				      "the choice that is true is the one ticked");
+				check([window cg_privilegeIndexForRow:0] == 0,
+				      "a writable file's owner row starts on Read & Write");
+
+				/* 0600 -> the OWNER's bits only; the group's and everyone's r bits stay as they were. */
+				(void)chmod([file fileSystemRepresentation], 0640);
+				[window reload];
+				check((modeOf(file) & 0777) == 0640, "the file starts at 0640");
+				[window cg_applyPrivilegeIndex:3 forRow:0];
+				check((modeOf(file) & 0700) == 0, "choosing No access for the owner clears the owner's three bits");
+				check((modeOf(file) & 0077) == 0040, "and leaves the group's and everyone's bits alone");
+				check([[[window info] permissionSummary] isEqual:@"You have no access"],
+				      "the summary follows the mode");
+				check([window cg_privilegeIndexForRow:0] == 3, "and the row now says No access");
+				check([[[window cg_privilegeMenuForRow:0] itemAtIndex:3] state] == NSOnState,
+				      "the menu ticks No access for it");
+				[window cg_applyPrivilegeIndex:0 forRow:0];
+				check((modeOf(file) & 0700) == 0600, "choosing Read & Write puts the owner's two bits back");
+				check((modeOf(file) & 0077) == 0040, "and still leaves the rest alone");
 			}
 
 			/* 6c. THE PREVIEW IS THE PICTURE ITSELF: its own shape, and the pane's box on its long side. A text file

@@ -369,6 +369,83 @@ static NSString *WSWhereNameForPath(NSString *path)
 	return @"No access";
 }
 
+/* **THE FOUR CHOICES, IN THE POPUP'S ORDER.** Index 0 is the pair of bits (rw), 1 and 2 are one bit each, and 3 is
+ * none of them — the order the reference file manager's own menu uses. */
++ (NSArray *)privilegeTitles
+{
+	return [NSArray arrayWithObjects:@"Read & Write", @"Read only", @"Write only", @"No access", nil];
+}
+
+- (NSInteger)privilegeIndexForClass:(NSInteger)whichClass
+{
+	mode_t bits;
+
+	if (_mixedPermissions) {
+		return NSNotFound;
+	}
+	if (whichClass == 0) {
+		bits = (mode_t)((_mode >> 6) & 7);
+	} else if (whichClass == 1) {
+		bits = (mode_t)((_mode >> 3) & 7);
+	} else {
+		bits = (mode_t)(_mode & 7);
+	}
+	if ((bits & 6) == 6) {
+		return 0;
+	}
+	if ((bits & 4) != 0) {
+		return 1;
+	}
+	if ((bits & 2) != 0) {
+		return 2;
+	}
+	return 3;
+}
+
++ (mode_t)modeForPrivilegeIndex:(NSInteger)index class:(NSInteger)whichClass
+{
+	mode_t bits;
+	NSInteger shift;
+
+	switch (index) {
+	case 0: bits = 6; break;
+	case 1: bits = 4; break;
+	case 2: bits = 2; break;
+	case 3: bits = 0; break;
+	default: return (mode_t)0;
+	}
+	shift = (whichClass == 0) ? 6 : ((whichClass == 1) ? 3 : 0);
+	return (mode_t)(bits << shift);
+}
+
++ (BOOL)cg_setPrivilegeIndex:(NSInteger)index forClass:(NSInteger)whichClass paths:(NSArray *)paths
+{
+	mode_t replacement = [self modeForPrivilegeIndex:index class:whichClass];
+	NSInteger shift = (whichClass == 0) ? 6 : ((whichClass == 1) ? 3 : 0);
+	/* **THE CLASS'S THREE BITS, NOT THE TWO THE MENU NAMES.** "Read only" means read and NOT execute — a file that was
+	 * rwx and is set to read-only is r--, not r-x — so the execute bit is cleared with the write one. */
+	mode_t mask = (mode_t)(7 << shift);
+	BOOL ok = YES;
+	NSUInteger i;
+
+	if (index < 0 || index > 3 || [paths count] == 0) {
+		return NO;
+	}
+	for (i = 0; i < [paths count]; i++) {
+		NSString *path = [paths objectAtIndex:i];
+		struct stat s;
+
+		if (stat([path fileSystemRepresentation], &s) != 0) {
+			ok = NO;
+			continue;
+		}
+		if (chmod([path fileSystemRepresentation], (s.st_mode & ~mask) | replacement) != 0) {
+			ok = NO;
+		}
+	}
+	return ok;
+}
+
 + (NSString *)summaryForMode:(mode_t)mode
 {
 	if ((mode & S_IRUSR) != 0 && (mode & S_IWUSR) != 0) {

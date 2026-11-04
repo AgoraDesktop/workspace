@@ -457,6 +457,15 @@ The **comment** goes into the enclosing folder's `.agora` sidecar, keyed by name
 what a person decided about a name; it is saved as it is typed, because a window closed by its title bar never sends the
 field an "end editing".
 
+**THE PRIVILEGES ARE EDITABLE, AND EDITING ONE IS A CHMOD.** A click in the Sharing & Permissions table's Privilege
+column raises the four choices a POSIX mode can say — Read & Write, Read only, Write only, No access — with the true one
+ticked, and the pick replaces that class's three bits and leaves the rest of the mode alone (`WSItemInfo
+-cg_setPrivilegeIndex:forClass:paths:`, so the write can be checked without a window). The row IS the class: 0 the owner,
+1 the group, 2 everyone. There are no ACLs here, so there is no +/− and no gear — the popup is the whole of what a POSIX
+mode can be told. **The column is a plain field and the menu is an ordinary one**, not an `NSPopUpButtonCell`:
+MEASURED in a session, that cell draws its title one line-height low inside a flipped table and the words came out cut in
+half by the row beneath them.
+
 **THE PREVIEW IS THE PICTURE ITSELF.** A preview pane is not a grid cell: `WSItemIcons -cg_pictureForPath:box:` answers
 the picture at its own shape — no square's transparent bands — decoded at the WINDOW's scale (`userSpaceScaleFactor`), so
 the compositor is not stretching 128 pixels over 170, and the pane's body takes the picture's height, so the window grows

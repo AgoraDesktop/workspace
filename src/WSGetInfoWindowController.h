@@ -28,6 +28,7 @@
 
 @class NSButton;
 @class NSImageView;
+@class NSMenu;
 @class NSTextField;
 @class NSTextView;
 @class WSItemInfo;
@@ -67,6 +68,7 @@ NS_ASSUME_NONNULL_BEGIN
 	NSTextField *_permissionSummary;
 	NSTableView *_permissionTable;
 	NSView *_previewBody;			/* RETAINED: the preview section's body, whose height the picture sets */
+	NSInteger _cgMenuRow;			/* the row the privilege menu was opened for */
 	NSArray *_permissions;			/* RETAINED: NSArray<WSItemPermission *>, the table's rows */
 }
 
@@ -102,6 +104,12 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSImageView *)cg_previewView;
 - (NSButton *)cg_lockedButton;
 - (NSUInteger)cg_sectionCount;
+/* The permissions table's editing: which privilege a row is showing, and choosing another (which is a chmod on every
+ * selected path). Row 0 is the owner, 1 the group, 2 everyone. */
+- (NSInteger)cg_privilegeIndexForRow:(NSInteger)row;
+- (void)cg_applyPrivilegeIndex:(NSInteger)index forRow:(NSInteger)row;
+/* The menu a click in the Privilege column raises, with the true choice ticked — readable without popping it up. */
+- (NSMenu *)cg_privilegeMenuForRow:(NSInteger)row;
 /* Which sections are folded, and the fold itself — the same path a click on a band takes, minus the event. */
 - (BOOL)cg_isSectionCollapsedAtIndex:(NSUInteger)index;
 - (void)cg_setSectionAtIndex:(NSUInteger)index collapsed:(BOOL)collapsed;
