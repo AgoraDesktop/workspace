@@ -109,7 +109,7 @@ target_include_directories(Workspace PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
 # a .tar.bz2 and pass.
 add_library(agora_archive_codecs INTERFACE)
 target_compile_definitions(agora_archive_codecs INTERFACE ${AGORA_ARCHIVE_CODEC_DEFINITIONS})
-target_link_libraries(agora_archive_codecs INTERFACE ${AGORA_ARCHIVE_CODEC_LIBRARIES})
+target_link_libraries(agora_archive_codecs INTERFACE ZLIB::ZLIB ${AGORA_ARCHIVE_CODEC_LIBRARIES})
 
 target_link_libraries(Workspace PRIVATE
     AgoraApp::App

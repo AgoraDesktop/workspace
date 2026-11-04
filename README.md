@@ -23,12 +23,17 @@ Move/Copy, Move to Trash, Put Back, Empty Trash and Compress, with Undo, a progr
 surfaces answer the same three — a file window's grid (`WSIconView`), the desktop (`WSDesktopView`), the List
 (`WSListView`) and the Columns (`WSColumnView`, whose menu is the browser's own right-click):
 
-- **one icon**: Get Info, [Extract Archive], —, Cut, Copy, —, Rename, Compress, Move to Trash;
-- **one icon of several held**: Get Info, [Extract Archive], New Folder with Selection, Compress, —, Cut, Copy, —, Move to
-  Trash (no Rename: one name for many is a question, not a command);
+- **one icon**: Get Info, [Extract Archive], —, Cut, Copy, —, Rename, Compression ▸, Move to Trash;
+- **one icon of several held**: Get Info, [Extract Archive], New Folder with Selection, Compression ▸, —, Cut, Copy, —,
+  Move to Trash (no Rename: one name for many is a question, not a command);
 
 `[Extract Archive]` is the one row in brackets, and it is **asked for rather than drawn grey**: the menu puts the question
-to the target (`-cg_selectionCanBeExtracted`) and the row exists only when every selected item is a `.zip`.
+to the target (`-cg_selectionCanBeExtracted`) and the row exists only when every selected item is an archive.
+
+**`Compression ▸` IS A SUBMENU BECAUSE THERE IS MORE THAN ONE ARCHIVE.** Five leaves — Zip, Tar, Tar.gz, Tar.bz2, Tar.xz —
+each the *same* command with the format as its tag, so a target implements one selector rather than five and a probe reads
+the choice off the item. A format this build cannot write (no bzip2, no liblzma) is grey rather than a click that fails.
+The File menu carries the same submenu.
 - **the empty grid**: New Folder, —, Paste, Select All.
 
 A click on an icon that is NOT part of the held group narrows the selection to it first, and a click on the background
@@ -439,7 +444,13 @@ one can be made; an explicit root is what the probe uses), uniquifies a name alr
 plist under `.putback/` with the original path. `-putBackItem:` moves it home and removes the record; `-emptyTrash:`
 removes the items and the records. Empty is deliberately NOT undoable.
 
-**COMPRESS IS A ZIP WRITTEN HERE, AND STREAMED.** The archive is appended to as it is made — local header, then the
+**COMPRESS WRITES FIVE ARCHIVES, AND THEY ARE ALL WRITTEN HERE.** Zip (store and raw deflate), Tar (ustar headers, data
+padded to the block, GNU's `././@LongLink` when a name will not fit), and the same tar through gzip, bzip2 or liblzma —
+the wrapper being the only difference, so the rules are one set: streamed rather than buffered, each entry's own mode and
+time, symlinks stored as links, the bar counting files, Undo removing the archive. What this writes, the extractor above
+reads back, and `tar`/`unzip` agree.
+
+**AND THE ZIP IS THE SAME STORY.** The archive is appended to as it is made — local header, then the
 entry's bytes through zlib's raw deflate or straight through, then the header patched in place with the CRC and both
 sizes — so a file is never held in memory whole: MEASURED, a 191 MB tree cost a peak RSS of **409 MB** when the
 archive and every file were buffered and costs **27 MB** now, in **193 ms** rather than 5.6 s, because a file whose

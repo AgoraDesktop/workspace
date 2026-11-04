@@ -1187,7 +1187,7 @@ int main(void)
 		rows = (menu != nil) ? [menu itemArray] : nil;
 		check([rows count] == 8, "a right-click on an icon answers a menu of eight rows");
 		if ([rows count] == 8) {
-			NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"Cut", @"Copy", @"Rename", @"Compress",
+			NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"Cut", @"Copy", @"Rename", @"Compression",
 									   @"Move to Trash", nil];
 			NSInteger want[8] = { 0, -1, 1, 2, -1, 3, 4, 5 };	/* -1 is a separator */
 			NSInteger i;
@@ -1202,14 +1202,14 @@ int main(void)
 					shape = shape && [[item title] isEqual:[titles objectAtIndex:(NSUInteger)want[i]]];
 				}
 			}
-			check(shape, "Get Info | Cut, Copy | Rename, Compress, Move to Trash, in that order with those separators");
+			check(shape, "Get Info | Cut, Copy | Rename, Compression, Move to Trash, in that order with those separators");
 			check([[rows objectAtIndex:0] action] == @selector(getInfo:)
 			      && [[rows objectAtIndex:2] action] == @selector(cut:)
 			      && [[rows objectAtIndex:3] action] == @selector(copy:)
 			      && [[rows objectAtIndex:5] action] == @selector(rename:)
-			      && [[rows objectAtIndex:6] action] == @selector(compress:)
+			      && [[rows objectAtIndex:6] action] == NULL && [[rows objectAtIndex:6] submenu] != nil
 			      && [[rows objectAtIndex:7] action] == @selector(moveToTrash:),
-			      "and each row sends its own command");
+			      "and each row sends its own command, except Compression, which is the submenu of the five");
 			check([[rows objectAtIndex:0] target] == view && [[rows objectAtIndex:7] target] == view,
 			      "every row is aimed at the view the click landed in, not left to the responder chain");
 
@@ -1277,7 +1277,7 @@ int main(void)
 			      "a right-click on one of several held icons keeps the group");
 			check([groupRows count] == 8, "and answers the group's own menu");
 			if ([groupRows count] == 8) {
-				NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"New Folder with Selection", @"Compress",
+				NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"New Folder with Selection", @"Compression",
 									   @"Cut", @"Copy", @"Move to Trash", nil];
 				NSInteger want[8] = { 0, 1, 2, -1, 3, 4, -1, 5 }; /* -1 is a separator */
 				NSInteger i;
@@ -1292,11 +1292,11 @@ int main(void)
 						shape = shape && [[item title] isEqual:[titles objectAtIndex:(NSUInteger)want[i]]];
 					}
 				}
-				check(shape, "Get Info, New Folder with Selection, Compress | Cut, Copy | Move to Trash");
+				check(shape, "Get Info, New Folder with Selection, Compression | Cut, Copy | Move to Trash");
 				check([[groupRows objectAtIndex:1] action] == @selector(newFolderWithSelection:)
-				      && [[groupRows objectAtIndex:2] action] == @selector(compress:)
+				      && [[groupRows objectAtIndex:2] submenu] != nil
 				      && [[groupRows objectAtIndex:7] action] == @selector(moveToTrash:),
-				      "and the group's rows send the group's commands");
+				      "and the group's rows send the group's commands, Compression as the submenu");
 				check([[groupRows objectAtIndex:1] target] == view,
 				      "aimed at the grid the click landed in");
 				check([grouped indexOfItemWithTitle:@"Rename"] == (NSInteger)NSNotFound,
@@ -1326,7 +1326,7 @@ int main(void)
 					check([[view selectedIndexes] count] == 1 && [view selectedIndex] == third
 					      && [menu numberOfItems] == 8
 					      && [menu indexOfItemWithTitle:@"Rename"] != (NSInteger)NSNotFound
-					      && [menu indexOfItemWithTitle:@"Compress"] != (NSInteger)NSNotFound,
+					      && [menu indexOfItemWithTitle:@"Compression"] != (NSInteger)NSNotFound,
 					      "and a right-click outside the group narrows to that icon's own menu");
 				}
 			}
@@ -1461,7 +1461,7 @@ int main(void)
 				NSMenu *desktopMenu = [desktop menuForEvent:mouse(NSRightMouseDown, click)];
 
 				check(desktopMenu != nil && [desktopMenu numberOfItems] == 8,
-				      "the desktop's right-click raises the same eight-row menu, Compress among them");
+				      "the desktop's right-click raises the same eight-row menu, Compression among them");
 				check([[desktop cg_selection] count] == 1,
 				      "and it selects the icon under the pointer first");
 

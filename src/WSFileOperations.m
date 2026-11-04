@@ -1182,6 +1182,20 @@ static BOOL fn_tar_skip(AGTarSource *source, uint64_t length)
 	return YES;
 }
 
+/* THE SAME FIELD, WRITTEN: `length - 1` octal digits and the NUL tar's own headers use. */
+static void fn_tar_octal_write(unsigned char *field, size_t length, uint64_t value)
+{
+	char text[32];
+	size_t digits = length - 1;
+	size_t i;
+
+	snprintf(text, sizeof text, "%0*llo", (int)digits, (unsigned long long)value);
+	for (i = 0; i < digits; i++) {
+		field[i] = (unsigned char)(text[i] != '\0' ? text[i] : '0');
+	}
+	field[digits] = '\0';
+}
+
 /* AN OCTAL FIELD, WHICH IS WHAT A TAR HEADER HOLDS — with the base-256 escape GNU tar uses for very large sizes. */
 static uint64_t fn_tar_octal(const unsigned char *field, size_t length)
 {
@@ -1258,6 +1272,266 @@ static void fn_tar_pax_value(const unsigned char *data, size_t length, const cha
 		}
 		at += (size_t)recordLength;
 	}
+}
+
+/* ---- a TAR writer: 512-byte headers, data padded to the block, and the wrapper a format asks for -------------
+
+ * **THE WRITER AND THE READER ARE ONE CONVERSATION.** The header fields are the ones `cg_extractTar:` reads — mode,
+ * mtime, typeflag, link name, ustar prefix — and a name that will not fit in a hundred bytes is written the way GNU tar
+ * writes it, as a `././@LongLink` entry the reader picks up. What this writes, this reads back: the round trip is the
+ * test, and it is also what makes a `.tar` from this shell openable by any other one.
+ *
+ * **AND THE DATA IS STREAMED THROUGH THE CODEC USED TO MAKE THE WRAPPER.** A `.tar.gz` is a gzip stream of tar bytes;
+ * the tar writer hand its blocks to a sink that deflates them, and only the block being written is in memory. A build
+ * without bzip2 or liblzma can still write `.zip`, `.tar` and `.tar.gz`, and `+cg_archiveFormatIsAvailable:` is what the
+ * menu asks before it offers the others. */
+
+#define AGTAR_BLOCK 512
+
+typedef struct {
+	NSInteger format;
+	FILE *file;
+	z_stream zip;
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+	bz_stream bz;
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+	lzma_stream lz;
+#endif
+	BOOL open;
+} AGTarSink;
+
+static BOOL fn_tar_sink_open(AGTarSink *sink, NSString *path, NSInteger format, NSError **error)
+{
+	memset(sink, 0, sizeof *sink);
+	sink->format = format;
+	sink->file = fopen([path fileSystemRepresentation], "wb");
+	if (sink->file == NULL) {
+		if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+		return NO;
+	}
+	if (format == WSArchiveFormatTarGzip) {
+		if (deflateInit2(&sink->zip, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+			if (error != NULL) *error = fn_error(37, @"zlib could not start");
+			return NO;
+		}
+	} else if (format == WSArchiveFormatTarBzip2) {
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+		if (BZ2_bzCompressInit(&sink->bz, 9, 0, 0) != BZ_OK) {
+			if (error != NULL) *error = fn_error(37, @"bzip2 could not start");
+			return NO;
+		}
+#else
+		if (error != NULL) *error = fn_error(37, @"this build was made without bzip2, so .tar.bz2 cannot be written");
+		return NO;
+#endif
+	} else if (format == WSArchiveFormatTarXz) {
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+		if (lzma_easy_encoder(&sink->lz, 6, LZMA_CHECK_CRC64) != LZMA_OK) {
+			if (error != NULL) *error = fn_error(37, @"xz could not start");
+			return NO;
+		}
+#else
+		if (error != NULL) *error = fn_error(37, @"this build was made without liblzma, so .tar.xz cannot be written");
+		return NO;
+#endif
+	}
+	sink->open = YES;
+	return YES;
+}
+
+/* THE BYTES THE TAR WRITER PRODUCES, ON THEIR WAY OUT. Each codec takes the block and writes whatever it makes of it. */
+static BOOL fn_tar_sink_write(AGTarSink *sink, const unsigned char *bytes, size_t length, NSError **error)
+{
+	if (sink->format == WSArchiveFormatTar) {
+		if (fwrite(bytes, 1, length, sink->file) != length) {
+			if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+			return NO;
+		}
+		return YES;
+	}
+	if (sink->format == WSArchiveFormatTarGzip) {
+		unsigned char out[AGUNZIP_CHUNK];
+
+		sink->zip.next_in = (Bytef *)bytes;
+		sink->zip.avail_in = (uInt)length;
+		do {
+			size_t made;
+
+			sink->zip.next_out = out;
+			sink->zip.avail_out = (uInt)sizeof out;
+			if (deflate(&sink->zip, Z_NO_FLUSH) == Z_STREAM_ERROR) {
+				if (error != NULL) *error = fn_error(37, @"zlib failed");
+				return NO;
+			}
+			made = sizeof out - sink->zip.avail_out;
+			if (made > 0 && fwrite(out, 1, made, sink->file) != made) {
+				if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+				return NO;
+			}
+		} while (sink->zip.avail_out == 0);
+		return YES;
+	}
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+	if (sink->format == WSArchiveFormatTarBzip2) {
+		char out[AGUNZIP_CHUNK];
+
+		sink->bz.next_in = (char *)bytes;
+		sink->bz.avail_in = (unsigned int)length;
+		for (;;) {
+			size_t made;
+
+			sink->bz.next_out = out;
+			sink->bz.avail_out = (unsigned int)sizeof out;
+			if (BZ2_bzCompress(&sink->bz, BZ_RUN) != BZ_RUN_OK) {
+				if (error != NULL) *error = fn_error(37, @"bzip2 failed");
+				return NO;
+			}
+			made = sizeof out - sink->bz.avail_out;
+			if (made > 0 && fwrite(out, 1, made, sink->file) != made) {
+				if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+				return NO;
+			}
+			if (sink->bz.avail_in == 0) {
+				break;
+			}
+		}
+		return YES;
+	}
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+	if (sink->format == WSArchiveFormatTarXz) {
+		unsigned char out[AGUNZIP_CHUNK];
+
+		sink->lz.next_in = bytes;
+		sink->lz.avail_in = length;
+		do {
+			size_t made;
+
+			sink->lz.next_out = out;
+			sink->lz.avail_out = sizeof out;
+			if (lzma_code(&sink->lz, LZMA_RUN) != LZMA_OK) {
+				if (error != NULL) *error = fn_error(37, @"xz failed");
+				return NO;
+			}
+			made = sizeof out - sink->lz.avail_out;
+			if (made > 0 && fwrite(out, 1, made, sink->file) != made) {
+				if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+				return NO;
+			}
+		} while (sink->lz.avail_in > 0);
+		return YES;
+	}
+#endif
+	if (error != NULL) *error = fn_error(37, @"this build cannot write that format");
+	return NO;
+}
+
+/* THE LAST BLOCK OF EACH CODEC, AND THEN THE FILE.** A compressed tar is not finished until its stream is: a `.tar.gz`
+ * whose deflate stream is left open is a file that `gunzip` refuses. */
+static BOOL fn_tar_sink_close(AGTarSink *sink, NSError **error)
+{
+	BOOL ok = YES;
+
+	if (!sink->open) {
+		return NO;
+	}
+	if (sink->format == WSArchiveFormatTarGzip) {
+		unsigned char out[AGUNZIP_CHUNK];
+		int zr;
+
+		do {
+			size_t made;
+
+			sink->zip.next_out = out;
+			sink->zip.avail_out = (uInt)sizeof out;
+			zr = deflate(&sink->zip, Z_FINISH);
+			made = sizeof out - sink->zip.avail_out;
+			if (made > 0 && fwrite(out, 1, made, sink->file) != made) {
+				ok = NO;
+			}
+		} while (zr == Z_OK && ok);
+		deflateEnd(&sink->zip);
+	} else if (sink->format == WSArchiveFormatTarBzip2) {
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+		char out[AGUNZIP_CHUNK];
+		int br;
+
+		do {
+			size_t made;
+
+			sink->bz.next_out = out;
+			sink->bz.avail_out = (unsigned int)sizeof out;
+			br = BZ2_bzCompress(&sink->bz, BZ_FINISH);
+			made = sizeof out - sink->bz.avail_out;
+			if (made > 0 && fwrite(out, 1, made, sink->file) != made) {
+				ok = NO;
+			}
+		} while (br == BZ_FINISH_OK && ok);
+		BZ2_bzCompressEnd(&sink->bz);
+#endif
+	} else if (sink->format == WSArchiveFormatTarXz) {
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+		unsigned char out[AGUNZIP_CHUNK];
+		lzma_ret xr;
+
+		do {
+			size_t made;
+
+			sink->lz.next_out = out;
+			sink->lz.avail_out = sizeof out;
+			xr = lzma_code(&sink->lz, LZMA_FINISH);
+			made = sizeof out - sink->lz.avail_out;
+			if (made > 0 && fwrite(out, 1, made, sink->file) != made) {
+				ok = NO;
+			}
+		} while (xr == LZMA_OK && ok);
+		lzma_end(&sink->lz);
+#endif
+	}
+	if (fflush(sink->file) != 0) {
+		ok = NO;
+	}
+	if (fclose(sink->file) != 0) {
+		ok = NO;
+	}
+	sink->file = NULL;
+	sink->open = NO;
+	if (!ok && error != NULL) {
+		*error = fn_error(37, @"the archive could not be written");
+	}
+	return ok;
+}
+
+/* ONE HEADER BLOCK, FILLED THE WAY THE READER READS IT — with the ustar prefix when the name is too long for the name
+ * field and short enough for the pair, and GNU's `././@LongLink` before it when it is not. */
+static void fn_tar_fill_header(unsigned char *block, const char *name, uint64_t size, mode_t mode, time_t mtime,
+			       char type, const char *linkName)
+{
+	unsigned sum = 0;
+	size_t i;
+
+	memset(block, 0, AGTAR_BLOCK);
+	strncpy((char *)block, name, 99);
+	fn_tar_octal_write(block + 100, 8, mode & 07777);
+	fn_tar_octal_write(block + 108, 8, 0);
+	fn_tar_octal_write(block + 116, 8, 0);
+	fn_tar_octal_write(block + 124, 12, size);
+	fn_tar_octal_write(block + 136, 12, (uint64_t)mtime);
+	block[156] = (unsigned char)type;
+	if (linkName != NULL) {
+		strncpy((char *)block + 157, linkName, 99);
+	}
+	memcpy(block + 257, "ustar", 5);
+	block[262] = '\0';
+	block[263] = '0';
+	block[264] = '0';
+	memset(block + 148, ' ', 8);
+	for (i = 0; i < AGTAR_BLOCK; i++) {
+		sum += block[i];
+	}
+	fn_tar_octal_write(block + 148, 7, sum);
+	block[155] = ' ';
 }
 
 /* ---- THE OPERATIONS -------------------------------------------------------------------------- */
@@ -1616,6 +1890,20 @@ static unsigned long long fn_count_entries_at_path(NSString *path)
 
 - (NSString *)compressPaths:(NSArray *)paths inDirectory:(NSString *)directory error:(NSError **)error
 {
+	return [self compressPaths:paths inDirectory:directory format:WSArchiveFormatZip error:error];
+}
+
+- (NSString *)compressPaths:(NSArray *)paths inDirectory:(NSString *)directory format:(WSArchiveFormat)format
+		      error:(NSError **)error
+{
+	if (format != WSArchiveFormatZip) {
+		return [self cg_compressTarPaths:paths inDirectory:directory format:format error:error];
+	}
+	return [self cg_compressZipPaths:paths inDirectory:directory error:error];
+}
+
+- (NSString *)cg_compressZipPaths:(NSArray *)paths inDirectory:(NSString *)directory error:(NSError **)error
+{
 	NSString *baseName = @"Archive";
 	NSString *archivePath;
 	AGZipBuilder *builder;
@@ -1671,6 +1959,258 @@ static unsigned long long fn_count_entries_at_path(NSString *path)
 	return archivePath;
 }
 
+
+/* ---- WRITING THE TAR FAMILY -------------------------------------------------------------------- */
+
+/* **THE WALK, WRITING AS IT GOES.** A directory is a header with a trailing slash; a symlink is a header whose link name is
+ * its target; a file is a header, its bytes as blocks, and the padding that makes the next header start on a 512-byte
+ * boundary. A name too long for the hundred-byte field is written the way GNU tar writes it — a `././@LongLink` entry
+ * holding the name, then the entry with a truncated one — because that is what the reader, and every other tar, expects. */
+- (BOOL)cg_writeTarPath:(NSString *)path entryName:(NSString *)entryName sink:(AGTarSink *)sink
+		  written:(NSUInteger *)written total:(NSUInteger)total error:(NSError **)error
+{
+	struct stat st;
+	unsigned char block[AGTAR_BLOCK];
+	const char *name = [entryName UTF8String];
+
+	if (lstat([path fileSystemRepresentation], &st) != 0) {
+		if (error != NULL) *error = fn_error(12, [NSString stringWithFormat:@"%@ is not there", path]);
+		return NO;
+	}
+	if (strlen(name) > 99) {
+		size_t length = strlen(name) + 1;
+
+		fn_tar_fill_header(block, "././@LongLink", length, 0644, time(NULL), 'L', NULL);
+		if (!fn_tar_sink_write(sink, block, AGTAR_BLOCK, error)) {
+			return NO;
+		}
+		{
+			unsigned char *padded = calloc(1, (length + AGTAR_BLOCK - 1) / AGTAR_BLOCK * AGTAR_BLOCK);
+
+			if (padded == NULL) {
+				if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+				return NO;
+			}
+			memcpy(padded, name, length);
+			if (!fn_tar_sink_write(sink, padded, (length + AGTAR_BLOCK - 1) / AGTAR_BLOCK * AGTAR_BLOCK, error)) {
+				free(padded);
+				return NO;
+			}
+			free(padded);
+		}
+	}
+	if (S_ISDIR(st.st_mode)) {
+		NSString *directoryName = [entryName hasSuffix:@"/"] ? entryName : [entryName stringByAppendingString:@"/"];
+		DIR *directory;
+		struct dirent *entry;
+		NSMutableArray *children;
+		NSUInteger c;
+
+		fn_tar_fill_header(block, [directoryName UTF8String], 0, st.st_mode, st.st_mtime, '5', NULL);
+		if (!fn_tar_sink_write(sink, block, AGTAR_BLOCK, error)) {
+			return NO;
+		}
+		children = [[NSMutableArray alloc] init];
+		directory = opendir([path fileSystemRepresentation]);
+		if (directory == NULL) {
+			[children release];
+			if (error != NULL) *error = fn_error(12, [NSString stringWithFormat:@"%@ could not be read", path]);
+			return NO;
+		}
+		while ((entry = readdir(directory)) != NULL) {
+			if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+				continue;
+			}
+			[children addObject:[NSString stringWithUTF8String:entry->d_name]];
+		}
+		closedir(directory);
+		for (c = 0; c < [children count]; c++) {
+			NSString *child = [children objectAtIndex:c];
+			NSString *childPath = [path stringByAppendingPathComponent:child];
+			NSString *childName = [directoryName stringByAppendingString:child];
+
+			if (![self cg_writeTarPath:childPath entryName:childName sink:sink written:written total:total
+					    error:error]) {
+				[children release];
+				return NO;
+			}
+		}
+		[children release];
+		return YES;
+	}
+	if (S_ISLNK(st.st_mode)) {
+		char target[PATH_MAX];
+		ssize_t length = readlink([path fileSystemRepresentation], target, sizeof target);
+
+		if (length < 0) {
+			if (error != NULL) *error = fn_error(12, [NSString stringWithFormat:@"%@ could not be read", path]);
+			return NO;
+		}
+		target[length] = '\0';
+		fn_tar_fill_header(block, name, 0, st.st_mode, st.st_mtime, '2', target);
+		if (!fn_tar_sink_write(sink, block, AGTAR_BLOCK, error)) {
+			return NO;
+		}
+		if (written != NULL) {
+			(*written)++;
+			[self report:*written total:total path:path];
+		}
+		return YES;
+	}
+	{
+		FILE *from = fopen([path fileSystemRepresentation], "rb");
+		unsigned char *buffer;
+		uint64_t left = (uint64_t)st.st_size;
+		uint64_t padded;
+
+		if (from == NULL) {
+			if (error != NULL) *error = fn_error(12, [NSString stringWithFormat:@"%@ could not be read", path]);
+			return NO;
+		}
+		fn_tar_fill_header(block, name, (uint64_t)st.st_size, st.st_mode, st.st_mtime, '0', NULL);
+		if (!fn_tar_sink_write(sink, block, AGTAR_BLOCK, error)) {
+			fclose(from);
+			return NO;
+		}
+		buffer = malloc(AGUNZIP_CHUNK);
+		while (left > 0) {
+			size_t want = (size_t)((left < AGUNZIP_CHUNK) ? left : AGUNZIP_CHUNK);
+
+			if (buffer == NULL || fread(buffer, 1, want, from) != want ||
+			    !fn_tar_sink_write(sink, buffer, want, error)) {
+				free(buffer);
+				fclose(from);
+				if (error != NULL) *error = fn_error(37, @"the archive could not be written");
+				return NO;
+			}
+			left -= want;
+		}
+		free(buffer);
+		fclose(from);
+		if (written != NULL) {
+			(*written)++;
+			[self report:*written total:total path:path];
+		}
+		padded = ((uint64_t)st.st_size + AGTAR_BLOCK - 1) / AGTAR_BLOCK * AGTAR_BLOCK - (uint64_t)st.st_size;
+		if (padded > 0) {
+			unsigned char zeros[AGTAR_BLOCK];
+
+			memset(zeros, 0, sizeof zeros);
+			while (padded > 0) {
+				size_t want = (size_t)((padded < AGTAR_BLOCK) ? padded : AGTAR_BLOCK);
+
+				if (!fn_tar_sink_write(sink, zeros, want, error)) {
+					return NO;
+				}
+				padded -= want;
+			}
+		}
+		return YES;
+	}
+}
+
+- (NSString *)cg_compressTarPaths:(NSArray *)paths inDirectory:(NSString *)directory format:(WSArchiveFormat)format
+			    error:(NSError **)error
+{
+	NSString *baseName = @"Archive";
+	NSString *archivePath;
+	AGTarSink sink;
+	NSUInteger done = 0;
+	NSUInteger total = 0;
+	NSUInteger i;
+	BOOL ok = YES;
+
+	if ([paths count] == 0) {
+		if (error != NULL) *error = fn_error(20, @"there is nothing to compress");
+		return nil;
+	}
+	if ([paths count] == 1) {
+		baseName = [[paths objectAtIndex:0] lastPathComponent];
+		if ([[baseName pathExtension] length] > 0) {
+			baseName = [baseName stringByDeletingPathExtension];
+		}
+	}
+	archivePath = [directory stringByAppendingPathComponent:
+		fn_unique_name(directory, [baseName stringByAppendingString:[[self class] cg_suffixForArchiveFormat:format]])];
+	for (i = 0; i < [paths count]; i++) {
+		total += (NSUInteger)fn_count_entries_at_path([paths objectAtIndex:i]);
+	}
+	if (!fn_tar_sink_open(&sink, archivePath, format, error)) {
+		return nil;
+	}
+	for (i = 0; i < [paths count] && ok; i++) {
+		NSString *path = [paths objectAtIndex:i];
+
+		if (![self cg_writeTarPath:path entryName:[path lastPathComponent] sink:&sink written:&done total:total
+				     error:error]) {
+			ok = NO;
+			break;
+		}
+	}
+	if (ok) {
+		/* **TWO ZERO BLOCKS END A TAR**, which is how a reader knows the archive is complete rather than truncated. */
+		unsigned char zeros[AGTAR_BLOCK];
+
+		memset(zeros, 0, sizeof zeros);
+		if (!fn_tar_sink_write(&sink, zeros, AGTAR_BLOCK, error) ||
+		    !fn_tar_sink_write(&sink, zeros, AGTAR_BLOCK, error)) {
+			ok = NO;
+		}
+	}
+	if (!fn_tar_sink_close(&sink, error)) {
+		ok = NO;
+	}
+	if (!ok) {
+		(void)[[NSFileManager defaultManager] removeItemAtPath:archivePath error:NULL];
+		return nil;
+	}
+	[self registerUndo:@"Compress" handler:^(id target) {
+		(void)[[NSFileManager defaultManager] removeItemAtPath:archivePath error:NULL];
+		(void)target;
+	}];
+	return archivePath;
+}
+
++ (NSString *)cg_suffixForArchiveFormat:(WSArchiveFormat)format
+{
+	switch (format) {
+	case WSArchiveFormatTar: return @".tar";
+	case WSArchiveFormatTarGzip: return @".tar.gz";
+	case WSArchiveFormatTarBzip2: return @".tar.bz2";
+	case WSArchiveFormatTarXz: return @".tar.xz";
+	default: return @".zip";
+	}
+}
+
++ (NSString *)cg_titleForArchiveFormat:(WSArchiveFormat)format
+{
+	switch (format) {
+	case WSArchiveFormatTar: return @"Tar";
+	case WSArchiveFormatTarGzip: return @"Tar.gz";
+	case WSArchiveFormatTarBzip2: return @"Tar.bz2";
+	case WSArchiveFormatTarXz: return @"Tar.xz";
+	default: return @"Zip";
+	}
+}
+
++ (BOOL)cg_archiveFormatIsAvailable:(WSArchiveFormat)format
+{
+	if (format == WSArchiveFormatTarBzip2) {
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+		return YES;
+#else
+		return NO;
+#endif
+	}
+	if (format == WSArchiveFormatTarXz) {
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+		return YES;
+#else
+		return NO;
+#endif
+	}
+	return YES;
+}
 
 /* ---- EXTRACTION ------------------------------------------------------------------------------- */
 

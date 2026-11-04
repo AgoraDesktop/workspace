@@ -972,6 +972,79 @@ int main(void)
 		(void)package;
 	}
 
+	/* 10e. WRITING THE TAR FAMILY. Each format is written, unpacked by this tree's own reader and compared with what went
+	 * in — bytes, mode, mtime and the symlink — and the name it takes is the single item's own plus the format's suffix.
+	 * A format this build cannot write is skipped rather than pretended (the suite is built with the codecs here). */
+	{
+		NSArray *formats = [NSArray arrayWithObjects:[NSNumber numberWithInteger:WSArchiveFormatZip],
+							     [NSNumber numberWithInteger:WSArchiveFormatTar],
+							     [NSNumber numberWithInteger:WSArchiveFormatTarGzip],
+							     [NSNumber numberWithInteger:WSArchiveFormatTarBzip2],
+							     [NSNumber numberWithInteger:WSArchiveFormatTarXz], nil];
+		NSUInteger f;
+
+		for (f = 0; f < [formats count]; f++) {
+			WSArchiveFormat format = (WSArchiveFormat)[[formats objectAtIndex:f] integerValue];
+			NSString *source = [base stringByAppendingPathComponent:@"written"];
+			NSString *script = [source stringByAppendingPathComponent:@"run.sh"];
+			NSString *link = [source stringByAppendingPathComponent:@"link.txt"];
+			NSString *nested = [source stringByAppendingPathComponent:@"nested"];
+			NSString *archive;
+			NSString *suffix = [WSFileOperations cg_suffixForArchiveFormat:format];
+			NSString *wantName = [@"written" stringByAppendingString:suffix];
+
+			if (![WSFileOperations cg_archiveFormatIsAvailable:format]) {
+				printf("  (note: %s is not available in this build, skipped\n", [[WSFileOperations cg_titleForArchiveFormat:format] UTF8String]);
+				continue;
+			}
+			[[NSFileManager defaultManager] removeItemAtPath:source error:NULL];
+			makeDirectory(source);
+			makeDirectory(nested);
+			makeFile([source stringByAppendingPathComponent:@"a.txt"], 30);
+			makeFile([nested stringByAppendingPathComponent:@"b.txt"], 4000);
+			makeFile(script, 18);
+			(void)chmod([script fileSystemRepresentation], 0755);
+			(void)symlink("a.txt", [link fileSystemRepresentation]);
+			{
+				struct timespec stamp[2];
+
+				stamp[0].tv_sec = 1600000010;
+				stamp[0].tv_nsec = 0;
+				stamp[1] = stamp[0];
+				(void)utimensat(AT_FDCWD, [script fileSystemRepresentation], stamp, AT_SYMLINK_NOFOLLOW);
+			}
+			archive = [ops compressPaths:[NSArray arrayWithObject:source] inDirectory:base format:format error:NULL];
+			printf("  (note: %s wrote %s\n", [[WSFileOperations cg_titleForArchiveFormat:format] UTF8String],
+			       (archive != nil) ? [[archive lastPathComponent] UTF8String] : "(nil)");
+			check(archive != nil && [[archive lastPathComponent] isEqual:wantName],
+			      "the archive is named for the item and the format");
+			[[NSFileManager defaultManager] removeItemAtPath:source error:NULL];
+			if (archive != nil) {
+				NSString *made = [ops extractArchive:archive error:NULL];
+
+				check(made != nil && exists([made stringByAppendingPathComponent:@"written/a.txt"]),
+				      "and what it wrote is what the reader unpacks");
+				check(made != nil && exists([made stringByAppendingPathComponent:@"written/nested/b.txt"]),
+				      "with the nesting intact");
+				{
+					struct stat st;
+					char target[PATH_MAX];
+					NSString *exe = [made stringByAppendingPathComponent:@"written/run.sh"];
+					ssize_t length = readlink([[made stringByAppendingPathComponent:@"written/link.txt"]
+								   fileSystemRepresentation], target, sizeof target);
+
+					check(stat([exe fileSystemRepresentation], &st) == 0 && (st.st_mode & 07777) == 0755
+					      && st.st_mtime == (time_t)1600000010,
+					      "keeping the mode and the time");
+					check(length > 0 && strncmp(target, "a.txt", (size_t)length) == 0,
+					      "and the symlink is a link again");
+				}
+				[[NSFileManager defaultManager] removeItemAtPath:made error:NULL];
+				[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
+			}
+		}
+	}
+
 	/* 11. ZIP64, MEASURED WITHOUT FOUR GIGABYTES. The format's limits are 4 GB and 65,535 entries, which no suite should
 	 * write; the writer reads its thresholds from `+cg_zip64ByteLimit`, and a probe lowers them so the SAME decision and
 	 * the SAME records are exercised on a few kilobytes. What has to be true is what a reader believes: the central

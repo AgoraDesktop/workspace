@@ -1381,11 +1381,18 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[self finishOperation];
 }
 
+/* **THE FORMAT IS THE ROW'S TAG, AND A CALLER WITH NO ROW GETS A ZIP.** One selector for all five leaves keeps the
+ * command one command; `-tag` is the choice, and a nil sender (a probe, or the old single row) means the format the
+ * shell grew up with. */
 - (void)compress:(id)sender
 {
-	(void)sender;
+	WSArchiveFormat format = WSArchiveFormatZip;
+
+	if ([sender isKindOfClass:[NSMenuItem class]]) {
+		format = (WSArchiveFormat)[(NSMenuItem *)sender tag];
+	}
 	(void)[_fileOperations compressPaths:[self selectedPaths] inDirectory:[self cg_destinationBesideSelection]
-				       error:NULL];
+				      format:format error:NULL];
 	[self finishOperation];
 }
 

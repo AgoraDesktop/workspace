@@ -197,9 +197,11 @@ set_tests_properties(workspace-preferences PROPERTIES ENVIRONMENT
 # is built first and entirely, and every decision this component made is in it: which menus there are, what the
 # application menu offers, where each row is sent, and what `-update`'s enabling walk makes of the result. The ink
 # in the strip is the desktop suite's to measure; this is the menu's.
-add_executable(main_menu main_menu.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m")
+add_executable(main_menu main_menu.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(main_menu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
-target_link_libraries(main_menu PRIVATE AgoraApp::App Foundation::Foundation objc)
+target_link_libraries(main_menu PRIVATE AgoraApp::App Foundation::Foundation objc agora_archive_codecs)
 add_test(NAME workspace-main-menu COMMAND main_menu)
 # The AppKit's own dependencies arrive through the prefix, and DT_RUNPATH is not inherited by a dependency — the
 # same reason libagora-app's tests set this, and it is the imported target's directory rather than a written path.
@@ -221,9 +223,11 @@ set_tests_properties(workspace-menu-bar-clock PROPERTIES ENVIRONMENT
 # UP ARROW function key in the Private Use Area), and drawing a dropdown MEASURES that string and inks its glyph —
 # so this is where a font with nothing for that code point shows up. Opening the menu crashed; this is that,
 # offscreen.
-add_executable(go_menu go_menu.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m")
+add_executable(go_menu go_menu.m "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMainMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(go_menu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
-target_link_libraries(go_menu PRIVATE AgoraApp::App Foundation::Foundation objc)
+target_link_libraries(go_menu PRIVATE AgoraApp::App Foundation::Foundation objc agora_archive_codecs)
 add_test(NAME workspace-go-menu COMMAND go_menu)
 set_tests_properties(workspace-go-menu PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")
@@ -431,14 +435,17 @@ add_executable(column_view column_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(column_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(column_view PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
     Foundation::Foundation
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-column-view COMMAND column_view)
 set_tests_properties(workspace-column-view PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
@@ -555,9 +562,11 @@ set_tests_properties(workspace-get-info PROPERTIES ENVIRONMENT
 # can answer, a single item the ones it can, that the trash's menu is the trash's, and that Compress is on both item menus
 # and on neither background one.
 add_executable(context_menu context_menu.m
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(context_menu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
-target_link_libraries(context_menu PRIVATE AgoraApp::App Foundation::Foundation objc)
+target_link_libraries(context_menu PRIVATE AgoraApp::App Foundation::Foundation objc agora_archive_codecs)
 add_test(NAME workspace-context-menu COMMAND context_menu)
 set_tests_properties(workspace-context-menu PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")

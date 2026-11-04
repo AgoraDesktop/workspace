@@ -17,6 +17,8 @@
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSMenuItem.h>
 
+#import "WSFileOperations.h"
+
 @implementation WSContextMenu
 
 /* **THE TRASH ADDS A ROW, AND THE MENU ASKS THE TARGET RATHER THAN TAKING A FLAG.** Every surface that raises one of
@@ -37,6 +39,32 @@
 {
 	return (target != nil && [target respondsToSelector:@selector(cg_selectionCanBeExtracted)]
 		&& [target cg_selectionCanBeExtracted]);
+}
+
+/* **THE COMPRESSION ROW IS A SUBMENU, BECAUSE THERE IS MORE THAN ONE ARCHIVE.** A single "Compress" row can only mean
+ * the format its author picked; the submenu is where the choice lives, and every leaf is the same command with a tag
+ * naming the format — so a target implements one selector, not five, and a probe reads the choice off the item. */
+static NSMenuItem *WSCompressionRow(id target)
+{
+	NSMenuItem *row = [[[NSMenuItem alloc] initWithTitle:@"Compression" action:NULL keyEquivalent:@""] autorelease];
+	NSMenu *submenu = [[[NSMenu alloc] initWithTitle:@"Compression"] autorelease];
+	WSArchiveFormat format;
+
+	[row setTarget:target];
+	for (format = WSArchiveFormatZip; format <= WSArchiveFormatTarXz; format++) {
+		NSMenuItem *leaf = [[[NSMenuItem alloc]
+			initWithTitle:[NSString stringWithFormat:@"%@ Archive", [WSFileOperations cg_titleForArchiveFormat:format]]
+			      action:@selector(compress:)
+		       keyEquivalent:@""] autorelease];
+
+		[leaf setTarget:target];
+		[leaf setTag:(NSInteger)format];
+		/* A FORMAT THIS BUILD CANNOT WRITE IS GREY, NOT A CLICK THAT FAILS. */
+		[leaf setEnabled:[WSFileOperations cg_archiveFormatIsAvailable:format]];
+		[submenu addItem:leaf];
+	}
+	[row setSubmenu:submenu];
+	return row;
 }
 
 /* ONE ROW: title, selector, and the target that will be asked whether it can answer. Nil is allowed for the target —
@@ -70,11 +98,11 @@
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Rename" action:@selector(rename:) target:target]];
-	/* **COMPRESS IS A ROW HERE AS WELL AS IN THE FILE MENU.** The archive is made beside what it compressed (see
+	/* **COMPRESSION IS A ROW HERE AS WELL AS IN THE FILE MENU.** The archive is made beside what it compressed (see
 	 * `-cg_destinationBesideSelection`), which is exactly the thing a person is looking at when they right-click it; a
 	 * command that is only in the menu bar is a command a person finds by accident. It sits after Rename, where the
 	 * reference file manager keeps it: the rows above it change the item, this one makes something out of it. */
-	[menu addItem:[self cg_row:@"Compress" action:@selector(compress:) target:target]];
+	[menu addItem:WSCompressionRow(target)];
 	if (!trash) {
 		[menu addItem:[self cg_row:@"Move to Trash" action:@selector(moveToTrash:) target:target]];
 	}
@@ -103,9 +131,9 @@
 	}
 	[menu addItem:[self cg_row:@"New Folder with Selection"
 			   action:@selector(newFolderWithSelection:) target:target]];
-	/* **AND A GROUP CAN BE ONE ARCHIVE.** "Compress" beside "New Folder with Selection" is the same idea twice: both make
-	 * one thing out of what is held, and both put it where the selection is. */
-	[menu addItem:[self cg_row:@"Compress" action:@selector(compress:) target:target]];
+	/* **AND A GROUP CAN BE ONE ARCHIVE.** "Compression" beside "New Folder with Selection" is the same idea twice: both
+	 * make one thing out of what is held, and both put it where the selection is. */
+	[menu addItem:WSCompressionRow(target)];
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Cut" action:@selector(cut:) target:target]];
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];

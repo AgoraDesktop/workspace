@@ -257,9 +257,10 @@ int main(void)
 		      "New Workspace Window is the application's own row");
 		check(item != nil && [item isEnabled], "and it is ENABLED, because the application answers it");
 
-		/* AND THE MENUS BESIDE IT ARE A SKELETON: every row names the reference file manager's own selector and none of them has a
-		 * target until the stage that implements it exists. Greyed is the honest state — an enabled row nobody
-		 * answers is a promise the menu cannot keep. */
+		/* **A ROW NOBODY ANSWERS IS GREY.** The menus beside the application's are aimed at the responder chain — the
+		 * window answers most of them — so with no window in this probe they are all unavailable, which is the honest
+		 * picture rather than a promise the menu cannot keep. A SUBMENU IS A DOOR AND NOT A COMMAND: it has no action of
+		 * its own, so the walk goes through its leaves instead, where the Compression formats live. */
 		{
 			NSArray *skeletons = [NSArray arrayWithObjects:@"File", @"View", @"Go", nil];
 			NSUInteger s;
@@ -269,15 +270,28 @@ int main(void)
 			for (s = 0; s < [skeletons count]; s++) {
 				NSMenu *menu = (NSMenu *)[[bar itemAtIndex:indexTitled(bar, [skeletons objectAtIndex:s])]
 							 submenu];
+				NSUInteger i;
 
 				for (i = 0; i < [menu numberOfItems]; i++) {
 					NSMenuItem *row = [menu itemAtIndex:i];
+					NSMenu *below = (NSMenu *)[row submenu];
+					NSUInteger j;
 
 					if ([row isSeparatorItem]) {
 						continue;
 					}
+					if (below != nil) {
+						check([row action] == NULL, "a submenu row carries no action of its own");
+						for (j = 0; j < [below numberOfItems]; j++) {
+							inspected++;
+							if ([[below itemAtIndex:j] isEnabled]) {
+								allDisabled = NO;
+							}
+						}
+						continue;
+					}
 					/* NEW WORKSPACE WINDOW IS W2'S AND PRINT IS THE PRINT SYSTEM'S; both are checked above, and
-					 * every other row here still waits for its stage and must be grey. */
+					 * every other row waits for a responder this probe does not have. */
 					if (sel_isEqual([row action], @selector(newWorkspaceWindow:))
 					    || sel_isEqual([row action], @selector(printSelection:))) {
 						continue;
@@ -288,8 +302,8 @@ int main(void)
 					}
 				}
 			}
-			check(inspected > 10, "the File, View and Go menus are populated");
-			check(allDisabled, "and every OTHER row in them is disabled, because its feature is not written yet");
+			check(inspected > 10, "the File, View and Go menus are populated, submenus included");
+			check(allDisabled, "and every row without a target is grey, because nothing answers it here");
 		}
 
 		/* **AND THE EXCEPTION, WHICH IS MEASURED RATHER THAN WISHED AWAY.** The Edit menu's five chain-routed rows

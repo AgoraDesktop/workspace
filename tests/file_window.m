@@ -512,15 +512,17 @@ int main(void)
 			      "a folder is selected in the icon view");
 			check([[first cg_destinationBesideSelection] isEqual:root],
 			      "and the destination is the folder that holds it");
-			/* **AND IT ARRIVES THROUGH THE RIGHT-CLICK MENU'S ROW, NOT ONLY THROUGH THE MENU BAR.** The row the
-			 * pointer raises names `-compress:`, and sending it is what a click does; the rest is the command already
-			 * measured above. */
+			/* **AND IT ARRIVES THROUGH THE RIGHT-CLICK MENU'S LEAF, NOT ONLY THROUGH THE MENU BAR.** The leaf the
+			 * pointer raises names `-compress:` with the format as its tag, and sending it is what a click does. */
 			{
 				NSMenu *menu = [WSContextMenu menuForSingleItemWithTarget:first];
-				NSMenuItem *row = [menu itemAtIndex:[menu indexOfItemWithTitle:@"Compress"]];
+				NSMenu *compression = (NSMenu *)[[menu itemAtIndex:[menu indexOfItemWithTitle:@"Compression"]] submenu];
+				NSMenuItem *row = (compression != nil)
+					? [compression itemAtIndex:(NSInteger)WSArchiveFormatZip] : nil;
 
-				check(row != nil && [row action] == @selector(compress:),
-				      "the context menu carries a Compress row aimed at the window");
+				check(row != nil && [row action] == @selector(compress:)
+				      && [row tag] == (NSInteger)WSArchiveFormatZip,
+				      "the context menu carries a Zip leaf aimed at the window");
 				[NSApp sendAction:[row action] to:[row target] from:row];
 			}
 			check([[NSFileManager defaultManager] fileExistsAtPath:archive],
@@ -1066,7 +1068,11 @@ int main(void)
 
 		[[NSFileManager defaultManager] createDirectoryAtPath:trip withIntermediateDirectories:YES
 							   attributes:nil error:NULL];
+		/* TWO FILES, because this block is about the FOLDER case: one file would take the single-file rule and land
+		 * beside the archive as itself. */
 		[[NSMutableData dataWithLength:64] writeToFile:[trip stringByAppendingPathComponent:@"inside.txt"]
+						   atomically:NO];
+		[[NSMutableData dataWithLength:64] writeToFile:[trip stringByAppendingPathComponent:@"other.txt"]
 						   atomically:NO];
 		fresh = [[WSFileWindowController alloc] initWithDirectory:root];
 		archive = [[fresh fileOperations] compressPaths:[NSArray arrayWithObject:trip] inDirectory:root error:NULL];
@@ -1109,6 +1115,23 @@ int main(void)
 		check([[NSFileManager defaultManager]
 			fileExistsAtPath:[firstFolder stringByAppendingPathComponent:@"trip/inside.txt"]],
 		      "with the archive's own contents inside it");
+
+		/* **AND THE FORMAT IS THE SUBMENU LEAF'S, NOT A SECOND COMMAND.** Sending the Tar.gz leaf beside the working
+		 * "Extract Archive" row is what a person's click does; the tag is what carries the choice. */
+		{
+			NSString *tarred = [root stringByAppendingPathComponent:@"trip.tar.gz"];
+			NSMenu *menu = [WSContextMenu menuForSingleItemWithTarget:fresh];
+			NSMenu *compression = (NSMenu *)[[menu itemAtIndex:[menu indexOfItemWithTitle:@"Compression"]] submenu];
+			NSMenuItem *leaf = [compression itemAtIndex:(NSInteger)WSArchiveFormatTarGzip];
+
+			check(leaf != nil && [leaf tag] == (NSInteger)WSArchiveFormatTarGzip
+			      && [leaf action] == @selector(compress:),
+			      "the Compression submenu carries a leaf for each format, tagged with it");
+			[NSApp sendAction:[leaf action] to:[leaf target] from:leaf];
+			check([[NSFileManager defaultManager] fileExistsAtPath:tarred],
+			      "and sending the Tar.gz leaf writes that archive beside the selection");
+			[[NSFileManager defaultManager] removeItemAtPath:tarred error:NULL];
+		}
 
 		/* AND THE DOUBLE CLICK: the same command, through the door the views report to. */
 		zipItem = [[WSItem alloc] initWithName:[archive lastPathComponent] path:archive isDirectory:NO];

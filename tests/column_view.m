@@ -431,9 +431,10 @@ int main(void)
 		check([rows count] == 8, "a right-click on a column's row raises the item's own menu");
 		if ([rows count] == 8) {
 			check([[[rows objectAtIndex:0] title] isEqual:@"Get Info"]
-			      && [[[rows objectAtIndex:6] title] isEqual:@"Compress"]
+			      && [[[rows objectAtIndex:6] title] isEqual:@"Compression"]
+			      && [[rows objectAtIndex:6] submenu] != nil
 			      && [[[rows objectAtIndex:7] title] isEqual:@"Move to Trash"],
-			      "with the reference file manager's rows, Compress among them");
+			      "with the reference file manager's rows, Compression among them");
 			check([[rows objectAtIndex:7] target] == commands
 			      && [[rows objectAtIndex:6] target] == commands,
 			      "aimed at the WINDOW's commands, not at the browser");

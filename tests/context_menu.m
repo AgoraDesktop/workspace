@@ -84,6 +84,38 @@ static NSString *rowsOf(NSMenu *menu)
 	return [joined autorelease];
 }
 
+/* **A SUBMENU IS NOT A ROW WITH AN ACTION.** The Compression row carries five leaves, and what a probe wants of them is
+ * that each names the format it writes and that each is the same command with that format as its tag. */
+static BOOL hasCompressionLeaves(NSMenu *menu, id target)
+{
+	NSInteger index = [menu indexOfItemWithTitle:@"Compression"];
+	NSMenuItem *row;
+	NSMenu *submenu;
+	NSArray *leaves;
+	NSInteger format;
+
+	if (index == NSNotFound) {
+		return NO;
+	}
+	row = [menu itemAtIndex:index];
+	submenu = (NSMenu *)[row submenu];
+	if (submenu == nil || [row action] != NULL) {
+		return NO;
+	}
+	leaves = [submenu itemArray];
+	if ([leaves count] != 5) {
+		return NO;
+	}
+	for (format = 0; format < 5; format++) {
+		NSMenuItem *leaf = [leaves objectAtIndex:(NSUInteger)format];
+
+		if ([leaf action] != @selector(compress:) || [leaf tag] != format || [leaf target] != target) {
+			return NO;
+		}
+	}
+	return YES;
+}
+
 static BOOL hasRow(NSMenu *menu, NSString *title, SEL action)
 {
 	NSInteger index = [menu indexOfItemWithTitle:title];
@@ -114,13 +146,14 @@ int main(void)
 		check(hasRow(single, @"Cut", @selector(cut:)) && hasRow(single, @"Copy", @selector(copy:)),
 		      "and Cut and Copy");
 		check(hasRow(single, @"Rename", @selector(rename:)), "and Rename, which one name can answer");
-		check(hasRow(single, @"Compress", @selector(compress:)),
-		      "and Compress, which the menu bar has and the pointer now reaches");
+		check(hasRow(single, @"Compression", NULL), "and Compression, which the menu bar has and the pointer now reaches");
+		check(hasCompressionLeaves(single, item),
+		      "with a leaf for each of the five archives, each naming its format as its tag");
 		check(hasRow(single, @"Move to Trash", @selector(moveToTrash:)), "and Move to Trash");
-		check([single indexOfItemWithTitle:@"Compress"] < [single indexOfItemWithTitle:@"Move to Trash"],
-		      "with Compress above Move to Trash, where the reference file manager keeps it");
+		check([single indexOfItemWithTitle:@"Compression"] < [single indexOfItemWithTitle:@"Move to Trash"],
+		      "with Compression above Move to Trash, where the reference file manager keeps it");
 		{
-			NSInteger index = [single indexOfItemWithTitle:@"Compress"];
+			NSInteger index = [single indexOfItemWithTitle:@"Compression"];
 			NSMenuItem *row = [single itemAtIndex:index];
 
 			check([row target] == item, "and every row is aimed at the target the menu was built for");
@@ -131,7 +164,7 @@ int main(void)
 		/* 2. A GROUP: the rows a group can answer — and Rename is not one of them. */
 		multiple = [WSContextMenu menuForMultipleItemsWithTarget:item];
 		printf("  (note: a group's menu is %s\n", [rowsOf(multiple) UTF8String]);
-		check(hasRow(multiple, @"Compress", @selector(compress:)), "a group can be compressed");
+		check(hasCompressionLeaves(multiple, item), "a group can be compressed, in any of the five formats");
 		check(hasRow(multiple, @"New Folder with Selection", @selector(newFolderWithSelection:)),
 		      "and gathered into a folder, beside it");
 		check(hasRow(multiple, @"Get Info", @selector(getInfo:)), "and asked about");
@@ -145,8 +178,8 @@ int main(void)
 		check(hasRow(inTrash, @"Put Back", @selector(putBack:)), "a trashed item's menu starts with the way back");
 		check([inTrash indexOfItemWithTitle:@"Move to Trash"] == NSNotFound,
 		      "and does not offer to trash it again");
-		check(hasRow(inTrash, @"Compress", @selector(compress:)),
-		      "while Compress is still there: an archive of a trashed item is a real thing to want");
+		check(hasCompressionLeaves(inTrash, trash),
+		      "while Compression is still there: an archive of a trashed item is a real thing to want");
 
 		/* 3b. EXTRACT ARCHIVE IS ASKED FOR, NOT DRAWN GREY: it is about a .zip and about nothing else, so a target that
 		 * says so gets the row and a target that does not never sees it. */
@@ -172,8 +205,8 @@ int main(void)
 		check(hasRow(background, @"New Folder", @selector(newFolder:)), "the empty grid makes a folder");
 		check(hasRow(background, @"Paste", @selector(paste:)) && hasRow(background, @"Select All", @selector(selectAll:)),
 		      "and pastes and selects all");
-		check([background indexOfItemWithTitle:@"Compress"] == NSNotFound,
-		      "and never Compress, which is about what is HELD and not about where the pointer is");
+		check([background indexOfItemWithTitle:@"Compression"] == NSNotFound,
+		      "and never Compression, which is about what is HELD and not about where the pointer is");
 		check([background indexOfItemWithTitle:@"Extract Archive"] == NSNotFound,
 		      "nor Extract Archive, for the same reason");
 

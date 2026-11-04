@@ -1142,12 +1142,15 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 - (void)compress:(id)sender
 {
 	NSArray *paths = [self cg_selectedPaths];
+	WSArchiveFormat format = WSArchiveFormatZip;
 
-	(void)sender;
+	if ([sender isKindOfClass:[NSMenuItem class]]) {
+		format = (WSArchiveFormat)[(NSMenuItem *)sender tag];
+	}
 	if ([paths count] == 0) {
 		return;
 	}
-	(void)[_fileOperations compressPaths:paths inDirectory:[_model directory] error:NULL];
+	(void)[_fileOperations compressPaths:paths inDirectory:[_model directory] format:format error:NULL];
 	[self reloadAfterChange];
 	[self fn_didFinishOperation];
 }

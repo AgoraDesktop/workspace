@@ -88,7 +88,32 @@ typedef void (^WSFileProgressHandler)(NSUInteger completed, NSUInteger total, NS
 - (BOOL)putBackTrashItems:(NSArray *)items error:(NSError **)error;
 - (BOOL)emptyTrash:(NSError **)error;
 
-/* COMPRESS writes one `.zip` in `directory`; the returned path is the archive. */
+/* ---- THE FORMATS A PERSON CHOOSES BETWEEN ----------------------------------------------------------------
+ *
+ * **A ZIP IS NOT THE ONLY ARCHIVE, AND THE MENU SAYS SO.** The same operation writes any of these; the format decides
+ * the suffix, the wrapper and nothing else — the rules (beside the source, modes and times kept, symlinks stored as
+ * links, streamed rather than buffered, Undo removes it) are one set. The two codecs that are found at BUILD time are
+ * asked about here too: a row for a format this build cannot write is grey rather than an error after the click.
+ */
+typedef NSInteger WSArchiveFormat;
+enum {
+	WSArchiveFormatZip = 0,
+	WSArchiveFormatTar = 1,
+	WSArchiveFormatTarGzip = 2,
+	WSArchiveFormatTarBzip2 = 3,
+	WSArchiveFormatTarXz = 4
+};
+
+/* COMPRESS writes an archive of `format` in `directory`; the returned path is the archive. */
+- (nullable NSString *)compressPaths:(NSArray *)paths inDirectory:(NSString *)directory
+			      format:(WSArchiveFormat)format error:(NSError **)error;
+
+/* The suffix the format writes (".zip", ".tar.gz", …), the word a menu calls it, and whether this build can write it. */
++ (NSString *)cg_suffixForArchiveFormat:(WSArchiveFormat)format;
++ (NSString *)cg_titleForArchiveFormat:(WSArchiveFormat)format;
++ (BOOL)cg_archiveFormatIsAvailable:(WSArchiveFormat)format;
+
+/* COMPRESS as a ZIP, which is what the menu row was before there was a menu to choose with. */
 - (nullable NSString *)compressPaths:(NSArray *)paths inDirectory:(NSString *)directory error:(NSError **)error;
 
 /* **A .zip IS EXTRACTED BESIDE ITSELF, INTO A FOLDER NAMED FOR IT.** `-extractArchive:` reads the archive this tree

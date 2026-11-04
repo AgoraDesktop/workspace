@@ -27,6 +27,8 @@
  */
 #import "WSMainMenu.h"
 
+#import "WSFileOperations.h"
+
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSMenu.h>
@@ -136,7 +138,27 @@ static NSMenu *WSFileMenu(id target)
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Get Info", @selector(getInfo:), nil, @"i", NSCommandKeyMask);
 	WSRow(menu, @"Duplicate", @selector(duplicate:), nil, @"d", NSCommandKeyMask);
-	WSRow(menu, @"Compress", @selector(compress:), nil, nil, 0);
+	/* **AND THE SAME CHOICE THE RIGHT-CLICK MENU OFFERS.** One "Compress" row can only mean the format its author picked;
+	 * the submenu is where the choice lives, and every leaf is the one command with a tag naming the format. The rows are
+	 * aimed at nothing, so they travel the responder chain like every other row here whose owner is a window. */
+	{
+		NSMenuItem *compression = WSRow(menu, @"Compression", NULL, nil, nil, 0);
+		NSMenu *submenu = [[[NSMenu alloc] initWithTitle:@"Compression"] autorelease];
+		WSArchiveFormat format;
+
+		for (format = WSArchiveFormatZip; format <= WSArchiveFormatTarXz; format++) {
+			NSMenuItem *leaf = [[[NSMenuItem alloc]
+				initWithTitle:[NSString stringWithFormat:@"%@ Archive",
+									 [WSFileOperations cg_titleForArchiveFormat:format]]
+				      action:@selector(compress:)
+			       keyEquivalent:@""] autorelease];
+
+			[leaf setTag:(NSInteger)format];
+			[leaf setEnabled:[WSFileOperations cg_archiveFormatIsAvailable:format]];
+			[submenu addItem:leaf];
+		}
+		[compression setSubmenu:submenu];
+	}
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Move to Trash", @selector(moveToTrash:), nil, @"\u232b", NSCommandKeyMask);
 	return menu;
