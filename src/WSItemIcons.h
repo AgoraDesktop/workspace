@@ -30,6 +30,14 @@
  * to Icon Services. */
 + (nullable NSImage *)thumbnailForPath:(NSString *)path size:(NSInteger)size;
 
+/* **A PICTURE AT ITS OWN SHAPE, FOR A PANE THAT HAS ROOM FOR IT.** `-thumbnailForPath:size:` answers a SQUARE, because
+ * every icon surface in this tree draws into one and a square is what a grid cell wants. A preview pane is the other
+ * case: it has a whole column to fill, and a square thumbnail of a wide screenshot leaves two bands of nothing above and
+ * below the picture. This answers the picture fitted into `box` pixels on its LONG side with no transparent bands, so a
+ * caller can size a view to the picture instead of to a square. Nil for anything the tier cannot decode, and cached
+ * under the same ceiling as the thumbnails. */
++ (nullable NSImage *)cg_pictureForPath:(nullable NSString *)path box:(NSInteger)box;
+
 /* Whether the path's extension is a type the tier decodes: PNG or JPEG, which is what `NSBitmapImageRep` reads. */
 + (BOOL)isImageFile:(nullable NSString *)path;
 

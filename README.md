@@ -457,6 +457,12 @@ The **comment** goes into the enclosing folder's `.agora` sidecar, keyed by name
 what a person decided about a name; it is saved as it is typed, because a window closed by its title bar never sends the
 field an "end editing".
 
+**THE PREVIEW IS THE PICTURE ITSELF.** A preview pane is not a grid cell: `WSItemIcons -cg_pictureForPath:box:` answers
+the picture at its own shape — no square's transparent bands — decoded at the WINDOW's scale (`userSpaceScaleFactor`), so
+the compositor is not stretching 128 pixels over 170, and the pane's body takes the picture's height, so the window grows
+to fit a tall picture and stays short for a wide one instead of holding a white lake. A file this tier cannot decode keeps
+its icon, which is square.
+
 **NAMED ABSENCES.** `Shared folder` is drawn and disabled: sharing is W12's and a tick that nothing honoured would lie.
 There is no tag field (tags are not in the metadata store), no "Hide extension" (that is a Finder flag this substrate does
 not have), no `Open With` (F1) and no custom icon (F2). A folder's size is its own directory allocation, not the total of

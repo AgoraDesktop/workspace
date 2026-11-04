@@ -56,7 +56,7 @@ static const CGFloat WSInfoSectionHeight = 22.0;
 static const CGFloat WSInfoMargin = 12.0;
 static const CGFloat WSInfoKeyWidth = 74.0;	/* the right-aligned "Kind:" column, so the values line up */
 static const CGFloat WSInfoRowHeight = 17.0;
-static const CGFloat WSInfoPreviewSize = 128.0;
+static const CGFloat WSInfoPreviewSize = 260.0;
 
 /* **A VIEW THAT LAYS OUT FROM ITS TOP-LEFT CORNER**, which is what a stack of rows wants and what Cocoa's unflipped
  * default makes awkward: every frame here is measured downward from the top, the way the window reads. */
@@ -472,6 +472,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	NSView *header = band;
 
 	_headerIcon = [[NSImageView alloc] initWithFrame:NSMakeRect(WSInfoMargin, 13.0, 32.0, 32.0)];
+	[_headerIcon setImageScaling:NSImageScaleProportionallyUpOrDown];
 	if (icon != nil) {
 		[_headerIcon setImage:icon];
 	}
@@ -630,10 +631,15 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 
 - (WSInfoSectionView *)cg_previewSection
 {
-	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WSInfoWindowWidth, 138.0)];
+	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:
+		NSMakeRect(0.0, 0.0, WSInfoWindowWidth, WSInfoPreviewSize + 12.0)];
 	WSInfoSectionView *section;
 
-	_previewView = [[NSImageView alloc] initWithFrame:NSMakeRect((WSInfoWindowWidth - 2.0 * WSInfoMargin - WSInfoPreviewSize) / 2.0,
+	/* **THE PANE IS AS TALL AS THE PICTURE, NOT AS TALL AS THE BOX.** A wide screenshot fitted into a square leaves two
+	 * bands of white above and below it, which is what a preview pane full of nothing looks like; `-cg_updatePreview`
+	 * measures the picture and gives this body its height, so the section hugs what is in it. */
+	_previewBody = [body retain];
+	_previewView = [[NSImageView alloc] initWithFrame:NSMakeRect(([body frame].size.width - WSInfoPreviewSize) / 2.0,
 								   6.0, WSInfoPreviewSize, WSInfoPreviewSize)];
 	[_previewView setImageScaling:NSImageScaleProportionallyUpOrDown];
 	[body addSubview:_previewView];
@@ -698,15 +704,79 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 
 #pragma mark - Filling it in
 
+/* **AN ICON IS ASKED FOR IN THE PIXELS THE SURFACE HAS, AND DRAWN IN POINTS.** `WSItemIcons` answers an image whose
+ * size is its pixel size, so asking for 32 on a window at 1.332 draws a 32-pixel picture into 32 points — the compositor
+ * then stretches it by a third, which is the softness a person sees and calls a bad preview. The scale is the window's
+ * own (`-userSpaceScaleFactor`, the factor its bitmap context was made with), and the view scales the extra pixels back
+ * down, which is a downscale and stays sharp. */
 - (NSImage *)cg_iconWithSize:(NSInteger)size
 {
 	NSString *path = [[_info paths] objectAtIndex:0];
 	BOOL isDirectory = NO;
+	CGFloat scale = [[self window] userSpaceScaleFactor];
+	NSInteger pixels;
+	NSImage *image;
 
+	if (scale <= 0.0) {
+		scale = 1.0;
+	}
+	pixels = (NSInteger)((CGFloat)size * scale + 0.5);
 	(void)[[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDirectory];
-	return [WSItemIcons thumbnailForPath:path size:size] != nil
-		? [WSItemIcons thumbnailForPath:path size:size]
-		: [WSItemIcons iconForPath:path isDirectory:isDirectory size:size];
+	image = [WSItemIcons thumbnailForPath:path size:pixels];
+	if (image == nil) {
+		image = [WSItemIcons iconForPath:path isDirectory:isDirectory size:pixels];
+	}
+	return image;
+}
+
+/* **THE PREVIEW IS THE PICTURE ITSELF, AT ITS OWN SHAPE AND THE SURFACE'S RESOLUTION.** Two things were wrong with a
+ * square 128-point thumbnail in this pane: it was decoded at 128 pixels and stretched by the window's scale, and it
+ * carried the transparent bands of a square around a wide picture, so the pane was mostly white. `-cg_pictureForPath:`
+ * answers the picture with no bands, and the pane's body takes the picture's height, which is why the window grows to
+ * fit a tall one and stays short for a wide one. A file this tier cannot decode keeps its icon, which is square. */
+- (void)cg_updatePreview
+{
+	NSString *path = [[_info paths] objectAtIndex:0];
+	BOOL isDirectory = NO;
+	CGFloat scale = [[self window] userSpaceScaleFactor];
+	NSInteger pixels;
+	NSImage *image;
+	NSSize natural;
+	NSSize shown;
+	CGFloat paneWidth;
+
+	if (scale <= 0.0) {
+		scale = 1.0;
+	}
+	pixels = (NSInteger)(WSInfoPreviewSize * scale + 0.5);
+	(void)[[NSFileManager defaultManager] fileExistsAtPath:path isDirectory:&isDirectory];
+	image = [WSItemIcons cg_pictureForPath:path box:pixels];
+	if (image == nil) {
+		image = [WSItemIcons iconForPath:path isDirectory:isDirectory size:pixels];
+	}
+	[_previewView setImage:image];
+	if (_previewBody == nil) {
+		return;
+	}
+	paneWidth = [_previewBody frame].size.width;
+	if (image == nil) {
+		[_previewView setFrame:NSMakeRect((paneWidth - WSInfoPreviewSize) / 2.0, 6.0,
+						  WSInfoPreviewSize, WSInfoPreviewSize)];
+		[_previewBody setFrameSize:NSMakeSize(paneWidth, WSInfoPreviewSize + 12.0)];
+		return;
+	}
+	natural = [image size];
+	shown = NSMakeSize(natural.width / scale, natural.height / scale);
+	if (shown.width > WSInfoPreviewSize) {
+		shown.height *= WSInfoPreviewSize / shown.width;
+		shown.width = WSInfoPreviewSize;
+	}
+	if (shown.height > WSInfoPreviewSize) {
+		shown.width *= WSInfoPreviewSize / shown.height;
+		shown.height = WSInfoPreviewSize;
+	}
+	[_previewView setFrame:NSMakeRect((paneWidth - shown.width) / 2.0, 6.0, shown.width, shown.height)];
+	[_previewBody setFrameSize:NSMakeSize(paneWidth, shown.height + 12.0)];
 }
 
 - (void)cg_updateFields
@@ -744,7 +814,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	_permissions = rows;
 	[_permissionSummary setStringValue:[_info mixedPermissions] ? @"—" : [_info permissionSummary]];
 	[_permissionTable reloadData];
-	[_previewView setImage:[self cg_iconWithSize:(NSInteger)WSInfoPreviewSize]];
+	[self cg_updatePreview];
 
 	/* THE COMMENT IS THE SIDECAR'S, and it is read only for the one item the window is about. */
 	{

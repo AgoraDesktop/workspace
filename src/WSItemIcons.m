@@ -237,6 +237,83 @@ static NSImage *fn_working_image(NSString *path, NSInteger working)
 	return answer;
 }
 
++ (NSImage *)cg_pictureForPath:(NSString *)path box:(NSInteger)box
+{
+	NSString *key;
+	NSImage *cached;
+	NSImage *source;
+	NSSize natural;
+	CGFloat scale;
+	NSInteger width;
+	NSInteger height;
+	NSBitmapImageRep *rep;
+	NSGraphicsContext *context;
+	NSGraphicsContext *previous;
+	NSImage *answer;
+
+	if (path == nil || box <= 0 || ![self isImageFile:path]) {
+		return nil;
+	}
+	key = [NSString stringWithFormat:@"picture|%@|%ld", path, (long)box];
+	if (sThumbnails == nil) {
+		sThumbnails = [[NSMutableDictionary alloc] init];
+		sThumbnailOrder = [[NSMutableArray alloc] init];
+	}
+	cached = [sThumbnails objectForKey:key];
+	if (cached != nil) {
+		return cached;
+	}
+	source = [[NSImage alloc] initWithContentsOfFile:path];
+	if (source == nil) {
+		return nil;
+	}
+	natural = [source size];
+	if (natural.width <= 0.0 || natural.height <= 0.0) {
+		[source release];
+		return nil;
+	}
+	sDecodes++;
+	/* **THE BOX DESCRIBES THE LONG SIDE**, the same rule the square thumbnail uses, so the two agree about what a
+	 * picture of a given size costs; only the SHORT side differs, because this one is the picture's own. */
+	scale = (CGFloat)box / ((natural.width > natural.height) ? natural.width : natural.height);
+	width = (NSInteger)(natural.width * scale + 0.5);
+	height = (NSInteger)(natural.height * scale + 0.5);
+	if (width < 1) {
+		width = 1;
+	}
+	if (height < 1) {
+		height = 1;
+	}
+	rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes:NULL pixelsWide:width pixelsHigh:height
+		bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+		colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:width * 4 bitsPerPixel:32];
+	answer = nil;
+	if (rep != nil) {
+		context = [NSGraphicsContext graphicsContextWithBitmapImageRep:rep];
+		previous = [[NSGraphicsContext currentContext] retain];
+		[NSGraphicsContext setCurrentContext:context];
+		[source drawInRect:NSMakeRect(0.0, 0.0, (CGFloat)width, (CGFloat)height)
+			  fromRect:NSZeroRect
+			 operation:NSCompositingOperationSourceOver
+			  fraction:1.0
+		    respectFlipped:YES
+			     hints:[NSDictionary dictionaryWithObject:
+					[NSNumber numberWithInteger:NSImageInterpolationMedium]
+							      forKey:NSImageHintInterpolation]];
+		[NSGraphicsContext setCurrentContext:previous];
+		[previous release];
+		answer = [[NSImage alloc] initWithSize:NSMakeSize((CGFloat)width, (CGFloat)height)];
+		[answer addRepresentation:rep];
+		[rep release];
+	}
+	[source release];
+	if (answer != nil) {
+		fn_cache_put(sThumbnails, sThumbnailOrder, WS_THUMBNAIL_CACHE_LIMIT, answer, key);
+		[answer autorelease];
+	}
+	return answer;
+}
+
 + (NSImage *)iconForPath:(NSString *)path isDirectory:(BOOL)isDirectory size:(NSInteger)size
 {
 	NSImage *thumbnail;

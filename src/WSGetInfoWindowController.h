@@ -60,6 +60,7 @@ NS_ASSUME_NONNULL_BEGIN
 	NSImageView *_previewView;
 	NSTextField *_permissionSummary;
 	NSTableView *_permissionTable;
+	NSView *_previewBody;			/* RETAINED: the preview section's body, whose height the picture sets */
 	NSArray *_permissions;			/* RETAINED: NSArray<WSItemPermission *>, the table's rows */
 }
 

@@ -241,6 +241,43 @@ int main(void)
 				[window cg_setSectionAtIndex:0 collapsed:NO];
 			}
 
+			/* 6c. THE PREVIEW IS THE PICTURE ITSELF: its own shape, and the pane's box on its long side. A text file
+			 * has no picture, so it keeps its icon — which is square — and the pane is the box. */
+			{
+				NSImage *document = [[window cg_previewView] image];
+				NSRect pane = [[window cg_previewView] frame];
+
+				check(document != nil, "a document is previewed by its icon");
+				check(ABS(pane.size.width - 260.0) < 0.5 && ABS(pane.size.height - 260.0) < 0.5,
+				      "and an icon is square, 260 points in the pane");
+			}
+			{
+				NSString *png = [directory stringByAppendingPathComponent:@"wide.png"];
+				NSBitmapImageRep *rep = [[NSBitmapImageRep alloc]
+					initWithBitmapDataPlanes:NULL pixelsWide:200 pixelsHigh:100
+					    bitsPerSample:8 samplesPerPixel:4 hasAlpha:YES isPlanar:NO
+					  colorSpaceName:NSCalibratedRGBColorSpace bytesPerRow:200 * 4 bitsPerPixel:32];
+				NSData *data = [rep representationUsingType:NSPNGFileType properties:nil];
+				WSGetInfoWindowController *picture;
+				NSImage *image;
+
+				check(data != nil && [data writeToFile:png atomically:NO],
+				      "a 200x100 PNG is written for the preview to read");
+				[rep release];
+				picture = [WSGetInfoWindowController infoWindowForPaths:[NSArray arrayWithObject:png]];
+				image = [[picture cg_previewView] image];
+				check(image != nil, "an image file is previewed by its own picture");
+				printf("  (note: the preview is %gx%g points in a 260 pane\n",
+				       (double)[image size].width, (double)[image size].height);
+				check([image size].width > [image size].height * 1.8,
+				      "at the picture's own shape, not squared off with transparent bands");
+				check(ABS([image size].width - 260.0) < 2.0
+				      && ABS([image size].height - 130.0) < 2.0,
+				      "fitted into the pane's box on its long side, without stretching");
+				check(ABS(([[picture cg_previewView] frame]).size.height - 130.0) < 2.0,
+				      "and the view is the picture's height, so the pane does not leave a white lake");
+			}
+
 			/* 7. TWO WINDOWS ON ONE SUBJECT ARE ONE WINDOW. */
 			{
 				WSGetInfoWindowController *again = [WSGetInfoWindowController
@@ -252,8 +289,8 @@ int main(void)
 				      "asking again for the same item reuses the window that is open on it");
 				check(different != nil && ![different cg_isShowingPaths:[window paths]],
 				      "and a different item is a different window");
-				check([[WSGetInfoWindowController cg_openInfoWindows] count] == 2,
-				      "the registry holds exactly the two that were opened");
+				check([[WSGetInfoWindowController cg_openInfoWindows] count] == 3,
+				      "the registry holds exactly the three that were opened");
 			}
 
 			/* 8. THE COMMENT IS THE SIDECAR'S, written as it is typed. */
