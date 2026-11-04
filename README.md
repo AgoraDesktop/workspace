@@ -23,15 +23,21 @@ Move/Copy, Move to Trash, Put Back, Empty Trash and Compress, with Undo, a progr
 surfaces answer the same three — a file window's grid (`WSIconView`), the desktop (`WSDesktopView`), the List
 (`WSListView`) and the Columns (`WSColumnView`, whose menu is the browser's own right-click):
 
-- **one icon**: Get Info, —, Cut, Copy, —, Rename, Move to Trash;
-- **one icon of several held**: Get Info, New Folder with Selection, —, Cut, Copy, —, Move to Trash (no Rename: one name
-  for many is a question, not a command);
+- **one icon**: Get Info, —, Cut, Copy, —, Rename, Compress, Move to Trash;
+- **one icon of several held**: Get Info, New Folder with Selection, Compress, —, Cut, Copy, —, Move to Trash (no Rename:
+  one name for many is a question, not a command);
 - **the empty grid**: New Folder, —, Paste, Select All.
 
 A click on an icon that is NOT part of the held group narrows the selection to it first, and a click on the background
 leaves the selection alone. The commands behind the rows are the ones this tree already had — the inline
-rename field, W6's trash, and the pasteboard `WSItemDrag` writes — plus Paste, which a Cut needs to mean anything; and
-Get Info, which opens the inspector below (`WSGetInfoWindowController`).
+rename field, W6's trash, and the pasteboard `WSItemDrag` writes — plus Paste, which a Cut needs to mean anything;
+Get Info, which opens the inspector below (`WSGetInfoWindowController`); and Compress, which writes the archive beside
+what it compressed.
+
+**AND EVERY ROW IS ANSWERED BY THE THING THE MENU IS AIMED AT**, which is not a detail: the list and the browser aim
+their menus at the WINDOW (it owns the selection's meaning), while the grid and the desktop aim at THEMSELVES. MEASURED:
+Get Info was grey in the grid and Compress would have been dead there too, because the view that raised the menu answered
+neither — so `WSIconView` answers both now, and the desktop answers both as well.
 
 **AND A RIGHT-CLICK ON THE EMPTY GRID RAISES THE FOLDER'S OWN.** New Folder, a separator, Paste, Select All — the rows the
 reference file manager shows when the pointer is over nothing, about the directory the grid is showing. The two menus are

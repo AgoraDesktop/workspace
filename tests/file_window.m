@@ -500,7 +500,17 @@ int main(void)
 			      "a folder is selected in the icon view");
 			check([[first cg_destinationBesideSelection] isEqual:root],
 			      "and the destination is the folder that holds it");
-			[first compress:nil];
+			/* **AND IT ARRIVES THROUGH THE RIGHT-CLICK MENU'S ROW, NOT ONLY THROUGH THE MENU BAR.** The row the
+			 * pointer raises names `-compress:`, and sending it is what a click does; the rest is the command already
+			 * measured above. */
+			{
+				NSMenu *menu = [WSContextMenu menuForSingleItemWithTarget:first];
+				NSMenuItem *row = [menu itemAtIndex:[menu indexOfItemWithTitle:@"Compress"]];
+
+				check(row != nil && [row action] == @selector(compress:),
+				      "the context menu carries a Compress row aimed at the window");
+				[NSApp sendAction:[row action] to:[row target] from:row];
+			}
 			check([[NSFileManager defaultManager] fileExistsAtPath:archive],
 			      "Compress puts the archive beside the selected item");
 			[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];

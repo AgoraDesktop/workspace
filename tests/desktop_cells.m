@@ -89,6 +89,8 @@ int main(void)
 		area = [desktop cg_layoutBounds];
 
 		check([positions count] == 3, "the desktop read three items");
+
+
 		check(!NSEqualPoints([[positions objectAtIndex:0] pointValue], [[positions objectAtIndex:1] pointValue]),
 		      "two sidecar entries naming the same corner do NOT share a cell");
 		{
@@ -182,6 +184,28 @@ int main(void)
 				[window release];
 			}
 		}
+	}
+
+	/* **THE DESKTOP ANSWERS COMPRESS TOO, so the right-click row and the menu bar work over it.** A view of its own, so
+	 * the reload the command ends with cannot disturb the layout this probe has been measuring. */
+	{
+		WSDesktopView *compressing = [[WSDesktopView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 900.0, 600.0)
+									directory:root];
+		NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0.0, 0.0, 900.0, 600.0)
+							       styleMask:NSBorderlessWindowMask
+								 backing:NSBackingStoreBuffered defer:NO];
+		NSString *alpha = [root stringByAppendingPathComponent:@"alpha.txt"];
+		NSString *archive = [root stringByAppendingPathComponent:@"alpha.zip"];
+
+		[window setContentView:compressing];
+		[compressing cg_selectPaths:[NSArray arrayWithObject:alpha]];
+		[compressing compress:nil];
+		check([[NSFileManager defaultManager] fileExistsAtPath:archive],
+		      "the desktop compresses its selection into the desktop folder");
+		[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
+		[window setContentView:nil];
+		[window release];
+		[compressing release];
 	}
 
 	printf("desktop_cells: %s\n", s_failed == 0 ? "all checks passed" : "FAILURES");

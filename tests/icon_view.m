@@ -1185,15 +1185,15 @@ int main(void)
 		[view selectIndex:notes];
 		menu = [view menuForEvent:mouse(NSRightMouseDown, centerOfIndex(view, notes))];
 		rows = (menu != nil) ? [menu itemArray] : nil;
-		check([rows count] == 7, "a right-click on an icon answers a menu of seven rows");
-		if ([rows count] == 7) {
-			NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"Cut", @"Copy", @"Rename", @"Move to Trash",
-									   nil];
-			NSInteger want[7] = { 0, -1, 1, 2, -1, 3, 4 };	/* -1 is a separator */
+		check([rows count] == 8, "a right-click on an icon answers a menu of eight rows");
+		if ([rows count] == 8) {
+			NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"Cut", @"Copy", @"Rename", @"Compress",
+									   @"Move to Trash", nil];
+			NSInteger want[8] = { 0, -1, 1, 2, -1, 3, 4, 5 };	/* -1 is a separator */
 			NSInteger i;
 			BOOL shape = YES;
 
-			for (i = 0; i < 7; i++) {
+			for (i = 0; i < 8; i++) {
 				NSMenuItem *item = [rows objectAtIndex:(NSUInteger)i];
 
 				if (want[i] < 0) {
@@ -1202,24 +1202,26 @@ int main(void)
 					shape = shape && [[item title] isEqual:[titles objectAtIndex:(NSUInteger)want[i]]];
 				}
 			}
-			check(shape, "Get Info | Cut, Copy | Rename, Move to Trash, in that order with those separators");
+			check(shape, "Get Info | Cut, Copy | Rename, Compress, Move to Trash, in that order with those separators");
 			check([[rows objectAtIndex:0] action] == @selector(getInfo:)
 			      && [[rows objectAtIndex:2] action] == @selector(cut:)
 			      && [[rows objectAtIndex:3] action] == @selector(copy:)
 			      && [[rows objectAtIndex:5] action] == @selector(rename:)
-			      && [[rows objectAtIndex:6] action] == @selector(moveToTrash:),
+			      && [[rows objectAtIndex:6] action] == @selector(compress:)
+			      && [[rows objectAtIndex:7] action] == @selector(moveToTrash:),
 			      "and each row sends its own command");
-			check([[rows objectAtIndex:0] target] == view && [[rows objectAtIndex:6] target] == view,
+			check([[rows objectAtIndex:0] target] == view && [[rows objectAtIndex:7] target] == view,
 			      "every row is aimed at the view the click landed in, not left to the responder chain");
 
-			/* **AND THE ONE ROW WITH NO FEATURE IS GREY RATHER THAN ABSENT.** `-update` is the same walk a menu bar does
-			 * before it tracks, so this is the picture a person gets: Get Info is W8's, and the four commands W6 and this
-			 * stage gave the surfaces are live. */
+			/* **AND A ROW THE GRID CANNOT ANSWER IS THE DEFECT THIS MEASURES.** The menu is aimed at the view, so a row
+			 * whose command the view does not implement is a row that does nothing: MEASURED, Get Info and Compress were
+			 * both dead in the grid while the list and the browser had them working, because those aim at the window. */
 			[menu update];
-			check(![[rows objectAtIndex:0] isEnabled], "Get Info is grey until W8 gives it a window");
+			check([[rows objectAtIndex:0] isEnabled], "Get Info is live in the grid, as it is in the list");
 			check([[rows objectAtIndex:2] isEnabled] && [[rows objectAtIndex:3] isEnabled]
-			      && [[rows objectAtIndex:5] isEnabled] && [[rows objectAtIndex:6] isEnabled],
-			      "Cut, Copy, Rename and Move to Trash are live for a single selected item");
+			      && [[rows objectAtIndex:5] isEnabled] && [[rows objectAtIndex:6] isEnabled]
+			      && [[rows objectAtIndex:7] isEnabled],
+			      "and Cut, Copy, Rename, Compress and Move to Trash are live for a single selected item");
 		}
 
 		/* ---- CUT AND PASTE: THE ONE PAIR A CUT NEEDS TO MEAN ANYTHING ---- */
@@ -1273,15 +1275,15 @@ int main(void)
 			groupRows = (grouped != nil) ? [grouped itemArray] : nil;
 			check([[view selectedIndexes] count] == (NSUInteger)[view itemCount],
 			      "a right-click on one of several held icons keeps the group");
-			check([groupRows count] == 7, "and answers the group's own menu");
-			if ([groupRows count] == 7) {
-				NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"New Folder with Selection", @"Cut",
-									   @"Copy", @"Move to Trash", nil];
-				NSInteger want[7] = { 0, 1, -1, 2, 3, -1, 4 }; /* -1 is a separator */
+			check([groupRows count] == 8, "and answers the group's own menu");
+			if ([groupRows count] == 8) {
+				NSArray *titles = [NSArray arrayWithObjects:@"Get Info", @"New Folder with Selection", @"Compress",
+									   @"Cut", @"Copy", @"Move to Trash", nil];
+				NSInteger want[8] = { 0, 1, 2, -1, 3, 4, -1, 5 }; /* -1 is a separator */
 				NSInteger i;
 				BOOL shape = YES;
 
-				for (i = 0; i < 7; i++) {
+				for (i = 0; i < 8; i++) {
 					NSMenuItem *item = [groupRows objectAtIndex:(NSUInteger)i];
 
 					if (want[i] < 0) {
@@ -1290,9 +1292,10 @@ int main(void)
 						shape = shape && [[item title] isEqual:[titles objectAtIndex:(NSUInteger)want[i]]];
 					}
 				}
-				check(shape, "Get Info, New Folder with Selection | Cut, Copy | Move to Trash");
+				check(shape, "Get Info, New Folder with Selection, Compress | Cut, Copy | Move to Trash");
 				check([[groupRows objectAtIndex:1] action] == @selector(newFolderWithSelection:)
-				      && [[groupRows objectAtIndex:6] action] == @selector(moveToTrash:),
+				      && [[groupRows objectAtIndex:2] action] == @selector(compress:)
+				      && [[groupRows objectAtIndex:7] action] == @selector(moveToTrash:),
 				      "and the group's rows send the group's commands");
 				check([[groupRows objectAtIndex:1] target] == view,
 				      "aimed at the grid the click landed in");
@@ -1321,8 +1324,9 @@ int main(void)
 					[view keyDown:key(NSRightArrowFunctionKey, NSShiftKeyMask)];
 					menu = [view menuForEvent:mouse(NSRightMouseDown, centerOfIndex(view, third))];
 					check([[view selectedIndexes] count] == 1 && [view selectedIndex] == third
-					      && [menu numberOfItems] == 7
-					      && [menu indexOfItemWithTitle:@"Rename"] != (NSInteger)NSNotFound,
+					      && [menu numberOfItems] == 8
+					      && [menu indexOfItemWithTitle:@"Rename"] != (NSInteger)NSNotFound
+					      && [menu indexOfItemWithTitle:@"Compress"] != (NSInteger)NSNotFound,
 					      "and a right-click outside the group narrows to that icon's own menu");
 				}
 			}
@@ -1456,8 +1460,8 @@ int main(void)
 				NSPoint click = NSMakePoint(cell.x + 32.0, 400.0 - (cell.y + 32.0));
 				NSMenu *desktopMenu = [desktop menuForEvent:mouse(NSRightMouseDown, click)];
 
-				check(desktopMenu != nil && [desktopMenu numberOfItems] == 7,
-				      "the desktop's right-click raises the same seven-row menu");
+				check(desktopMenu != nil && [desktopMenu numberOfItems] == 8,
+				      "the desktop's right-click raises the same eight-row menu, Compress among them");
 				check([[desktop cg_selection] count] == 1,
 				      "and it selects the icon under the pointer first");
 
@@ -1518,7 +1522,7 @@ int main(void)
 											   NSMakePoint(cell.x + 32.0,
 												       400.0 - (cell.y + 32.0)))];
 							check([[desktop cg_selection] count] == 2
-							      && [group numberOfItems] == 7
+							      && [group numberOfItems] == 8
 							      && [group indexOfItemWithTitle:@"New Folder with Selection"]
 								  != (NSInteger)NSNotFound,
 							      "the desktop's group menu is the same list, with New Folder with Selection");

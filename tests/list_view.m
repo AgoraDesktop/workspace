@@ -619,13 +619,15 @@ int main(void)
 		[list selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
 		menu = [list menuForEvent:rightClick(inRow0)];
 		rows = (menu != nil) ? [menu itemArray] : nil;
-		check([rows count] == 7, "a right-click on a list row raises the item's own menu");
-		if ([rows count] == 7) {
+		check([rows count] == 8, "a right-click on a list row raises the item's own menu");
+		if ([rows count] == 8) {
 			check([[[rows objectAtIndex:0] title] isEqual:@"Get Info"]
 			      && [[[rows objectAtIndex:5] title] isEqual:@"Rename"]
-			      && [[[rows objectAtIndex:6] title] isEqual:@"Move to Trash"],
-			      "with the reference file manager's rows");
-			check([[rows objectAtIndex:6] target] == commands,
+			      && [[[rows objectAtIndex:6] title] isEqual:@"Compress"]
+			      && [[[rows objectAtIndex:7] title] isEqual:@"Move to Trash"],
+			      "with the reference file manager's rows, Compress among them");
+			check([[rows objectAtIndex:7] target] == commands
+			      && [[rows objectAtIndex:6] target] == commands,
 			      "aimed at the WINDOW's commands, which is what owns the selection's meaning");
 		}
 
@@ -634,7 +636,7 @@ int main(void)
 	     byExtendingSelection:NO];
 		menu = [list menuForEvent:rightClick(inRow1)];
 		rows = (menu != nil) ? [menu itemArray] : nil;
-		check([[list selectedRowIndexes] count] == 2 && [rows count] == 7
+		check([[list selectedRowIndexes] count] == 2 && [rows count] == 8
 		      && [menu indexOfItemWithTitle:@"New Folder with Selection"] != (NSInteger)NSNotFound
 		      && [menu indexOfItemWithTitle:@"Rename"] == (NSInteger)NSNotFound,
 		      "a right-click inside a group keeps it and offers the group's rows");

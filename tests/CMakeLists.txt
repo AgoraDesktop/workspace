@@ -539,3 +539,15 @@ target_link_libraries(get_info PRIVATE
 add_test(NAME workspace-get-info COMMAND get_info)
 set_tests_properties(workspace-get-info PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
+
+# **THE ROWS A RIGHT-CLICK RAISES.** The menu is the pointer's route to the commands the menu bar has, and the rows are
+# the whole of it — a title, a selector and the target they are aimed at. This checks that a group gets the rows a group
+# can answer, a single item the ones it can, that the trash's menu is the trash's, and that Compress is on both item menus
+# and on neither background one.
+add_executable(context_menu context_menu.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m")
+target_include_directories(context_menu PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(context_menu PRIVATE AgoraApp::App Foundation::Foundation objc)
+add_test(NAME workspace-context-menu COMMAND context_menu)
+set_tests_properties(workspace-context-menu PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>")

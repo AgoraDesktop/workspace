@@ -23,6 +23,7 @@
 #import "WSIconLayout.h"
 #import "WSSelectionBand.h"
 #import "WSSelectionOwner.h"
+#import "WSGetInfoWindowController.h"
 #import "WSItemIcons.h"
 #import "WSItemDrag.h"
 #import "WSItemModel.h"
@@ -1088,6 +1089,35 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 		return;
 	}
 	(void)[_fileOperations movePathsToTrash:[self cg_selectedPaths] error:NULL];
+	[self reloadAfterChange];
+	[self fn_didFinishOperation];
+}
+
+/* **THE TWO ROWS THE GRID'S MENU HAS AND THIS VIEW DID NOT ANSWER.** The menu is aimed at the view, so a row the view
+ * cannot answer is a row a person sees greyed — MEASURED: right-clicking an icon offered Get Info and (since the menu
+ * gained it) Compress, and neither did anything, because the list and the browser aim their menus at the WINDOW and this
+ * one aims at itself. Both commands are the same objects the window's are: the inspector's registry makes one window per
+ * subject, and an archive is made beside what it compressed. */
+- (void)getInfo:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	(void)[WSGetInfoWindowController infoWindowForPaths:paths];
+}
+
+- (void)compress:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	(void)[_fileOperations compressPaths:paths inDirectory:[_model directory] error:NULL];
 	[self reloadAfterChange];
 	[self fn_didFinishOperation];
 }

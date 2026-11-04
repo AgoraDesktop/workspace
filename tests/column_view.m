@@ -428,12 +428,14 @@ int main(void)
 			menu = [browser menuForEvent:rightClick(inWindow)];
 		}
 		rows = (menu != nil) ? [menu itemArray] : nil;
-		check([rows count] == 7, "a right-click on a column's row raises the item's own menu");
-		if ([rows count] == 7) {
+		check([rows count] == 8, "a right-click on a column's row raises the item's own menu");
+		if ([rows count] == 8) {
 			check([[[rows objectAtIndex:0] title] isEqual:@"Get Info"]
-			      && [[[rows objectAtIndex:6] title] isEqual:@"Move to Trash"],
-			      "with the reference file manager's rows");
-			check([[rows objectAtIndex:6] target] == commands,
+			      && [[[rows objectAtIndex:6] title] isEqual:@"Compress"]
+			      && [[[rows objectAtIndex:7] title] isEqual:@"Move to Trash"],
+			      "with the reference file manager's rows, Compress among them");
+			check([[rows objectAtIndex:7] target] == commands
+			      && [[rows objectAtIndex:6] target] == commands,
 			      "aimed at the WINDOW's commands, not at the browser");
 		}
 

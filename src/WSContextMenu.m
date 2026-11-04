@@ -58,6 +58,11 @@
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Rename" action:@selector(rename:) target:target]];
+	/* **COMPRESS IS A ROW HERE AS WELL AS IN THE FILE MENU.** The archive is made beside what it compressed (see
+	 * `-cg_destinationBesideSelection`), which is exactly the thing a person is looking at when they right-click it; a
+	 * command that is only in the menu bar is a command a person finds by accident. It sits after Rename, where the
+	 * reference file manager keeps it: the rows above it change the item, this one makes something out of it. */
+	[menu addItem:[self cg_row:@"Compress" action:@selector(compress:) target:target]];
 	if (!trash) {
 		[menu addItem:[self cg_row:@"Move to Trash" action:@selector(moveToTrash:) target:target]];
 	}
@@ -83,6 +88,9 @@
 	[menu addItem:[self cg_row:@"Get Info" action:@selector(getInfo:) target:target]];
 	[menu addItem:[self cg_row:@"New Folder with Selection"
 			   action:@selector(newFolderWithSelection:) target:target]];
+	/* **AND A GROUP CAN BE ONE ARCHIVE.** "Compress" beside "New Folder with Selection" is the same idea twice: both make
+	 * one thing out of what is held, and both put it where the selection is. */
+	[menu addItem:[self cg_row:@"Compress" action:@selector(compress:) target:target]];
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Cut" action:@selector(cut:) target:target]];
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];

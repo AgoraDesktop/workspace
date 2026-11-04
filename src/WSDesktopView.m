@@ -679,6 +679,21 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	[self reload];
 }
 
+/* **COMPRESS IS THE SAME COMMAND A FILE WINDOW HAS, AIMED AT THE DESKTOP.** The archive is made in the desktop folder,
+ * which is where the icons come from — so it appears in the grid beside the thing it was made from, and the grid is read
+ * again to show it. */
+- (void)compress:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+
+	(void)sender;
+	if ([paths count] == 0) {
+		return;
+	}
+	(void)[_fileOperations compressPaths:paths inDirectory:[_model directory] error:NULL];
+	[self reload];
+}
+
 /* ---- THE EMPTY DESKTOP'S TWO COMMANDS -------------------------------------------------------- */
 
 /* NEW FOLDER IS W6'S OPERATION, and the folder it made is what the desktop holds afterwards — the same rule the file
