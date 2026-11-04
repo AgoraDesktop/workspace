@@ -274,6 +274,13 @@
 	[controller showWindow:nil];
 	fprintf(stderr, "workspace: file window for %s\n", [directory UTF8String]);
 	[controller release];
+	/* **A WINDOW THE LAUNCH ASKED FOR IS NOT BURIED BY ONE OPENED AFTER IT.** `--get-info` exists so a probe can see the
+	 * inspector without clicking, and in a session the Dock's own file window maps after it — a window that appeared
+	 * last is on top, so the requested inspector would be behind the window the shell opened by itself. Re-ordering it
+	 * here is four lines and no timer: the same request, `-orderFront`, after the other window is up. */
+	if ([_getInfoPaths count] > 0) {
+		(void)[[WSGetInfoWindowController infoWindowForPaths:_getInfoPaths] orderFront];
+	}
 }
 
 - (void)newWorkspaceWindow:(id)sender
