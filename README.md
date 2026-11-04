@@ -482,6 +482,11 @@ pane's own admission that it had not measured one. It now says "Calculating…" 
 alive until it answers) and takes the total when it lands; an answer that names a path the person has since left is
 dropped. A file's line is still its own `stat`, because that is the whole of a file's size.
 
+**AND THE PANE DRAWS WHAT IT ASKS FOR, IN ONE PLACE.** The regression this replaces is worth naming: the size was wired
+into `-previewText`, the door a probe reads, and the DRAWING still called the shallow formatter for itself — so the pane
+sat on "Calculating…" while the answer had arrived, been stored and been right, and the test passed because it read the
+door. `-cg_lines` is now the pane's four lines and both the drawing and the door read that one list.
+
 **THE PREVIEW IS THE PICTURE ITSELF.** A preview pane is not a grid cell: `WSItemIcons -cg_pictureForPath:box:` answers
 the picture at its own shape — no square's transparent bands — decoded at the WINDOW's scale (`userSpaceScaleFactor`), so
 the compositor is not stretching 128 pixels over 170, and the pane's body takes the picture's height, so the window grows

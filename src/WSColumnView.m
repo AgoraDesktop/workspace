@@ -167,19 +167,35 @@ static NSString *fn_size_string(WSItem *item)
 	[_sizeText release];
 	_sizeText = text;
 	[self setNeedsDisplay:YES];
+	/* **AND THE WINDOW IS MARKED STALE WITH IT.** A subview's dirty rect is drawn by the update pass, but the pass it
+	 * belongs to is the window's: MEASURED, a pane that marked only itself stayed on "Calculating…" for ever while the
+	 * answer had arrived and been stored — the text was right and nothing ever painted it. The tracking loop's own
+	 * repaint writes the same pair for the same reason. */
+	[[self window] setNeedsDisplay:YES];
 }
 
 - (WSItem *)item { return _item; }
 
-- (NSString *)previewText
+/* **THE PANE'S FOUR LINES, IN ONE PLACE, BECAUSE TWO THINGS READ THEM.** The pane DRAWS these and a probe ASKS for
+ * them (`-previewText`), and MEASURED they disagreed: a measured size was wired into the text door while the drawing
+ * called `fn_size_string` for itself, so the pane sat on "Calculating…" while the answer had arrived, been stored and
+ * been correct. One list, two readers. */
+- (NSArray *)cg_lines
 {
 	if (_item == nil) {
-		return @"No Selection";
+		return [NSArray arrayWithObject:@"No Selection"];
 	}
-	return [NSString stringWithFormat:@"%@\n%@\n%@\n%@",
-		[_item name], [WSItemKind kindForItem:_item],
+	return [NSArray arrayWithObjects:
+		[_item name],
+		[WSItemKind kindForItem:_item],
 		(_sizeText != nil) ? _sizeText : fn_size_string(_item),
-		fn_date_string([_item modificationDate])];
+		fn_date_string([_item modificationDate]),
+		nil];
+}
+
+- (NSString *)previewText
+{
+	return [[self cg_lines] componentsJoinedByString:@"\n"];
 }
 
 /* **A LINE CENTRED IN THE PANE, MEASURED AND DRAWN WHERE ITS OWN WIDTH PUTS IT.** The tier's `-drawInRect:` lays a line
@@ -243,10 +259,16 @@ static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat p
 		[NSColor blackColor], NSForegroundColorAttributeName, nil];
 	detailAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
 		[NSColor darkGrayColor], NSForegroundColorAttributeName, nil];
-	fn_draw_centred([_item name], 96.0, 20.0, bounds.size.width, nameAttributes);
-	fn_draw_centred([WSItemKind kindForItem:_item], 124.0, 18.0, bounds.size.width, detailAttributes);
-	fn_draw_centred(fn_size_string(_item), 146.0, 18.0, bounds.size.width, detailAttributes);
-	fn_draw_centred(fn_date_string([_item modificationDate]), 168.0, 18.0, bounds.size.width, detailAttributes);
+	{
+		NSArray *lines = [self cg_lines];
+
+		if ([lines count] >= 4) {
+			fn_draw_centred([lines objectAtIndex:0], 96.0, 20.0, bounds.size.width, nameAttributes);
+			fn_draw_centred([lines objectAtIndex:1], 124.0, 18.0, bounds.size.width, detailAttributes);
+			fn_draw_centred([lines objectAtIndex:2], 146.0, 18.0, bounds.size.width, detailAttributes);
+			fn_draw_centred([lines objectAtIndex:3], 168.0, 18.0, bounds.size.width, detailAttributes);
+		}
+	}
 }
 
 @end
@@ -853,9 +875,9 @@ static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat p
 
 - (NSString *)cg_previewSizeText
 {
-	return [[_preview previewText] componentsSeparatedByString:@"\n"].count > 2
-		? [[[_preview previewText] componentsSeparatedByString:@"\n"] objectAtIndex:2]
-		: nil;
+	NSArray *lines = [[_preview previewText] componentsSeparatedByString:@"\n"];
+
+	return ([lines count] > 2) ? [lines objectAtIndex:2] : nil;
 }
 - (NSString *)cg_previewText { return [_preview previewText]; }
 
