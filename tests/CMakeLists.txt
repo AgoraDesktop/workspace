@@ -53,7 +53,8 @@ target_link_libraries(desktop_cells PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-desktop-cells COMMAND desktop_cells)
 set_tests_properties(workspace-desktop-cells PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
@@ -88,7 +89,8 @@ target_link_libraries(desktop_drag PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-desktop-drag COMMAND desktop_drag)
 set_tests_properties(workspace-desktop-drag PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
@@ -121,7 +123,8 @@ target_link_libraries(desktop_band PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-desktop-band COMMAND desktop_band)
 set_tests_properties(workspace-desktop-band PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
@@ -183,7 +186,8 @@ target_link_libraries(preferences PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-preferences COMMAND preferences)
 set_tests_properties(workspace-preferences PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
@@ -309,7 +313,8 @@ target_link_libraries(file_window PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSConflictSheet.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
@@ -345,7 +350,8 @@ target_link_libraries(app_bundle PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-app-bundle COMMAND app_bundle)
 set_tests_properties(workspace-app-bundle PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
@@ -383,7 +389,8 @@ target_link_libraries(icon_view PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-icon-view COMMAND icon_view)
 set_tests_properties(workspace-icon-view PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
@@ -408,7 +415,8 @@ target_link_libraries(list_view PRIVATE
     AgoraLaunchServices::LaunchServices
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-list-view COMMAND list_view)
 set_tests_properties(workspace-list-view PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
@@ -450,7 +458,7 @@ add_executable(file_ops file_ops.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(file_ops PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
-target_link_libraries(file_ops PRIVATE Foundation::Foundation ZLIB::ZLIB objc)
+target_link_libraries(file_ops PRIVATE Foundation::Foundation ZLIB::ZLIB agora_archive_codecs objc)
 add_test(NAME workspace-file-ops COMMAND file_ops)
 set_tests_properties(workspace-file-ops PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>")
@@ -510,7 +518,8 @@ target_link_libraries(printing PRIVATE
     AgoraWatch::Watch
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-printing COMMAND printing)
 set_tests_properties(workspace-printing PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")
@@ -535,7 +544,8 @@ target_link_libraries(get_info PRIVATE
     AgoraLaunchServices::LaunchServices
     Foundation::Foundation
     ZLIB::ZLIB
-    objc)
+    objc    agora_archive_codecs
+)
 add_test(NAME workspace-get-info COMMAND get_info)
 set_tests_properties(workspace-get-info PROPERTIES ENVIRONMENT
     "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>:$<TARGET_FILE_DIR:AgoraLaunchServices::LaunchServices>")

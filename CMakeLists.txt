@@ -36,6 +36,24 @@ find_package(AgoraLaunchServices CONFIG REQUIRED)
 find_package(AgoraWatch CONFIG REQUIRED)
 find_package(ZLIB REQUIRED)
 
+# **THE OTHER TWO DECOMPRESSORS A `.tar.*` NEEDS, AND THEY ARE OPTIONAL ON PURPOSE.** zlib is already here for the ZIP
+# writer; bzip2 (BSD-like) and liblzma (public domain) are system libraries of the same kind, and this asks for them
+# without REQUIRED: a machine without one still builds a Workspace that extracts .zip, .tar and .tar.gz, and says which
+# codec it was built without when somebody hands it the other kind. Both are found through CMake's own modules.
+find_package(BZip2)
+find_package(LibLZMA)
+
+set(AGORA_ARCHIVE_CODEC_DEFINITIONS "")
+set(AGORA_ARCHIVE_CODEC_LIBRARIES "")
+if(BZIP2_FOUND)
+  list(APPEND AGORA_ARCHIVE_CODEC_DEFINITIONS AGORA_WORKSPACE_HAVE_BZIP2=1)
+  list(APPEND AGORA_ARCHIVE_CODEC_LIBRARIES BZip2::BZip2)
+endif()
+if(LIBLZMA_FOUND)
+  list(APPEND AGORA_ARCHIVE_CODEC_DEFINITIONS AGORA_WORKSPACE_HAVE_LZMA=1)
+  list(APPEND AGORA_ARCHIVE_CODEC_LIBRARIES LibLZMA::LibLZMA)
+endif()
+
 add_executable(Workspace
     src/main.m
     src/WSAboutPanel.m
@@ -85,12 +103,21 @@ get_filename_component(_ws_chrome_themes
 target_compile_definitions(Workspace PRIVATE AGORA_CHROME_DEFAULT_THEME="${_ws_chrome_themes}")
 
 target_include_directories(Workspace PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+# **THE CODECS ARE ONE THING, SO THEY ARE ONE TARGET.** `WSFileOperations.m` is compiled into the application and into
+# eleven probes (the file operations' own suite, the window's, the views', the desktop's); every one of them has to see the
+# same `AGORA_WORKSPACE_HAVE_*` answers and link the same libraries, or a suite would quietly test a build that cannot read
+# a .tar.bz2 and pass.
+add_library(agora_archive_codecs INTERFACE)
+target_compile_definitions(agora_archive_codecs INTERFACE ${AGORA_ARCHIVE_CODEC_DEFINITIONS})
+target_link_libraries(agora_archive_codecs INTERFACE ${AGORA_ARCHIVE_CODEC_LIBRARIES})
+
 target_link_libraries(Workspace PRIVATE
     AgoraApp::App
     AgoraIconServices::IconServices
     AgoraLaunchServices::LaunchServices
     AgoraWatch::Watch
-    ZLIB::ZLIB)
+    ZLIB::ZLIB
+    agora_archive_codecs)
 
 # ---------------------------------------------------------------------------
 # The bundle: Workspace.app/Contents/{Info.plist, <platform>/<arch>/Workspace}

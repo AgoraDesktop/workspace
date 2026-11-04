@@ -15,6 +15,13 @@
 #import <Foundation/Foundation.h>
 
 #include <fcntl.h>
+#include <zlib.h>
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+#include <bzlib.h>
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+#include <lzma.h>
+#endif
 #include <stdio.h>
 #include <string.h>
 #include <sys/resource.h>
@@ -41,6 +48,145 @@ static BOOL makeFile(NSString *path, NSUInteger bytes)
 	return [[NSFileManager defaultManager] createFileAtPath:path contents:[NSMutableData dataWithLength:bytes]
 						      attributes:nil];
 }
+
+/* ---- A TAR, BUILT BY HAND --------------------------------------------------------------------------------
+ *
+ * The archive formats this probe checks are the ones the shell makes, and it makes them with the system's libraries —
+ * so the probe writes the tar blocks itself (they are 512 bytes of octal) and compresses with the same three codecs the
+ * product uses. Nothing here shells out, so the suite has no dependency on a `tar` binary being installed. */
+static void tar_octal(unsigned char *field, size_t length, uint64_t value)
+{
+	char text[32];
+	size_t digits = length - 1;
+	size_t i;
+
+	snprintf(text, sizeof text, "%0*llo", (int)digits, (unsigned long long)value);
+	for (i = 0; i < digits; i++) {
+		field[i] = (unsigned char)(text[i] != '\0' ? text[i] : '0');
+	}
+	field[digits] = '\0';
+}
+
+static void tar_header(unsigned char *block, const char *name, uint64_t size, mode_t mode, time_t mtime,
+		       char type, const char *linkName)
+{
+	unsigned sum = 0;
+	size_t i;
+
+	memset(block, 0, 512);
+	strncpy((char *)block, name, 99);
+	tar_octal(block + 100, 8, mode & 07777);
+	tar_octal(block + 108, 8, 0);		/* uid */
+	tar_octal(block + 116, 8, 0);		/* gid */
+	tar_octal(block + 124, 12, size);
+	tar_octal(block + 136, 12, (uint64_t)mtime);
+	block[156] = (unsigned char)type;
+	if (linkName != NULL) {
+		strncpy((char *)block + 157, linkName, 99);
+	}
+	memcpy(block + 257, "ustar", 5);
+	block[262] = '\0';
+	block[263] = '0';
+	block[264] = '0';
+	memset(block + 148, ' ', 8);		/* the checksum field is spaces while it is summed */
+	for (i = 0; i < 512; i++) {
+		sum += block[i];
+	}
+	tar_octal(block + 148, 7, sum);
+	block[155] = ' ';
+}
+
+static void tar_append(NSMutableData *data, const char *name, const void *bytes, uint64_t size, mode_t mode,
+		       time_t mtime, char type, const char *linkName)
+{
+	unsigned char block[512];
+	size_t padded = (size_t)((size + 511) & ~(uint64_t)511);
+	unsigned char *zeros = calloc(1, padded + 1);
+
+	tar_header(block, name, size, mode, mtime, type, linkName);
+	[data appendBytes:block length:512];
+	if (size > 0 && bytes != NULL) {
+		[data appendBytes:bytes length:(NSUInteger)size];
+	}
+	if (padded > size) {
+		[data appendBytes:zeros length:padded - (size_t)size];
+	}
+	free(zeros);
+}
+
+static NSData *tar_finished(NSMutableData *data)
+{
+	unsigned char zeros[1024];
+
+	memset(zeros, 0, sizeof zeros);
+	[data appendBytes:zeros length:sizeof zeros];
+	return data;
+}
+
+/* THE THREE WRAPPERS, THROUGH THE LIBRARIES THE PRODUCT READS THEM WITH. */
+static NSData *gzip_of(NSData *plain)
+{
+	z_stream stream;
+	unsigned char *out;
+	uLong bound;
+	NSData *answer = nil;
+
+	memset(&stream, 0, sizeof stream);
+	if (deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+		return nil;
+	}
+	bound = deflateBound(&stream, (uLong)[plain length]);
+	out = malloc((size_t)bound);
+	if (out != NULL) {
+		stream.next_in = (Bytef *)[plain bytes];
+		stream.avail_in = (uInt)[plain length];
+		stream.next_out = out;
+		stream.avail_out = (uInt)bound;
+		if (deflate(&stream, Z_FINISH) == Z_STREAM_END) {
+			answer = [NSData dataWithBytes:out length:(NSUInteger)stream.total_out];
+		}
+		free(out);
+	}
+	deflateEnd(&stream);
+	return answer;
+}
+
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+static NSData *bzip2_of(NSData *plain)
+{
+	unsigned int size = (unsigned int)([plain length] + [plain length] / 100 + 600);
+	char *out = malloc(size);
+	NSData *answer = nil;
+
+	if (out != NULL && BZ2_bzBuffToBuffCompress(out, &size, (char *)[plain bytes], (unsigned int)[plain length],
+						    9, 0, 0) == BZ_OK) {
+		answer = [NSData dataWithBytes:out length:size];
+	}
+	free(out);
+	return answer;
+}
+#endif
+
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+static NSData *xz_of(NSData *plain)
+{
+	size_t size = lzma_stream_buffer_bound([plain length]);
+	unsigned char *out = malloc(size);
+	NSData *answer = nil;
+
+	if (out != NULL) {
+		size_t outPosition = 0;		/* `out_pos` is in/out and starts at zero, not at the bound */
+		lzma_ret xr = lzma_easy_buffer_encode(6, LZMA_CHECK_CRC64, NULL, [plain bytes], [plain length],
+						     out, &outPosition, size);
+
+		if (xr == LZMA_OK) {
+			answer = [NSData dataWithBytes:out length:outPosition];
+		}
+	}
+	free(out);
+	return answer;
+}
+#endif
 
 /* ---- THE CENTRAL DIRECTORY, WHICH IS WHAT A READER BELIEVES ------------------------------------------------
  *
@@ -680,6 +826,150 @@ int main(void)
 		[[NSFileManager defaultManager] removeItemAtPath:again error:NULL];
 		[[NSFileManager defaultManager] removeItemAtPath:unpacked error:NULL];
 		[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
+	}
+
+	/* 10d. THE TAR FAMILY, WITH THE SAME RULES. `.tar`, `.tar.gz`, `.tar.bz2` and `.tar.xz` (and their short spellings)
+	 * are the same command as a `.zip`: a folder named for the archive beside it, or the file itself when the archive holds
+	 * one, with modes, times and symlinks kept, and a name that leaves the folder refused whole. */
+	{
+		NSMutableData *plain = [[NSMutableData alloc] init];
+		NSString *package = [base stringByAppendingPathComponent:@"package"];
+		NSArray *names = [NSArray arrayWithObjects:@"package.tar", @"package.tar.gz", @"package.tgz", nil];
+
+		/* ONE DIRECTORY, ONE FILE AND ONE SYMLINK, the three shapes a tar reader has to tell apart. */
+		tar_append(plain, "bundle/", NULL, 0, 0755, 1600000000, '5', NULL);
+		tar_append(plain, "bundle/inner.txt", "hello tar\n", 10, 0644, 1600000001, '0', NULL);
+		tar_append(plain, "bundle/exe.sh", "#!/bin/sh\n", 10, 0755, 1600000002, '0', NULL);
+		tar_append(plain, "bundle/link", NULL, 0, 0777, 1600000003, '2', "inner.txt");
+		tar_finished(plain);
+
+		check([WSFileOperations cg_isArchivePath:@"a.tar"] && [WSFileOperations cg_isArchivePath:@"a.tar.gz"]
+		      && [WSFileOperations cg_isArchivePath:@"a.tgz"] && [WSFileOperations cg_isArchivePath:@"a.tar.bz2"]
+		      && [WSFileOperations cg_isArchivePath:@"a.tbz"] && [WSFileOperations cg_isArchivePath:@"a.tar.xz"]
+		      && [WSFileOperations cg_isArchivePath:@"a.txz"] && [WSFileOperations cg_isArchivePath:@"a.ZIP"],
+		      "every spelling of a tar and a zip is an archive");
+		check(![WSFileOperations cg_isArchivePath:@"a.txt"] && ![WSFileOperations cg_isArchivePath:@"a.tar.txt"],
+		      "and a name that only looks like one is not");
+
+		{
+			NSUInteger k;
+
+			for (k = 0; k < [names count]; k++) {
+				NSString *name = [names objectAtIndex:k];
+				NSString *archivePath = [base stringByAppendingPathComponent:name];
+				NSData *bytes = plain;
+				NSString *made;
+
+				if ([name hasSuffix:@".gz"] || [name hasSuffix:@".tgz"]) {
+					bytes = gzip_of(plain);
+				}
+				check(bytes != nil && [bytes writeToFile:archivePath atomically:NO],
+				      [[NSString stringWithFormat:@"%@ is written", name] UTF8String]);
+				{
+					NSError *tarErr = nil;
+
+					made = [ops extractArchive:archivePath error:&tarErr];
+					if (made == nil) {
+						printf("  (note: %s failed: %s\n", [name UTF8String],
+						       [[tarErr localizedDescription] UTF8String]);
+					}
+				}
+				printf("  (note: %s unpacked to %s\n", [name UTF8String],
+				       (made != nil) ? [[made lastPathComponent] UTF8String] : "(nil)");
+				check(made != nil && [[made lastPathComponent] isEqual:@"package"],
+				      "and unpacks into a folder named for it, .tar.gz and .tgz included");
+				check(exists([made stringByAppendingPathComponent:@"bundle/inner.txt"]),
+				      "with the file inside it");
+				{
+					struct stat st;
+					char target[PATH_MAX];
+					NSString *exe = [made stringByAppendingPathComponent:@"bundle/exe.sh"];
+					NSString *link = [made stringByAppendingPathComponent:@"bundle/link"];
+					ssize_t length;
+
+					check(stat([exe fileSystemRepresentation], &st) == 0 && (st.st_mode & 07777) == 0755
+					      && st.st_mtime == (time_t)1600000002,
+					      "keeping the mode and the time the header carries");
+					length = readlink([link fileSystemRepresentation], target, sizeof target);
+					check(length > 0 && strncmp(target, "inner.txt", (size_t)length) == 0,
+					      "and the symlink is a link again");
+				}
+				[[NSFileManager defaultManager] removeItemAtPath:made error:NULL];
+				[[NSFileManager defaultManager] removeItemAtPath:archivePath error:NULL];
+			}
+		}
+
+		/* THE OTHER TWO CODECS, WHEN THE BUILD HAS THEM. */
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+		{
+			NSString *bzipPath = [base stringByAppendingPathComponent:@"package.tar.bz2"];
+			NSData *bytes = bzip2_of(plain);
+			NSString *made;
+
+			check(bytes != nil && [bytes writeToFile:bzipPath atomically:NO], "a .tar.bz2 is written");
+			made = [ops extractArchive:bzipPath error:NULL];
+			check(made != nil && exists([made stringByAppendingPathComponent:@"bundle/inner.txt"]),
+			      "and bzip2 is unpacked like the rest");
+			[[NSFileManager defaultManager] removeItemAtPath:made error:NULL];
+			[[NSFileManager defaultManager] removeItemAtPath:bzipPath error:NULL];
+		}
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+		{
+			NSString *xzPath = [base stringByAppendingPathComponent:@"package.txz"];
+			NSData *bytes = xz_of(plain);
+			NSString *made;
+
+			check(bytes != nil && [bytes writeToFile:xzPath atomically:NO], "a .txz is written");
+			made = [ops extractArchive:xzPath error:NULL];
+			check(made != nil && exists([made stringByAppendingPathComponent:@"bundle/inner.txt"]),
+			      "and xz is unpacked like the rest");
+			[[NSFileManager defaultManager] removeItemAtPath:made error:NULL];
+			[[NSFileManager defaultManager] removeItemAtPath:xzPath error:NULL];
+		}
+#endif
+
+		/* ONE FILE IN A TAR IS THE FILE, NOT A FOLDER AROUND IT — the ZIP's rule, over a stream. */
+		{
+			NSMutableData *single = [[NSMutableData alloc] init];
+			NSString *tarPath = [base stringByAppendingPathComponent:@"single.tgz"];
+			NSString *made;
+
+			tar_append(single, "lonely.txt", "one\n", 4, 0644, 1600000004, '0', NULL);
+			tar_finished(single);
+			check([gzip_of(single) writeToFile:tarPath atomically:NO], "a one-file .tgz is written");
+			made = [ops extractArchive:tarPath error:NULL];
+			check(made != nil && [[made lastPathComponent] isEqual:@"lonely.txt"],
+			      "and it comes back as the file it holds, beside the archive");
+			check(!exists([[base stringByAppendingPathComponent:@"single"] stringByAppendingPathComponent:@"lonely.txt"]),
+			      "with no folder kept around it");
+			[single release];
+			[[NSFileManager defaultManager] removeItemAtPath:made error:NULL];
+			[[NSFileManager defaultManager] removeItemAtPath:tarPath error:NULL];
+		}
+
+		/* A TAR ENTRY THAT LEAVES THE FOLDER IS REFUSED WHOLE, like the ZIP's. */
+		{
+			NSMutableData *hostile = [[NSMutableData alloc] init];
+			NSString *tarPath = [base stringByAppendingPathComponent:@"hostile.tar"];
+			NSError *tarError = nil;
+			NSString *made;
+
+			tar_append(hostile, "ok.txt", "fine\n", 5, 0644, 1600000005, '0', NULL);
+			tar_append(hostile, "../escaped.txt", "nope\n", 5, 0644, 1600000006, '0', NULL);
+			tar_finished(hostile);
+			check([hostile writeToFile:tarPath atomically:NO], "a tar carrying ../escaped.txt is written");
+			made = [ops extractArchive:tarPath error:&tarError];
+			check(made == nil && tarError != nil, "and it is refused rather than half-unpacked");
+			check(!exists([base stringByAppendingPathComponent:@"escaped.txt"]),
+			      "with nothing written outside the folder");
+			check(!exists([base stringByAppendingPathComponent:@"hostile"]),
+			      "and the folder it had started is taken away");
+			[hostile release];
+			[[NSFileManager defaultManager] removeItemAtPath:tarPath error:NULL];
+		}
+		[plain release];
+		(void)package;
 	}
 
 	/* 11. ZIP64, MEASURED WITHOUT FOUR GIGABYTES. The format's limits are 4 GB and 65,535 entries, which no suite should

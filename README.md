@@ -458,12 +458,17 @@ above it. The suite cannot write four gigabytes, so `+cg_setZip64LimitsForTestin
 same records are measured on a few kilobytes; the real limits were verified once against Python's `zipfile` and `unzip`
 on a 4.1 GB entry.
 
-**AND A .zip UNPACKS BESIDE ITSELF, INTO A FOLDER NAMED FOR IT.** `-extractArchive:` reads the archive this tree writes
-— store and raw deflate, ZIP64 when a record needed 64 bits — and makes `<folder>/<basename>/`: `trip.zip` beside `trip`,
+**AND AN ARCHIVE UNPACKS BESIDE ITSELF, WHATEVER IT IS.** `-extractArchive:` reads `.zip` (store and raw deflate, ZIP64
+when a record needed 64 bits) and the tar family — `.tar`, `.tar.gz`/`.tgz`, `.tar.bz2`/`.tbz`/`.tbz2`,
+`.tar.xz`/`.txz` — through zlib, bzip2 and liblzma. The two codecs are FOUND AT BUILD TIME and are not required: a
+Workspace built without one still extracts everything else, and says which codec it was built without when it meets that
+kind rather than calling the archive corrupt. A tar is read as the stream it is, with ustar prefixes, GNU long names and
+PAX records; because a stream cannot say how many entries it holds until it has gone past, it is STAGED in the folder it
+would have made and the single-file rule is applied at the end. It makes `<folder>/<basename>/`: `trip.zip` beside `trip`,
 and "trip 2" when the name is taken, because two extractions are two folders. Every entry keeps its mode and its
-modification time, a symlink comes back as a link, empty folders survive, and each entry's CRC is checked.
+modification time, a symlink comes back as a link, empty folders survive, and a ZIP entry's CRC is checked.
 
-**AND AN ARCHIVE OF ONE FILE IS UNPACKED AS THAT FILE.** Wrapping a single document in `<basename>/` makes a person open
+**AND AN ARCHIVE OF ONE FILE — ZIP OR TAR — IS UNPACKED AS THAT FILE.** Wrapping a single document in `<basename>/` makes a person open
 a folder to reach the only thing in it, so the single-file case lands beside the archive under the ENTRY's own name —
 `photos.zip` holding `photos/cat.jpg` gives `cat.jpg` next to it, and `cat 2.jpg` if that name is taken. A folder entry
 that only names the file's parent does not change the count; anything with two files in it is a folder again, and an

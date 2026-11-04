@@ -24,11 +24,21 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <string.h>
 #include <time.h>
 #include <zlib.h>
+
+/* **THE OTHER TWO CODECS ARE FOUND AT BUILD TIME AND MAY NOT BE THERE**, which is why every use of them is inside one of
+ * these guards and the refusal names the codec rather than saying "unsupported". */
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+#include <bzlib.h>
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+#include <lzma.h>
+#endif
 
 /* ---- small file-system helpers ---------------------------------------------------------------- */
 
@@ -886,6 +896,370 @@ static void fn_dos_to_time(uint16_t dosDate, uint16_t dosTime, struct timespec *
 	out->tv_nsec = 0;
 }
 
+/* ---- a TAR reader: the header blocks, and the three decompressors a `.tar.*` comes wrapped in --------------------
+
+ * **A TAR IS A STREAM, SO IT IS READ ONCE.** There is no central directory to consult first, which changes one thing and
+ * only one: the single-file rule cannot be decided before the entries have gone past. So the extraction stages into the
+ * folder it would have made anyway — `<basename>/` — and at the end, if exactly one FILE went in, moves it out beside the
+ * archive under its own name and takes the folder away. Everything else (modes, times, symlinks, the path check, undo)
+ * is the same as the ZIP's, because it is the same person's expectation.
+ *
+ * **AND A CODEC THE BUILD DOES NOT HAVE IS NAMED RATHER THAN MISPELT.** `.tar.bz2` on a Workspace built without bzip2 is
+ * an error that says so; it is not "corrupt archive" and it is not silence. */
+
+typedef NS_ENUM(NSInteger, AGArchiveKind) {
+	AGArchiveKindNone = 0,
+	AGArchiveKindZip,
+	AGArchiveKindTar,
+	AGArchiveKindTarGzip,
+	AGArchiveKindTarBzip2,
+	AGArchiveKindTarXz
+};
+
+/* **THE LONGEST SUFFIX WINS.** `.tar.gz` has to be recognised before `.gz` or before a bare `.tar`, and the base name a
+ * folder is named for is what is left once the whole suffix is off: `photos.tar.gz` → `photos`. */
+static AGArchiveKind fn_archive_kind(NSString *path)
+{
+	NSString *lower = [[path lastPathComponent] lowercaseString];
+
+	if ([lower hasSuffix:@".tar.gz"] || [lower hasSuffix:@".tgz"]) {
+		return AGArchiveKindTarGzip;
+	}
+	if ([lower hasSuffix:@".tar.bz2"] || [lower hasSuffix:@".tbz"] || [lower hasSuffix:@".tbz2"]) {
+		return AGArchiveKindTarBzip2;
+	}
+	if ([lower hasSuffix:@".tar.xz"] || [lower hasSuffix:@".txz"]) {
+		return AGArchiveKindTarXz;
+	}
+	if ([lower hasSuffix:@".tar"]) {
+		return AGArchiveKindTar;
+	}
+	if ([lower hasSuffix:@".zip"]) {
+		return AGArchiveKindZip;
+	}
+	return AGArchiveKindNone;
+}
+
+static NSString *fn_archive_base_name(NSString *path)
+{
+	NSString *name = [path lastPathComponent];
+	NSString *lower = [name lowercaseString];
+	NSArray *suffixes = [NSArray arrayWithObjects:@".tar.gz", @".tar.bz2", @".tar.xz", @".tgz", @".tbz2", @".tbz",
+							      @".txz", @".tar", @".zip", nil];
+	NSUInteger i;
+
+	for (i = 0; i < [suffixes count]; i++) {
+		NSString *suffix = [suffixes objectAtIndex:i];
+
+		if ([lower hasSuffix:suffix]) {
+			return [name substringToIndex:[name length] - [suffix length]];
+		}
+	}
+	return [name stringByDeletingPathExtension];
+}
+
+/* **A BLOCK OF DECOMPRESSED BYTES, WHATEVER THE WRAPPER.** The tar parser above only ever asks for bytes; zlib, bzip2 and
+ * liblzma are three answers to the same question, and each keeps its own state in here. */
+typedef struct {
+	FILE *file;
+	AGArchiveKind kind;
+	z_stream zip;
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+	bz_stream bz;
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+	lzma_stream lz;
+#endif
+	unsigned char in[AGUNZIP_CHUNK];
+	size_t inLength;
+	size_t inPosition;
+	BOOL ended;
+	BOOL started;
+} AGTarSource;
+
+static BOOL fn_tar_source_open(AGTarSource *source, NSString *path, AGArchiveKind kind, NSError **error)
+{
+	memset(source, 0, sizeof *source);
+	source->kind = kind;
+	source->file = fopen([path fileSystemRepresentation], "rb");
+	if (source->file == NULL) {
+		if (error != NULL) *error = fn_error(36, @"the archive could not be read");
+		return NO;
+	}
+	if (kind == AGArchiveKindTarGzip) {
+		if (inflateInit2(&source->zip, 15 + 16) != Z_OK) {	/* 16 = gzip's own wrapper */
+			if (error != NULL) *error = fn_error(36, @"zlib could not start");
+			return NO;
+		}
+	} else if (kind == AGArchiveKindTarBzip2) {
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+		if (BZ2_bzDecompressInit(&source->bz, 0, 0) != BZ_OK) {
+			if (error != NULL) *error = fn_error(36, @"bzip2 could not start");
+			return NO;
+		}
+#else
+		if (error != NULL) *error = fn_error(36, @"this build was made without bzip2, so .tar.bz2 cannot be read");
+		return NO;
+#endif
+	} else if (kind == AGArchiveKindTarXz) {
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+		if (lzma_stream_decoder(&source->lz, UINT64_MAX, 0) != LZMA_OK) {
+			if (error != NULL) *error = fn_error(36, @"xz could not start");
+			return NO;
+		}
+#else
+		if (error != NULL) *error = fn_error(36, @"this build was made without liblzma, so .tar.xz cannot be read");
+		return NO;
+#endif
+	}
+	return YES;
+}
+
+static void fn_tar_source_close(AGTarSource *source)
+{
+	if (source->kind == AGArchiveKindTarGzip) {
+		inflateEnd(&source->zip);
+	}
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+	if (source->kind == AGArchiveKindTarBzip2) {
+		BZ2_bzDecompressEnd(&source->bz);
+	}
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+	if (source->kind == AGArchiveKindTarXz) {
+		lzma_end(&source->lz);
+	}
+#endif
+	if (source->file != NULL) {
+		fclose(source->file);
+		source->file = NULL;
+	}
+}
+
+/* 0 at the end of the stream, -1 for a read or codec failure. */
+static ssize_t fn_tar_source_read(AGTarSource *source, unsigned char *out, size_t want)
+{
+	if (want == 0 || source->ended) {
+		return 0;
+	}
+	if (source->kind == AGArchiveKindTar) {
+		size_t got = fread(out, 1, want, source->file);
+
+		if (got == 0) {
+			source->ended = YES;
+		}
+		return (ssize_t)got;
+	}
+	if (source->kind == AGArchiveKindTarGzip) {
+		source->zip.next_out = out;
+		source->zip.avail_out = (uInt)want;
+		for (;;) {
+			int zr;
+
+			if (source->zip.avail_in == 0 && !source->ended && want > 0) {
+				size_t got;
+
+				source->inLength = fread(source->in, 1, sizeof source->in, source->file);
+				source->inPosition = 0;
+				if (source->inLength == 0) {
+					source->ended = YES;
+					return -1;
+				}
+				source->zip.next_in = source->in;
+				source->zip.avail_in = (uInt)source->inLength;
+				(void)got;
+			}
+			zr = inflate(&source->zip, Z_NO_FLUSH);
+			if (zr == Z_STREAM_END) {
+				source->ended = YES;
+				return (ssize_t)(want - source->zip.avail_out);
+			}
+			if (zr != Z_OK && zr != Z_BUF_ERROR) {
+				return -1;
+			}
+			if (source->zip.avail_out == 0 || (zr == Z_BUF_ERROR && source->zip.avail_in == 0)) {
+				return (ssize_t)(want - source->zip.avail_out);
+			}
+			if (source->zip.avail_out < want) {
+				return (ssize_t)(want - source->zip.avail_out);
+			}
+		}
+	}
+#ifdef AGORA_WORKSPACE_HAVE_BZIP2
+	if (source->kind == AGArchiveKindTarBzip2) {
+		if (!source->started) {
+			source->started = YES;
+		}
+		source->bz.next_out = (char *)out;
+		source->bz.avail_out = (unsigned int)want;
+		for (;;) {
+			int br;
+
+			if (source->bz.avail_in == 0 && !source->ended) {
+				source->inLength = fread(source->in, 1, sizeof source->in, source->file);
+				if (source->inLength == 0) {
+					source->ended = YES;
+					return -1;
+				}
+				source->bz.next_in = (char *)source->in;
+				source->bz.avail_in = (unsigned int)source->inLength;
+			}
+			br = BZ2_bzDecompress(&source->bz);
+			if (br == BZ_STREAM_END) {
+				source->ended = YES;
+				return (ssize_t)(want - source->bz.avail_out);
+			}
+			if (br != BZ_OK) {
+				return -1;
+			}
+			if (source->bz.avail_out == 0 || source->bz.avail_in == 0) {
+				return (ssize_t)(want - source->bz.avail_out);
+			}
+		}
+	}
+#endif
+#ifdef AGORA_WORKSPACE_HAVE_LZMA
+	if (source->kind == AGArchiveKindTarXz) {
+		lzma_ret xr;
+
+		source->lz.next_out = out;
+		source->lz.avail_out = want;
+		for (;;) {
+			if (source->lz.avail_in == 0 && !source->ended) {
+				source->inLength = fread(source->in, 1, sizeof source->in, source->file);
+				if (source->inLength == 0) {
+					source->ended = YES;
+					return -1;
+				}
+				source->lz.next_in = source->in;
+				source->lz.avail_in = source->inLength;
+			}
+			xr = lzma_code(&source->lz, LZMA_RUN);
+			if (xr == LZMA_STREAM_END) {
+				source->ended = YES;
+				return (ssize_t)(want - source->lz.avail_out);
+			}
+			if (xr != LZMA_OK) {
+				return -1;
+			}
+			if (source->lz.avail_out == 0 || source->lz.avail_in == 0) {
+				return (ssize_t)(want - source->lz.avail_out);
+			}
+		}
+	}
+#endif
+	return -1;
+}
+
+/* EVERY READ IS EXACT OR IT FAILS: a tar is read in headers and file lengths, and a short read is a truncated archive. */
+static BOOL fn_tar_read_exactly(AGTarSource *source, unsigned char *out, size_t want)
+{
+	size_t at = 0;
+
+	while (at < want) {
+		ssize_t got = fn_tar_source_read(source, out + at, want - at);
+
+		if (got <= 0) {
+			return NO;
+		}
+		at += (size_t)got;
+	}
+	return YES;
+}
+
+static BOOL fn_tar_skip(AGTarSource *source, uint64_t length)
+{
+	unsigned char scratch[AGUNZIP_CHUNK];
+
+	while (length > 0) {
+		size_t want = (size_t)((length < sizeof scratch) ? length : sizeof scratch);
+
+		if (!fn_tar_read_exactly(source, scratch, want)) {
+			return NO;
+		}
+		length -= want;
+	}
+	return YES;
+}
+
+/* AN OCTAL FIELD, WHICH IS WHAT A TAR HEADER HOLDS — with the base-256 escape GNU tar uses for very large sizes. */
+static uint64_t fn_tar_octal(const unsigned char *field, size_t length)
+{
+	uint64_t value = 0;
+	size_t i = 0;
+
+	if (length > 0 && (field[0] & 0x80) != 0) {
+		value = (uint64_t)(field[0] & 0x7f);
+		for (i = 1; i < length; i++) {
+			value = (value << 8) | (uint64_t)field[i];
+		}
+		return value;
+	}
+	for (i = 0; i < length; i++) {
+		if (field[i] == ' ' || field[i] == '\0') {
+			if (value != 0 || i > 0) {
+				break;
+			}
+			continue;
+		}
+		if (field[i] < '0' || field[i] > '7') {
+			break;
+		}
+		value = (value << 3) | (uint64_t)(field[i] - '0');
+	}
+	return value;
+}
+
+/* A PAX RECORD IS `<length> <key>=<value>\n`, and the length counts itself — the one format quirk that has to be read
+ * exactly as written. */
+static void fn_tar_pax_value(const unsigned char *data, size_t length, const char *key,
+			     NSString **value, uint64_t *sizeValue)
+{
+	size_t at = 0;
+	size_t keyLength = strlen(key);
+
+	while (at < length) {
+		size_t recordEnd = at;
+		uint64_t recordLength = 0;
+		size_t valueAt;
+
+		while (recordEnd < length && data[recordEnd] != ' ') {
+			if (data[recordEnd] < '0' || data[recordEnd] > '9') {
+				return;
+			}
+			recordLength = recordLength * 10 + (uint64_t)(data[recordEnd] - '0');
+			recordEnd++;
+		}
+		if (recordLength == 0 || at + recordLength > length) {
+			return;
+		}
+		valueAt = recordEnd + 1;
+		if (valueAt + keyLength < at + recordLength && memcmp(data + valueAt, key, keyLength) == 0 &&
+		    data[valueAt + keyLength] == '=') {
+			size_t start = valueAt + keyLength + 1;
+			size_t end = at + (size_t)recordLength;
+
+			while (end > start && (data[end - 1] == '\n' || data[end - 1] == '\0')) {
+				end--;
+			}
+			if (sizeValue != NULL && strcmp(key, "size") == 0) {
+				uint64_t parsed = 0;
+				size_t i;
+
+				for (i = start; i < end; i++) {
+					parsed = parsed * 10 + (uint64_t)(data[i] - '0');
+				}
+				*sizeValue = parsed;
+			} else if (value != NULL) {
+				[value release];
+				*value = [[NSString alloc] initWithBytes:data + start length:end - start
+								encoding:NSUTF8StringEncoding];
+			}
+		}
+		at += (size_t)recordLength;
+	}
+}
+
 /* ---- THE OPERATIONS -------------------------------------------------------------------------- */
 
 @implementation WSFileOperations
@@ -1302,7 +1676,7 @@ static unsigned long long fn_count_entries_at_path(NSString *path)
 
 + (BOOL)cg_isArchivePath:(NSString *)path
 {
-	return (path != nil) && [[[path pathExtension] lowercaseString] isEqualToString:@"zip"];
+	return (path != nil) && fn_archive_kind(path) != AGArchiveKindNone;
 }
 
 /* **THE CENTRAL DIRECTORY, WHICH IS WHAT AN ARCHIVE SAYS IT CONTAINS.** Read whole — a directory is a few dozen bytes
@@ -1596,9 +1970,23 @@ done:
 
 - (nullable NSString *)extractArchive:(NSString *)path error:(NSError **)error
 {
+	AGArchiveKind kind = fn_archive_kind(path);
+
+	if (kind == AGArchiveKindNone) {
+		if (error != NULL) *error = fn_error(34, @"that is not an archive this shell can read");
+		return nil;
+	}
+	if (kind != AGArchiveKindZip) {
+		return [self cg_extractTar:path kind:kind error:error];
+	}
+	return [self cg_extractZip:path error:error];
+}
+
+- (nullable NSString *)cg_extractZip:(NSString *)path error:(NSError **)error
+{
 	NSFileManager *manager = [NSFileManager defaultManager];
 	NSString *directory = [path stringByDeletingLastPathComponent];
-	NSString *base = [[path lastPathComponent] stringByDeletingPathExtension];
+	NSString *base = fn_archive_base_name(path);
 	NSString *root;
 	NSDictionary *onlyFile = nil;
 	NSUInteger fileCount = 0;
@@ -1607,7 +1995,7 @@ done:
 	uint64_t size;
 	NSUInteger i;
 
-	if (![[self class] cg_isArchivePath:path]) {
+	if (fn_archive_kind(path) != AGArchiveKindZip) {
 		if (error != NULL) *error = fn_error(34, @"that is not a zip archive");
 		return nil;
 	}
@@ -1696,6 +2084,302 @@ done:
 		[self report:i + 1 total:[entries count] path:destination];
 	}
 	fclose(file);
+	[self registerUndo:@"Extract Archive" handler:^(id target) {
+		(void)[[NSFileManager defaultManager] removeItemAtPath:root error:NULL];
+		(void)target;
+	}];
+	return root;
+}
+
+/* ---- EXTRACTING A TAR --------------------------------------------------------------------------------------- */
+
+/* ONE TAR ENTRY ONTO THE DISK, through the same rule the ZIP's entries use: a folder made, a link made, a file streamed,
+ * and then the mode and the time the header carries. */
+- (BOOL)cg_writeTarEntryAt:(NSString *)destination root:(NSString *)root type:(char)type from:(AGTarSource *)source
+		      size:(uint64_t)size mode:(mode_t)mode stamp:(struct timespec)stamp linkName:(NSString *)linkName
+		     error:(NSError **)error
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	BOOL ok = YES;
+
+	if (type == '5') {
+		if (![manager createDirectoryAtPath:destination withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+			return NO;
+		}
+	} else if (type == '2') {
+		NSString *parent = [destination stringByDeletingLastPathComponent];
+
+		if (![manager createDirectoryAtPath:parent withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+			return NO;
+		}
+		if (linkName == nil || symlink([linkName fileSystemRepresentation], [destination fileSystemRepresentation]) != 0) {
+			if (error != NULL) *error = fn_error(32, @"a link could not be made");
+			return NO;
+		}
+	} else if (type == '1') {
+		NSString *parent = [destination stringByDeletingLastPathComponent];
+
+		if (![manager createDirectoryAtPath:parent withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+			return NO;
+		}
+		/* **A HARD LINK POINTS AT A PATH THE ARCHIVE ALREADY EXTRACTED.** The link carries no data of its own, so a link
+		 * that cannot be made — a target that was skipped, a file system without them — leaves the entry out rather than
+		 * failing the archive: what is missing is a second name for bytes that are already there under the first. */
+		if (linkName != nil) {
+			/* **A HARD LINK'S TARGET IS A PATH FROM THE ARCHIVE'S TOP**, not from the entry's own folder — which is
+			 * where a symlink's target is measured from, and the one place the two kinds of link differ. */
+			NSString *target = [root stringByAppendingPathComponent:linkName];
+
+			(void)link([target fileSystemRepresentation], [destination fileSystemRepresentation]);
+		}
+	} else {
+		NSString *parent = [destination stringByDeletingLastPathComponent];
+		FILE *to;
+		unsigned char *buffer;
+		uint64_t left = size;
+
+		if (![manager createDirectoryAtPath:parent withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+			return NO;
+		}
+		buffer = malloc(AGUNZIP_CHUNK);
+		to = fopen([destination fileSystemRepresentation], "wb");
+		if (buffer == NULL || to == NULL) {
+			if (getenv("WS_TAR_DIAG") != NULL) {
+				fprintf(stderr, "TAR: %s: %s\n", [destination UTF8String], strerror(errno));
+			}
+			free(buffer);
+			if (to != NULL) {
+				fclose(to);
+			}
+			if (error != NULL) *error = fn_error(32, @"a file could not be written");
+			return NO;
+		}
+		while (left > 0) {
+			size_t want = (size_t)((left < AGUNZIP_CHUNK) ? left : AGUNZIP_CHUNK);
+
+			if (!fn_tar_read_exactly(source, buffer, want) || fwrite(buffer, 1, want, to) != want) {
+				free(buffer);
+				fclose(to);
+				(void)[manager removeItemAtPath:destination error:NULL];
+				if (error != NULL) *error = fn_error(36, @"the archive is truncated");
+				return NO;
+			}
+			left -= want;
+		}
+		free(buffer);
+		if (fclose(to) != 0) {
+			if (error != NULL) *error = fn_error(32, @"a file could not be written");
+			return NO;
+		}
+	}
+	if (ok && (mode & 07777) != 0) {
+		(void)chmod([destination fileSystemRepresentation], mode & 07777);
+	}
+	if (ok && stamp.tv_sec != 0 && type != '2') {
+		struct timespec times[2];
+
+		times[0] = stamp;
+		times[1] = stamp;
+		(void)utimensat(AT_FDCWD, [destination fileSystemRepresentation], times, 0);
+	}
+	return ok;
+}
+
+/* **A TAR IS READ ONCE AND STAGED.** The single-file rule needs the whole archive's entry count, which a stream cannot
+ * give before it has gone past, so everything lands in the folder it would have made anyway; if exactly one FILE went in,
+ * it is moved out beside the archive at the end and the folder is removed. */
+- (nullable NSString *)cg_extractTar:(NSString *)path kind:(AGArchiveKind)kind error:(NSError **)error
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSString *directory = [path stringByDeletingLastPathComponent];
+	NSString *base = fn_archive_base_name(path);
+	NSString *root;
+	NSString *onlyFile = nil;
+	NSUInteger fileCount = 0;
+	NSUInteger entryCount = 0;
+	AGTarSource source;
+	unsigned char block[512];
+	NSString *pendingName = nil;
+	NSString *pendingLink = nil;
+	uint64_t pendingSize = 0;
+	NSUInteger pendingSizeAt = 0;
+	BOOL ok = YES;
+
+	if (!fn_tar_source_open(&source, path, kind, error)) {
+		fn_tar_source_close(&source);
+		return nil;
+	}
+	root = [directory stringByAppendingPathComponent:fn_unique_name(directory, base)];
+	if (![manager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:error]) {
+		fn_tar_source_close(&source);
+		return nil;
+	}
+	for (;;) {
+		char type;
+		NSString *name;
+		NSString *linkName = nil;
+		uint64_t size;
+		mode_t mode;
+		struct timespec stamp = { 0, 0 };
+		uint64_t padded;
+		NSString *destination;
+
+		if (!fn_tar_read_exactly(&source, block, sizeof block)) {
+			break;			/* the end of the stream is the end of the archive */
+		}
+		if (block[0] == '\0') {
+			break;			/* two zero blocks end a tar; one is enough to stop */
+		}
+		type = (char)block[156];
+		size = fn_tar_octal(block + 124, 12);
+		mode = (mode_t)fn_tar_octal(block + 100, 8);
+		stamp.tv_sec = (time_t)fn_tar_octal(block + 136, 12);
+		stamp.tv_nsec = 0;
+		name = [[NSString alloc] initWithBytes:block length:100 encoding:NSUTF8StringEncoding];
+		if (name == nil) {
+			name = [[NSString alloc] initWithBytes:block length:strnlen((const char *)block, 100)
+					      encoding:NSUTF8StringEncoding];
+		}
+		/* THE USTAR PREFIX IS PART OF THE PATH, and it is how a name longer than 100 bytes is spelled without GNU's
+		 * extension. */
+		if (block[257] == 'u' && block[258] == 's' && block[259] == 't' && block[260] == 'a' && block[345] != '\0') {
+			NSString *prefix = [[NSString alloc] initWithBytes:block + 345 length:strnlen((const char *)block + 345, 155)
+								  encoding:NSUTF8StringEncoding];
+
+			if (prefix != nil) {
+				NSString *joined = [prefix stringByAppendingFormat:@"/%@", name];
+
+				[joined retain];
+				[name release];
+				name = joined;
+			}
+			[prefix release];
+		}
+		/* GNU'S LONG NAME AND PAX'S RECORDS BOTH DESCRIBE THE NEXT ENTRY, and both are entries of their own with data. */
+		if (type == 'L' || type == 'K' || type == 'x' || type == 'g') {
+			unsigned char *data = malloc((size_t)size + 1);
+			BOOL read = (data != NULL) && fn_tar_read_exactly(&source, data, (size_t)size);
+
+			if (read) {
+				data[size] = '\0';
+				if (type == 'L') {
+					NSString *longName = [[NSString alloc] initWithBytes:data length:(NSUInteger)size
+										     encoding:NSUTF8StringEncoding];
+
+					[pendingName release];
+					pendingName = longName;
+				} else if (type == 'K') {
+					NSString *longLink = [[NSString alloc] initWithBytes:data length:(NSUInteger)size
+										     encoding:NSUTF8StringEncoding];
+
+					[pendingLink release];
+					pendingLink = longLink;
+				} else if (type == 'x') {
+					fn_tar_pax_value(data, (size_t)size, "path", &pendingName, NULL);
+					fn_tar_pax_value(data, (size_t)size, "linkpath", &pendingLink, NULL);
+					fn_tar_pax_value(data, (size_t)size, "size", NULL, &pendingSize);
+					pendingSizeAt = (uint64_t)size;
+				}
+			}
+			free(data);
+			padded = (size + 511) & ~(uint64_t)511;
+			if (!read || !fn_tar_skip(&source, padded - size)) {
+				[name release];
+				ok = NO;
+				break;
+			}
+			[name release];
+			continue;
+		}
+		if (pendingName != nil) {
+			[name release];
+			name = [pendingName retain];
+		}
+		/* **THE LINK NAME IS THE HEADER'S WHEN NO LONG FORM REPLACED IT.** A `typeflag` of '2' or '1' carries the path it
+		 * points at in the 100-byte field at 157 that the name has its own copy of; GNU's 'K' and PAX's `linkpath` override
+		 * it, and either may have been read on an entry just before this one. */
+		if (pendingLink != nil) {
+			linkName = [pendingLink retain];
+		} else if ((type == '2' || type == '1') && block[157] != '\0') {
+			linkName = [[NSString alloc] initWithBytes:block + 157
+							    length:strnlen((const char *)block + 157, 100)
+						       encoding:NSUTF8StringEncoding];
+		}
+		if (pendingSize != 0) {
+			size = pendingSize;
+		}
+		[pendingName release];
+		pendingName = nil;
+		[pendingLink release];
+		pendingLink = nil;
+		pendingSize = 0;
+		entryCount++;
+		if (!fn_entry_name_is_safe([name UTF8String])) {
+			if (error != NULL) {
+				*error = fn_error(35, [NSString stringWithFormat:@"%@ tries to leave the folder", name]);
+			}
+			[name release];
+			[linkName release];
+			ok = NO;
+			break;
+		}
+		destination = [root stringByAppendingPathComponent:name];
+		if (getenv("WS_TAR_DIAG") != NULL) {
+			fprintf(stderr, "TAR: type '%c' size %llu mode %04o \"%s\"\n", type,
+				(unsigned long long)size, (unsigned)(mode & 07777), [name UTF8String]);
+		}
+		if (![self cg_writeTarEntryAt:destination root:root type:type from:&source size:size mode:mode stamp:stamp
+				     linkName:linkName error:error]) {
+			[name release];
+			[linkName release];
+			ok = NO;
+			break;
+		}
+		if (type != '5') {
+			fileCount++;
+			[onlyFile release];
+			onlyFile = [destination retain];
+		}
+		padded = (size + 511) & ~(uint64_t)511;
+		if (type != '5' && !fn_tar_skip(&source, padded - size)) {
+			[name release];
+			[linkName release];
+			ok = NO;
+			break;
+		}
+		[self report:entryCount total:0 path:destination];
+		[name release];
+		[linkName release];
+	}
+	fn_tar_source_close(&source);
+	if (!ok) {
+		[onlyFile release];
+		(void)[manager removeItemAtPath:root error:NULL];
+		return nil;
+	}
+	/* **ONE FILE IS THE FILE, NOT A FOLDER AROUND IT**, the same rule the ZIP's extraction follows. */
+	if (fileCount == 1 && onlyFile != nil) {
+		NSString *name = [onlyFile lastPathComponent];
+		NSString *beside = [directory stringByAppendingPathComponent:fn_unique_name(directory, name)];
+
+		if ([manager moveItemAtPath:onlyFile toPath:beside error:error]) {
+			(void)[manager removeItemAtPath:root error:NULL];
+			[onlyFile release];
+			[self registerUndo:@"Extract Archive" handler:^(id target) {
+				(void)[[NSFileManager defaultManager] removeItemAtPath:beside error:NULL];
+				(void)target;
+			}];
+			return beside;
+		}
+		(void)[manager removeItemAtPath:root error:NULL];
+		[onlyFile release];
+		return nil;
+	}
+	[onlyFile release];
 	[self registerUndo:@"Extract Archive" handler:^(id target) {
 		(void)[[NSFileManager defaultManager] removeItemAtPath:root error:NULL];
 		(void)target;
