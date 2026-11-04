@@ -30,6 +30,15 @@
 		&& [target isTrashDirectory]);
 }
 
+/* **A ROW THAT ONLY SOME SELECTIONS CAN ANSWER IS ASKED FOR, NOT DRAWN GREY.** Extract Archive is about a .zip and about
+ * nothing else, so the menu asks the target — the same arrangement the trash's Put Back row uses — and the row appears
+ * when the selection is an archive rather than sitting disabled under every folder a person right-clicks. */
++ (BOOL)cg_targetCanExtract:(id)target
+{
+	return (target != nil && [target respondsToSelector:@selector(cg_selectionCanBeExtracted)]
+		&& [target cg_selectionCanBeExtracted]);
+}
+
 /* ONE ROW: title, selector, and the target that will be asked whether it can answer. Nil is allowed for the target —
  * then the row is disabled by the update walk, which is the honest picture of a command nobody implements. */
 + (NSMenuItem *)cg_row:(NSString *)title action:(SEL)action target:(id)target
@@ -53,6 +62,9 @@
 		[menu addItem:[NSMenuItem separatorItem]];
 	}
 	[menu addItem:[self cg_row:@"Get Info" action:@selector(getInfo:) target:target]];
+	if ([self cg_targetCanExtract:target]) {
+		[menu addItem:[self cg_row:@"Extract Archive" action:@selector(extractArchive:) target:target]];
+	}
 	[menu addItem:[NSMenuItem separatorItem]];
 	[menu addItem:[self cg_row:@"Cut" action:@selector(cut:) target:target]];
 	[menu addItem:[self cg_row:@"Copy" action:@selector(copy:) target:target]];
@@ -86,6 +98,9 @@
 		[menu addItem:[NSMenuItem separatorItem]];
 	}
 	[menu addItem:[self cg_row:@"Get Info" action:@selector(getInfo:) target:target]];
+	if ([self cg_targetCanExtract:target]) {
+		[menu addItem:[self cg_row:@"Extract Archive" action:@selector(extractArchive:) target:target]];
+	}
 	[menu addItem:[self cg_row:@"New Folder with Selection"
 			   action:@selector(newFolderWithSelection:) target:target]];
 	/* **AND A GROUP CAN BE ONE ARCHIVE.** "Compress" beside "New Folder with Selection" is the same idea twice: both make

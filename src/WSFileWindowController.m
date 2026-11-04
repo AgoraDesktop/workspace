@@ -970,9 +970,17 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 {
 	if ([item isBrowsable]) {
 		[self navigateToDirectory:[item path]];
-	} else {
-		(void)[[NSWorkspace sharedWorkspace] openFile:[item path]];
+		return;
 	}
+	/* **DOUBLE-CLICKING AN ARCHIVE UNPACKS IT.** There is no unarchiver registered for `.zip` in this tree's Launch
+	 * Services, so the launch door would answer "no application" for the one file type this shell knows how to open
+	 * itself — and what a person means by double-clicking an archive is its contents. */
+	if ([WSFileOperations cg_isArchivePath:[item path]]) {
+		(void)[_fileOperations extractArchive:[item path] error:NULL];
+		[self finishOperation];
+		return;
+	}
+	(void)[[NSWorkspace sharedWorkspace] openFile:[item path]];
 }
 
 /* A RENAME OR A DROP CHANGED THE MODEL: the count may be the same, but the status bar and both views are the
@@ -1334,6 +1342,37 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	return [[paths objectAtIndex:0] stringByDeletingLastPathComponent];
 }
 
+/* **AN ARCHIVE IS EXTRACTED BESIDE ITSELF.** `-extractArchive:` is the context row's command and the double click's, and
+ * the predicate is what the menu asks before it draws the row: every selected item is a `.zip`, which is the only
+ * selection the command is about. */
+- (BOOL)cg_selectionCanBeExtracted
+{
+	NSArray *paths = [self selectedPaths];
+	NSUInteger i;
+
+	if ([paths count] == 0) {
+		return NO;
+	}
+	for (i = 0; i < [paths count]; i++) {
+		if (![WSFileOperations cg_isArchivePath:[paths objectAtIndex:i]]) {
+			return NO;
+		}
+	}
+	return YES;
+}
+
+- (void)extractArchive:(id)sender
+{
+	NSArray *paths = [self selectedPaths];
+	NSUInteger i;
+
+	(void)sender;
+	for (i = 0; i < [paths count]; i++) {
+		(void)[_fileOperations extractArchive:[paths objectAtIndex:i] error:NULL];
+	}
+	[self finishOperation];
+}
+
 - (void)duplicate:(id)sender
 {
 	(void)sender;
@@ -1599,6 +1638,9 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	}
 	if (action == @selector(getInfo:)) {
 		return [[self selectedItems] count] > 0;
+	}
+	if (action == @selector(extractArchive:)) {
+		return [self cg_selectionCanBeExtracted];
 	}
 	if (action == @selector(cut:) || action == @selector(copy:)) {
 		return [[self selectedItems] count] > 0;

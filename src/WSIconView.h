@@ -146,6 +146,12 @@ extern NSString *WSIconViewFolderPathKey;
 /* Select the items at these paths — what a drop of them into this grid means, and the same door a probe uses. */
 - (void)cg_selectPaths:(NSArray *)paths;
 
+/* **EXTRACT ARCHIVE, AS A COMMAND AND AS A QUESTION.** The context menu asks this before it draws the row — the same
+ * arrangement the trash's Put Back uses — and the command unpacks every selected `.zip` beside itself into a folder named
+ * for it. A double click on an archive takes the same command. */
+- (BOOL)cg_selectionCanBeExtracted;
+- (void)extractArchive:(nullable id)sender;
+
 /* **THE CONTEXT MENU, AND WHAT A SINGLE ITEM CAN ANSWER.** `-menuForEvent:` is the AppKit's question (asked by `NSView`'s
  * `-rightMouseDown:`) and this view answers it for the ONE item under the pointer, narrowing the selection to it first.
  * Rename is the inline field the keyboard already reaches, Move to Trash is W6's, Copy and Cut are the pasteboard, and

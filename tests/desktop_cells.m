@@ -202,6 +202,19 @@ int main(void)
 		[compressing compress:nil];
 		check([[NSFileManager defaultManager] fileExistsAtPath:archive],
 		      "the desktop compresses its selection into the desktop folder");
+		/* **AND IT UNPACKS ONE, WHICH IS THE SAME COMMAND THE RIGHT-CLICK ROW AND A DOUBLE CLICK TAKE.** */
+		{
+			NSString *unpacked = [root stringByAppendingPathComponent:@"alpha"];
+
+			[compressing reload];
+			[compressing cg_selectPaths:[NSArray arrayWithObject:archive]];
+			check([compressing cg_selectionCanBeExtracted],
+			      "a selected archive on the desktop says it can be extracted");
+			[compressing extractArchive:nil];
+			check([[NSFileManager defaultManager] fileExistsAtPath:unpacked],
+			      "and the desktop unpacks it into a folder named for it");
+			[[NSFileManager defaultManager] removeItemAtPath:unpacked error:NULL];
+		}
 		[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
 		[window setContentView:nil];
 		[window release];

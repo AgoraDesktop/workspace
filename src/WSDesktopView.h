@@ -135,6 +135,12 @@ extern NSString *WSDesktopViewPathKey;
 /* And the items a drop put here are the ones the hand meant, so they are the ones held. */
 - (void)cg_selectPaths:(NSArray *)paths;
 
+/* **EXTRACT ARCHIVE, AS A COMMAND AND AS A QUESTION.** The context menu asks this before it draws the row — the same
+ * arrangement the trash's Put Back uses — and the command unpacks every selected `.zip` beside itself into a folder named
+ * for it. A double click on an archive takes the same command. */
+- (BOOL)cg_selectionCanBeExtracted;
+- (void)extractArchive:(nullable id)sender;
+
 /* **THE DRAG, AS A PROBE ASKS FOR IT.** The same two doors the icon view has, for the same reason: a session only
  * begins from a real event, and a test has none. */
 - (NSArray *)cg_selectedPaths;

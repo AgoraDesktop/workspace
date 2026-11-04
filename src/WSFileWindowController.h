@@ -181,6 +181,12 @@
  * about. Exposed because a probe checks the rule rather than the pixels. */
 - (nullable NSString *)cg_destinationBesideSelection;
 
+/* **EXTRACT ARCHIVE, AS A COMMAND AND AS A QUESTION.** The context menu asks `-cg_selectionCanBeExtracted` before it draws
+ * the row — the same arrangement the trash's Put Back uses — and `-extractArchive:` unpacks every selected `.zip` beside
+ * itself into a folder named for it. A double click on an archive takes the same command. */
+- (BOOL)cg_selectionCanBeExtracted;
+- (void)extractArchive:(nullable id)sender;
+
 @end
 
 #endif /* WORKSPACE_WSFILEWINDOWCONTROLLER_H */

@@ -16,6 +16,18 @@
 #import "WSIconView.h"
 #import "WSFileWindowController.h"
 
+/* **THE WINDOW'S OWN RE-READ AND ITS DOUBLE CLICK**, both declared here because the views are their only other callers. */
+@interface WSFileWindowController (AGProbe)
+- (void)refresh;
+@end
+
+/* **THE DOUBLE CLICK'S DOOR, DECLARED HERE BECAUSE IT IS THE WINDOW'S OWN.** The views call it
+ * (`-listView:openItem:` and the grid's twin) and it is what a double click reaches; a probe sends it directly rather
+ * than pretending to be a mouse. */
+@interface WSFileWindowController (AGOpenProbe)
+- (void)openItem:(WSItem *)item;
+@end
+
 #import <AppKit/NSSearchField.h>
 #import "WSHairlineView.h"
 #import "WSItemKind.h"
@@ -1039,6 +1051,74 @@ int main(void)
 		[third release];
 	}
 
+
+	/* **AN ARCHIVE UNPACKS BESIDE ITSELF, FROM A DOUBLE CLICK AND FROM THE MENU ROW.** A window of its own, so the
+	 * selection is this block's and not one left over from the column walk above. The row is asked for
+	 * (`-cg_selectionCanBeExtracted`) and the double click takes the same command, which is why both are measured against
+	 * the same archive: one extraction each, and the second gets "trip 2" because the first took "trip". */
+	{
+		NSString *trip = [root stringByAppendingPathComponent:@"trip"];
+		NSString *archive;
+		NSString *firstFolder = [root stringByAppendingPathComponent:@"trip"];
+		NSString *secondFolder = [root stringByAppendingPathComponent:@"trip 2"];
+		WSFileWindowController *fresh;
+		WSItem *zipItem;
+
+		[[NSFileManager defaultManager] createDirectoryAtPath:trip withIntermediateDirectories:YES
+							   attributes:nil error:NULL];
+		[[NSMutableData dataWithLength:64] writeToFile:[trip stringByAppendingPathComponent:@"inside.txt"]
+						   atomically:NO];
+		fresh = [[WSFileWindowController alloc] initWithDirectory:root];
+		archive = [[fresh fileOperations] compressPaths:[NSArray arrayWithObject:trip] inDirectory:root error:NULL];
+		check(archive != nil, "an archive is made on the window's folder");
+		/* THE SOURCE GOES, so the extraction's own name is free — and the window re-reads, because the archive was made
+		 * by the manager and no view has heard about it. */
+		[[NSFileManager defaultManager] removeItemAtPath:trip error:NULL];
+		[fresh refresh];
+		[fresh cg_useListView:nil];
+		[[fresh cg_listView] selectRowIndexes:[NSIndexSet indexSetWithIndex:0] byExtendingSelection:NO];
+		{
+			/* THE ROW BY NAME, because the fixture root holds everything the earlier checks left in it and a row number
+			 * would be a guess about the sort. */
+			NSOutlineView *list = (NSOutlineView *)[fresh cg_listView];
+			NSInteger row;
+
+			for (row = 0; row < [list numberOfRows]; row++) {
+				id item = [list itemAtRow:row];
+
+				if ([[[item path] lastPathComponent] isEqual:[archive lastPathComponent]]) {
+					[list selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row]
+					  byExtendingSelection:NO];
+					break;
+				}
+			}
+			check(row < [list numberOfRows], "the archive is a row in the window");
+		}
+		check([fresh cg_selectionCanBeExtracted], "a selected archive says it can be extracted");
+		{
+			/* THE MENU THE LIST RAISES IS AIMED AT THE WINDOW, which is where the command lives. */
+			NSMenu *menu = [WSContextMenu menuForSingleItemWithTarget:fresh];
+			NSMenuItem *row = [menu itemAtIndex:[menu indexOfItemWithTitle:@"Extract Archive"]];
+
+			check(row != nil && [row action] == @selector(extractArchive:) && [row target] == fresh,
+			      "the right-click menu carries the row, aimed at the window");
+			[NSApp sendAction:[row action] to:[row target] from:row];
+		}
+		check([[NSFileManager defaultManager] fileExistsAtPath:firstFolder],
+		      "sending the row unpacks the archive into a folder named for it");
+		check([[NSFileManager defaultManager]
+			fileExistsAtPath:[firstFolder stringByAppendingPathComponent:@"trip/inside.txt"]],
+		      "with the archive's own contents inside it");
+
+		/* AND THE DOUBLE CLICK: the same command, through the door the views report to. */
+		zipItem = [[WSItem alloc] initWithName:[archive lastPathComponent] path:archive isDirectory:NO];
+		[fresh openItem:zipItem];
+		[zipItem release];
+		check([[NSFileManager defaultManager] fileExistsAtPath:secondFolder],
+		      "and a double click unpacks it again, into \"trip 2\" because the first took \"trip\"");
+		[fresh close];
+		[fresh release];
+	}
 
 	[backItem release];
 	[listItem release];

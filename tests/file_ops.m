@@ -176,6 +176,67 @@ static NSArray *zip_central_directory(NSData *data)
 	return records;
 }
 
+/* ---- A ZIP BUILT BY HAND, FOR THE ONE CASE THE WRITER REFUSES TO MAKE ------------------------------------
+ *
+ * A stored entry whose name is `../escape.txt` is the classic zip-slip, and this tree's own writer cannot produce one
+ * because its names come from path components. So the probe assembles the bytes: local header, name, payload, central
+ * record, end record, with the offsets computed rather than typed. The CRC is left zero on purpose — the name is refused
+ * before any byte is written, which is the property under test. */
+static void slip_put16(unsigned char *at, uint16_t value)
+{
+	at[0] = (unsigned char)(value & 0xff);
+	at[1] = (unsigned char)((value >> 8) & 0xff);
+}
+
+static void slip_put32(unsigned char *at, uint32_t value)
+{
+	at[0] = (unsigned char)(value & 0xff);
+	at[1] = (unsigned char)((value >> 8) & 0xff);
+	at[2] = (unsigned char)((value >> 16) & 0xff);
+	at[3] = (unsigned char)((value >> 24) & 0xff);
+}
+
+static NSData *slip_archive(const char *name, const char *payload)
+{
+	uint16_t nameLength = (uint16_t)strlen(name);
+	uint32_t payloadLength = (uint32_t)strlen(payload);
+	uint32_t centralOffset = 30 + (uint32_t)nameLength + payloadLength;
+	uint32_t centralSize = 46 + (uint32_t)nameLength;
+	uint32_t total = centralOffset + centralSize + 22;
+	unsigned char *bytes = calloc(1, total);
+	unsigned char *at = bytes;
+	NSData *answer;
+
+	if (bytes == NULL) {
+		return nil;
+	}
+	slip_put32(at, 0x04034b50u);
+	slip_put16(at + 4, 20);
+	slip_put16(at + 8, 0);			/* stored */
+	slip_put16(at + 26, nameLength);
+	memcpy(at + 30, name, nameLength);
+	memcpy(at + 30 + nameLength, payload, payloadLength);
+	at = bytes + centralOffset;
+	slip_put32(at, 0x02014b50u);
+	slip_put16(at + 4, (uint16_t)((3u << 8) | 20u));
+	slip_put16(at + 6, 20);
+	slip_put32(at + 20, payloadLength);	/* compressed */
+	slip_put32(at + 24, payloadLength);	/* uncompressed */
+	slip_put16(at + 28, nameLength);
+	slip_put32(at + 38, (uint32_t)0100644u << 16);
+	slip_put32(at + 42, 0);			/* the local header is at zero */
+	memcpy(at + 46, name, nameLength);
+	at = bytes + centralOffset + centralSize;
+	slip_put32(at, 0x06054b50u);
+	slip_put16(at + 8, 1);
+	slip_put16(at + 10, 1);
+	slip_put32(at + 12, centralSize);
+	slip_put32(at + 16, centralOffset);
+	answer = [NSData dataWithBytes:bytes length:total];
+	free(bytes);
+	return answer;
+}
+
 static BOOL exists(NSString *path)
 {
 	return [[NSFileManager defaultManager] fileExistsAtPath:path];
@@ -464,6 +525,113 @@ int main(void)
 		      "and the archive is streamed: the peak RSS does not grow by the file's size");
 		(void)[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
 		(void)[[NSFileManager defaultManager] removeItemAtPath:bulkDir error:NULL];
+	}
+
+	/* 10b. EXTRACTION IS THE OTHER HALF: an archive this tree wrote comes back as the tree it wrote. The folder is named
+	 * for the archive and sits beside it, the files keep their bytes and their executable bit, the symlink is a symlink
+	 * again, the empty folder is still there, and the times are the files' own. */
+	{
+		NSString *source = [base stringByAppendingPathComponent:@"trip"];
+		NSString *nested = [source stringByAppendingPathComponent:@"nested"];
+		NSString *script = [source stringByAppendingPathComponent:@"run.sh"];
+		NSString *link = [source stringByAppendingPathComponent:@"link.txt"];
+		NSString *empty = [source stringByAppendingPathComponent:@"empty"];
+		NSString *archive;
+		NSString *folder;
+		struct timespec stamps[2];
+		NSString *extracted;
+		NSData *expectedBytes = nil;
+
+		makeDirectory(source);
+		makeDirectory(nested);
+		makeDirectory(empty);
+		makeFile([source stringByAppendingPathComponent:@"a.txt"], 40);
+		makeFile([nested stringByAppendingPathComponent:@"b.txt"], 5000);
+		makeFile(script, 24);
+		(void)chmod([script fileSystemRepresentation], 0755);
+		(void)symlink("a.txt", [link fileSystemRepresentation]);
+		stamps[0].tv_sec = 1600000000;
+		stamps[0].tv_nsec = 0;
+		stamps[1] = stamps[0];
+		(void)utimensat(AT_FDCWD, [script fileSystemRepresentation], stamps, AT_SYMLINK_NOFOLLOW);
+
+		archive = [ops compressPaths:[NSArray arrayWithObject:source] inDirectory:base error:NULL];
+		check(archive != nil, "a tree compresses");
+		{
+			/* **THE SOURCE GOES AWAY, BECAUSE THAT IS THE CASE THIS IS ABOUT**: an archive beside the tree it came from
+			 * extracts into "trip", and only a SECOND extraction has to invent "trip 2". */
+			expectedBytes = [[NSData dataWithContentsOfFile:[nested stringByAppendingPathComponent:@"b.txt"]] retain];
+			[[NSFileManager defaultManager] removeItemAtPath:source error:NULL];
+		}
+		folder = [ops extractArchive:archive error:NULL];
+		printf("  (note: %s extracted into %s\n", [[archive lastPathComponent] UTF8String],
+		       (folder != nil) ? [[folder lastPathComponent] UTF8String] : "(nil)");
+		check(folder != nil, "and extracts");
+		check(folder != nil && [[folder lastPathComponent] isEqual:@"trip"],
+		      "into a folder named for the archive, beside it");
+		extracted = [folder stringByAppendingPathComponent:@"trip"];
+		check(exists([extracted stringByAppendingPathComponent:@"a.txt"]),
+		      "with the archive's own top folder inside it");
+		check(exists([extracted stringByAppendingPathComponent:@"nested/b.txt"]),
+		      "and the nesting keeps its shape");
+		check(exists([extracted stringByAppendingPathComponent:@"empty"]),
+		      "and an empty folder is not dropped");
+		check(exists([extracted stringByAppendingPathComponent:@"run.sh"]),
+		      "and the script is there");
+		{
+			struct stat st;
+
+			check(stat([[extracted stringByAppendingPathComponent:@"run.sh"] fileSystemRepresentation], &st) == 0
+			      && (st.st_mode & 07777) == 0755,
+			      "executable again, from the mode the archive carried");
+			check((st.st_mode & 07777) == 0755 && st.st_mtime == (time_t)1600000000,
+			      "and dated when it was, not when it was unpacked");
+		}
+		{
+			char target[PATH_MAX];
+			ssize_t length = readlink([[extracted stringByAppendingPathComponent:@"link.txt"]
+						   fileSystemRepresentation], target, sizeof target);
+
+			check(length > 0 && strncmp(target, "a.txt", (size_t)length) == 0,
+			      "and the symlink is a symlink again, pointing at what it pointed at");
+		}
+		{
+			/* THE BYTES ROUND-TRIP: a 5 KB file that deflated on the way in has to inflate to the same 5 KB. */
+			NSData *round = [NSData dataWithContentsOfFile:
+				[extracted stringByAppendingPathComponent:@"nested/b.txt"]];
+
+			check(expectedBytes != nil && round != nil && [expectedBytes isEqual:round],
+			      "and every file's bytes are the ones that went in");
+			[expectedBytes release];
+		}
+		check(!exists([base stringByAppendingPathComponent:@"trip 2"]),
+		      "one extraction leaves no second folder behind");
+		{
+			NSString *again = [ops extractArchive:archive error:NULL];
+
+			check(again != nil && [[again lastPathComponent] isEqual:@"trip 2"],
+			      "and extracting it twice is two folders, not a merge");
+			[[NSFileManager defaultManager] removeItemAtPath:again error:NULL];
+		}
+
+		/* **A NAME THAT LEAVES THE FOLDER REFUSES THE WHOLE ARCHIVE.** Hand-built, because the writer will not make one:
+		 * a stored entry called "../escape.txt" is the classic zip-slip, and what must happen is nothing at all. */
+		{
+			NSString *bad = [base stringByAppendingPathComponent:@"slip.zip"];
+			NSError *slipError = nil;
+			NSString *made;
+			NSData *slip = slip_archive("../escape.txt", "pwned\nxyz");
+
+			check(slip != nil, "a zip carrying ../escape.txt is built by hand");
+			[slip writeToFile:bad atomically:NO];
+			made = [ops extractArchive:bad error:&slipError];
+			check(made == nil && slipError != nil, "an entry called ../escape.txt is refused");
+			check(!exists([base stringByAppendingPathComponent:@"escape.txt"]),
+			      "and nothing is written outside the folder it was unpacking into");
+			check(!exists([base stringByAppendingPathComponent:@"slip"]),
+			      "and the half-made folder is taken away again");
+			[[NSFileManager defaultManager] removeItemAtPath:bad error:NULL];
+		}
 	}
 
 	/* 11. ZIP64, MEASURED WITHOUT FOUR GIGABYTES. The format's limits are 4 GB and 65,535 entries, which no suite should

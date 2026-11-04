@@ -23,9 +23,12 @@ Move/Copy, Move to Trash, Put Back, Empty Trash and Compress, with Undo, a progr
 surfaces answer the same three — a file window's grid (`WSIconView`), the desktop (`WSDesktopView`), the List
 (`WSListView`) and the Columns (`WSColumnView`, whose menu is the browser's own right-click):
 
-- **one icon**: Get Info, —, Cut, Copy, —, Rename, Compress, Move to Trash;
-- **one icon of several held**: Get Info, New Folder with Selection, Compress, —, Cut, Copy, —, Move to Trash (no Rename:
-  one name for many is a question, not a command);
+- **one icon**: Get Info, [Extract Archive], —, Cut, Copy, —, Rename, Compress, Move to Trash;
+- **one icon of several held**: Get Info, [Extract Archive], New Folder with Selection, Compress, —, Cut, Copy, —, Move to
+  Trash (no Rename: one name for many is a question, not a command);
+
+`[Extract Archive]` is the one row in brackets, and it is **asked for rather than drawn grey**: the menu puts the question
+to the target (`-cg_selectionCanBeExtracted`) and the row exists only when every selected item is a `.zip`.
 - **the empty grid**: New Folder, —, Paste, Select All.
 
 A click on an icon that is NOT part of the held group narrows the selection to it first, and a click on the background
@@ -454,6 +457,15 @@ directory over the limits also gets the ZIP64 end of central directory, its loca
 above it. The suite cannot write four gigabytes, so `+cg_setZip64LimitsForTesting:entries:` lowers the thresholds and the
 same records are measured on a few kilobytes; the real limits were verified once against Python's `zipfile` and `unzip`
 on a 4.1 GB entry.
+
+**AND A .zip UNPACKS BESIDE ITSELF, INTO A FOLDER NAMED FOR IT.** `-extractArchive:` reads the archive this tree writes
+— store and raw deflate, ZIP64 when a record needed 64 bits — and makes `<folder>/<basename>/`: `trip.zip` beside `trip`,
+and "trip 2" when the name is taken, because two extractions are two folders. Every entry keeps its mode and its
+modification time, a symlink comes back as a link, empty folders survive, and each entry's CRC is checked. **A NAME THAT
+LEAVES THE FOLDER REFUSES THE WHOLE ARCHIVE**: an entry called `../escape.txt` or `/etc/passwd` is zip-slip, so the folder
+made so far is removed and the answer is nil. Undo removes the folder. A double click on an archive takes the same command
+— there is no unarchiver registered for `.zip` in this tree's Launch Services, so the launch door would answer "no
+application" for the one file type the shell can open itself.
 
 **AND IT LANDS BESIDE WHAT IT COMPRESSED.** Compress used to write into `-cg_commandDirectory`, which answers the COLUMN
 a context menu was raised in and is the browser's ROOT when the command comes from the menu bar — so compressing

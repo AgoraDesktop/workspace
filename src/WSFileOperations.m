@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <string.h>
 #include <time.h>
@@ -779,6 +780,112 @@ done:
 
 @end
 
+/* ---- a ZIP reader: the central directory, a streaming inflate, and a folder named for the archive --------
+
+ * **EXTRACTING IS THE OTHER HALF OF COMPRESSING, AND IT IS WRITTEN HERE FOR THE SAME REASON.** The archive this tree
+ * writes is the archive it reads: store and raw deflate, the central directory's names and modes, ZIP64 when a record
+ * needed 64 bits. No external unarchiver is run, so a `.zip` needs nothing installed to open.
+ *
+ * **AND EVERY ENTRY'S PATH IS CHECKED BEFORE ANYTHING IS CREATED.** A name that starts with `/`, or that has a `..`
+ * component, is an archive trying to write outside the folder it was asked to unpack into — the classic zip-slip — and
+ * it is REFUSED WHOLE: the folder made so far is removed and the answer is nil. A partial extraction of a hostile
+ * archive is the one outcome worth less than no extraction at all.
+ *
+ * **A FILE IS STREAMED THROUGH zlib, A BLOCK AT A TIME**, the same rule the writer follows: the archive's own bytes are
+ * never all in memory, and neither is the file being unpacked. */
+
+#define AGUNZIP_CHUNK 65536
+
+static uint16_t fn_le16(const unsigned char *bytes)
+{
+	return (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8));
+}
+
+static uint32_t fn_le32(const unsigned char *bytes)
+{
+	return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+}
+
+static uint64_t fn_le64(const unsigned char *bytes)
+{
+	return (uint64_t)fn_le32(bytes) | ((uint64_t)fn_le32(bytes + 4) << 32);
+}
+
+/* An entry that carries a ZIP64 extra field has its real numbers there, in the order uncompressed, compressed, offset. */
+static void fn_zip64_values(const unsigned char *extra, size_t length, uint64_t *uncompressed, uint64_t *compressed,
+			    uint64_t *offset)
+{
+	size_t at = 0;
+
+	while (at + 4 <= length) {
+		uint16_t tag = fn_le16(extra + at);
+		uint16_t size = fn_le16(extra + at + 2);
+		size_t cursor = at + 4;
+
+		if (tag == 0x0001) {
+			if (cursor + 8 <= at + 4 + size) {
+				*uncompressed = fn_le64(extra + cursor);
+				cursor += 8;
+			}
+			if (cursor + 8 <= at + 4 + size) {
+				*compressed = fn_le64(extra + cursor);
+				cursor += 8;
+			}
+			if (cursor + 8 <= at + 4 + size) {
+				*offset = fn_le64(extra + cursor);
+			}
+			return;
+		}
+		at += 4 + size;
+	}
+}
+
+/* **A NAME THAT LEAVES THE FOLDER IS NOT A NAME.** Split on `/`, and refuse an absolute path, a `..` component, and an
+ * empty name; a `.` component is harmless and is skipped by the caller. */
+static BOOL fn_entry_name_is_safe(const char *name)
+{
+	const char *at = name;
+
+	if (name == NULL || name[0] == '\0' || name[0] == '/') {
+		return NO;
+	}
+	while (*at != '\0') {
+		const char *end = strchr(at, '/');
+		size_t length = (end != NULL) ? (size_t)(end - at) : strlen(at);
+
+		if (length == 2 && at[0] == '.' && at[1] == '.') {
+			return NO;
+		}
+		if (end == NULL) {
+			break;
+		}
+		at = end + 1;
+	}
+	return YES;
+}
+
+/* THE DOS STAMP A ZIP CARRIES, BACK INTO A `time_t` — local time, the zone the writer used. */
+static void fn_dos_to_time(uint16_t dosDate, uint16_t dosTime, struct timespec *out)
+{
+	struct tm broken;
+	time_t seconds;
+
+	memset(&broken, 0, sizeof broken);
+	broken.tm_year = ((dosDate >> 9) & 0x7f) + 80;
+	broken.tm_mon = ((dosDate >> 5) & 0x0f) - 1;
+	broken.tm_mday = dosDate & 0x1f;
+	broken.tm_hour = (dosTime >> 11) & 0x1f;
+	broken.tm_min = (dosTime >> 5) & 0x3f;
+	broken.tm_sec = (int)(dosTime & 0x1f) * 2;
+	broken.tm_isdst = -1;
+	if (broken.tm_mon < 0 || broken.tm_mday < 1) {
+		return;
+	}
+	seconds = mktime(&broken);
+	out->tv_sec = seconds;
+	out->tv_nsec = 0;
+}
+
 /* ---- THE OPERATIONS -------------------------------------------------------------------------- */
 
 @implementation WSFileOperations
@@ -1190,4 +1297,365 @@ static unsigned long long fn_count_entries_at_path(NSString *path)
 	return archivePath;
 }
 
+
+/* ---- EXTRACTION ------------------------------------------------------------------------------- */
+
++ (BOOL)cg_isArchivePath:(NSString *)path
+{
+	return (path != nil) && [[[path pathExtension] lowercaseString] isEqualToString:@"zip"];
+}
+
+/* **THE CENTRAL DIRECTORY, WHICH IS WHAT AN ARCHIVE SAYS IT CONTAINS.** Read whole — a directory is a few dozen bytes
+ * an entry — and followed back through the ZIP64 locator when the plain end record carries its sentinels. */
+- (nullable NSArray *)cg_directoryOfArchive:(FILE *)file size:(uint64_t)size error:(NSError **)error
+{
+	NSMutableArray *entries = [[NSMutableArray alloc] init];
+	unsigned char *tail;
+	size_t tailLength;
+	uint64_t eocd = 0;
+	BOOL found = NO;
+	uint64_t count = 0;
+	uint64_t cdOffset = 0;
+	uint64_t cdSize = 0;
+	unsigned char *directory = NULL;
+	uint64_t at = 0;
+	uint64_t i;
+
+	tailLength = (size_t)((size < 66000) ? size : 66000);
+	tail = malloc(tailLength);
+	if (tail == NULL || fseek(file, (long)(size - tailLength), SEEK_SET) != 0) {
+		free(tail);
+		if (error != NULL) *error = fn_error(31, @"the archive could not be read");
+		return nil;
+	}
+	if (fread(tail, 1, tailLength, file) != tailLength) {
+		free(tail);
+		if (error != NULL) *error = fn_error(31, @"the archive could not be read");
+		return nil;
+	}
+	for (i = (uint64_t)tailLength; i >= 4; i--) {
+		const unsigned char *p = tail + (i - 4);
+
+		if (p[0] == 0x50 && p[1] == 0x4b && p[2] == 0x05 && p[3] == 0x06) {
+			eocd = size - tailLength + (i - 4);
+			found = YES;
+			break;
+		}
+	}
+	if (!found) {
+		free(tail);
+		if (error != NULL) *error = fn_error(31, @"this is not a zip archive");
+		return nil;
+	}
+	count = fn_le16(tail + (eocd - (size - tailLength)) + 10);
+	cdSize = fn_le32(tail + (eocd - (size - tailLength)) + 12);
+	cdOffset = fn_le32(tail + (eocd - (size - tailLength)) + 16);
+	free(tail);
+	/* THE ZIP64 END OF CENTRAL DIRECTORY, WHOSE LOCATOR SITS IMMEDIATELY BEFORE THE END RECORD. */
+	if (count == 0xffffu || cdSize == 0xffffffffu || cdOffset == 0xffffffffu) {
+		unsigned char locator[20];
+
+		if (eocd >= 20 && fseek(file, (long)(eocd - 20), SEEK_SET) == 0 &&
+		    fread(locator, 1, sizeof locator, file) == sizeof locator &&
+		    locator[0] == 0x50 && locator[1] == 0x4b && locator[2] == 0x06 && locator[3] == 0x07) {
+			uint64_t recordAt = fn_le64(locator + 8);
+			unsigned char record[56];
+
+			if (fseek(file, (long)recordAt, SEEK_SET) == 0 &&
+			    fread(record, 1, sizeof record, file) == sizeof record &&
+			    record[0] == 0x50 && record[1] == 0x4b && record[2] == 0x06 && record[3] == 0x06) {
+				count = fn_le64(record + 32);
+				cdSize = fn_le64(record + 40);
+				cdOffset = fn_le64(record + 48);
+			}
+		}
+	}
+	if (count == 0 || cdSize == 0 || cdOffset >= size || cdSize > size) {
+		[entries release];
+		if (error != NULL) *error = fn_error(31, @"the archive's directory is unreadable");
+		return nil;
+	}
+	directory = malloc((size_t)cdSize);
+	if (directory == NULL || fseek(file, (long)cdOffset, SEEK_SET) != 0 ||
+	    fread(directory, 1, (size_t)cdSize, file) != (size_t)cdSize) {
+		free(directory);
+		[entries release];
+		if (error != NULL) *error = fn_error(31, @"the archive's directory is unreadable");
+		return nil;
+	}
+	for (i = 0; i < count && at + 46 <= cdSize; i++) {
+		const unsigned char *p = directory + at;
+		uint16_t nameLength;
+		uint16_t extraLength;
+		uint16_t commentLength;
+		uint64_t uncompressed;
+		uint64_t compressed;
+		uint64_t localOffset;
+		uint32_t external;
+		NSString *name;
+
+		if (p[0] != 0x50 || p[1] != 0x4b || p[2] != 0x01 || p[3] != 0x02) {
+			break;
+		}
+		nameLength = fn_le16(p + 28);
+		extraLength = fn_le16(p + 30);
+		commentLength = fn_le16(p + 32);
+		compressed = fn_le32(p + 20);
+		uncompressed = fn_le32(p + 24);
+		localOffset = fn_le32(p + 42);
+		external = fn_le32(p + 38);
+		if (at + 46 + nameLength + extraLength > cdSize) {
+			break;
+		}
+		fn_zip64_values(p + 46 + nameLength, extraLength, &uncompressed, &compressed, &localOffset);
+		name = [[NSString alloc] initWithBytes:p + 46 length:nameLength encoding:NSUTF8StringEncoding];
+		if (name == nil) {
+			[name release];
+			at += 46 + nameLength + extraLength + commentLength;
+			continue;
+		}
+		[entries addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+			name, @"name",
+			[NSNumber numberWithUnsignedShort:fn_le16(p + 10)], @"method",
+			[NSNumber numberWithUnsignedLongLong:compressed], @"csize",
+			[NSNumber numberWithUnsignedLongLong:uncompressed], @"usize",
+			[NSNumber numberWithUnsignedLongLong:localOffset], @"offset",
+			[NSNumber numberWithUnsignedInt:fn_le32(p + 16)], @"crc",
+			[NSNumber numberWithUnsignedShort:fn_le16(p + 12)], @"time",
+			[NSNumber numberWithUnsignedShort:fn_le16(p + 14)], @"date",
+			[NSNumber numberWithUnsignedInt:(external >> 16)], @"mode", nil]];
+		[name release];
+		at += 46 + nameLength + extraLength + commentLength;
+	}
+	free(directory);
+	return [entries autorelease];
+}
+
+/* ONE ENTRY'S BYTES, STRAIGHT OR THROUGH zlib, INTO A FILE. The CRC is checked because a truncated or corrupt entry is
+ * otherwise a file that looks fine until somebody opens it. */
+- (BOOL)cg_writeEntry:(NSDictionary *)entry from:(FILE *)file toPath:(NSString *)path error:(NSError **)error
+{
+	unsigned char *in = NULL;
+	unsigned char *out = NULL;
+	uint16_t method = (uint16_t)[[entry objectForKey:@"method"] unsignedShortValue];
+	uint64_t csize = [[entry objectForKey:@"csize"] unsignedLongLongValue];
+	uint64_t localOffset = [[entry objectForKey:@"offset"] unsignedLongLongValue];
+	uint32_t wantCrc = [[entry objectForKey:@"crc"] unsignedIntValue];
+	uint32_t crc = (uint32_t)crc32(0L, Z_NULL, 0);
+	unsigned char header[30];
+	FILE *to = NULL;
+	z_stream stream;
+	BOOL deflateOpen = NO;
+	uint64_t left = csize;
+	BOOL ok = NO;
+
+	memset(&stream, 0, sizeof stream);
+	if (fseek(file, (long)localOffset, SEEK_SET) != 0 || fread(header, 1, sizeof header, file) != sizeof header) {
+		if (error != NULL) *error = fn_error(32, @"an entry's header is unreadable");
+		return NO;
+	}
+	if (fseek(file, (long)(fn_le16(header + 26) + fn_le16(header + 28)), SEEK_CUR) != 0) {
+		if (error != NULL) *error = fn_error(32, @"an entry's header is unreadable");
+		return NO;
+	}
+	in = malloc(AGUNZIP_CHUNK);
+	out = malloc(AGUNZIP_CHUNK);
+	to = fopen([path fileSystemRepresentation], "wb");
+	if (in == NULL || out == NULL || to == NULL) {
+		if (error != NULL) *error = fn_error(32, @"an entry could not be written");
+		goto done;
+	}
+	if (method == 8) {
+		if (inflateInit2(&stream, -MAX_WBITS) != Z_OK) {
+			if (error != NULL) *error = fn_error(33, @"zlib could not start");
+			goto done;
+		}
+		deflateOpen = YES;
+	}
+	while (left > 0) {
+		size_t got = (size_t)((left < AGUNZIP_CHUNK) ? left : AGUNZIP_CHUNK);
+
+		if (fread(in, 1, got, file) != got) {
+			if (error != NULL) *error = fn_error(32, @"an entry is truncated");
+			goto done;
+		}
+		left -= got;
+		if (!deflateOpen) {
+			crc = (uint32_t)crc32(crc, in, (uInt)got);
+			if (fwrite(in, 1, got, to) != got) {
+				if (error != NULL) *error = fn_error(32, @"an entry could not be written");
+				goto done;
+			}
+			continue;
+		}
+		stream.next_in = in;
+		stream.avail_in = (uInt)got;
+		for (;;) {
+			size_t made;
+			int zr;
+
+			stream.next_out = out;
+			stream.avail_out = AGUNZIP_CHUNK;
+			zr = inflate(&stream, Z_NO_FLUSH);
+			if (zr != Z_OK && zr != Z_STREAM_END) {
+				if (error != NULL) *error = fn_error(33, @"an entry does not inflate");
+				goto done;
+			}
+			made = AGUNZIP_CHUNK - stream.avail_out;
+			crc = (uint32_t)crc32(crc, out, (uInt)made);
+			if (made > 0 && fwrite(out, 1, made, to) != made) {
+				if (error != NULL) *error = fn_error(32, @"an entry could not be written");
+				goto done;
+			}
+			if (zr == Z_STREAM_END || stream.avail_in == 0) {
+				break;
+			}
+		}
+	}
+	if (crc != wantCrc) {
+		if (error != NULL) *error = fn_error(33, @"an entry's checksum does not match");
+		goto done;
+	}
+	ok = YES;
+done:
+	if (deflateOpen) {
+		inflateEnd(&stream);
+	}
+	if (to != NULL) {
+		(void)fclose(to);
+	}
+	free(in);
+	free(out);
+	if (!ok) {
+		(void)[[NSFileManager defaultManager] removeItemAtPath:path error:NULL];
+	}
+	return ok;
+}
+
+- (nullable NSString *)extractArchive:(NSString *)path error:(NSError **)error
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	NSString *directory = [path stringByDeletingLastPathComponent];
+	NSString *base = [[path lastPathComponent] stringByDeletingPathExtension];
+	NSString *folder;
+	NSArray *entries;
+	FILE *file;
+	uint64_t size;
+	NSUInteger i;
+
+	if (![[self class] cg_isArchivePath:path]) {
+		if (error != NULL) *error = fn_error(34, @"that is not a zip archive");
+		return nil;
+	}
+	file = fopen([path fileSystemRepresentation], "rb");
+	if (file == NULL) {
+		if (error != NULL) *error = fn_error(34, @"the archive could not be read");
+		return nil;
+	}
+	if (fseek(file, 0, SEEK_END) != 0) {
+		fclose(file);
+		if (error != NULL) *error = fn_error(34, @"the archive could not be read");
+		return nil;
+	}
+	size = (uint64_t)ftell(file);
+	entries = [self cg_directoryOfArchive:file size:size error:error];
+	if (entries == nil) {
+		fclose(file);
+		return nil;
+	}
+	/* **THE FOLDER IS NAMED FOR THE ARCHIVE AND SITS BESIDE IT**, and a second extraction of the same archive gets
+	 * "Foo 2" rather than a merge into the first: what a person asked for twice is two folders. */
+	folder = [directory stringByAppendingPathComponent:fn_unique_name(directory, base)];
+	if (![manager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:error]) {
+		fclose(file);
+		return nil;
+	}
+	for (i = 0; i < [entries count]; i++) {
+		NSDictionary *entry = [entries objectAtIndex:i];
+		NSString *name = [entry objectForKey:@"name"];
+		const char *utf8 = [name UTF8String];
+		NSString *destination = nil;
+		mode_t mode = (mode_t)[[entry objectForKey:@"mode"] unsignedIntValue];
+		struct timespec stamp = { 0, 0 };
+		BOOL isDirectory;
+
+		if (!fn_entry_name_is_safe(utf8)) {
+			if (error != NULL) {
+				*error = fn_error(35, [NSString stringWithFormat:@"%@ tries to leave the folder", name]);
+			}
+			fclose(file);
+			(void)[manager removeItemAtPath:folder error:NULL];
+			return nil;
+		}
+		destination = [folder stringByAppendingPathComponent:name];
+		isDirectory = (S_ISDIR(mode) || ([[entry objectForKey:@"csize"] unsignedLongLongValue] == 0 &&
+						 [[entry objectForKey:@"usize"] unsignedLongLongValue] == 0 &&
+						 [name hasSuffix:@"/"]));
+		fn_dos_to_time((uint16_t)[[entry objectForKey:@"date"] unsignedShortValue],
+			       (uint16_t)[[entry objectForKey:@"time"] unsignedShortValue], &stamp);
+		if (isDirectory) {
+			if (![manager createDirectoryAtPath:destination withIntermediateDirectories:YES
+						 attributes:nil error:NULL] && error != NULL) {
+				*error = fn_error(32, @"a folder could not be made");
+				fclose(file);
+				(void)[manager removeItemAtPath:folder error:NULL];
+				return nil;
+			}
+		} else {
+			NSString *parent = [destination stringByDeletingLastPathComponent];
+
+			if (![manager createDirectoryAtPath:parent withIntermediateDirectories:YES attributes:nil error:NULL]) {
+				if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+				fclose(file);
+				(void)[manager removeItemAtPath:folder error:NULL];
+				return nil;
+			}
+			if (S_ISLNK(mode)) {
+				/* A LINK IS WRITTEN BACK AS A LINK: its payload is the target path, and creating it needs the bytes in
+				 * hand rather than a stream. */
+				unsigned char *target = malloc((size_t)[[entry objectForKey:@"usize"] unsignedLongLongValue] + 1);
+				uint64_t localOffset = [[entry objectForKey:@"offset"] unsignedLongLongValue];
+				unsigned char header[30];
+				BOOL made = NO;
+
+				if (target != NULL && fseek(file, (long)localOffset, SEEK_SET) == 0 &&
+				    fread(header, 1, sizeof header, file) == sizeof header &&
+				    fseek(file, (long)(fn_le16(header + 26) + fn_le16(header + 28)), SEEK_CUR) == 0 &&
+				    fread(target, 1, (size_t)[[entry objectForKey:@"usize"] unsignedLongLongValue], file) ==
+					    (size_t)[[entry objectForKey:@"usize"] unsignedLongLongValue]) {
+					target[[[entry objectForKey:@"usize"] unsignedLongLongValue]] = '\0';
+					made = (symlink((const char *)target, [destination fileSystemRepresentation]) == 0);
+				}
+				free(target);
+				if (!made) {
+					if (error != NULL) *error = fn_error(32, @"a link could not be made");
+					fclose(file);
+					(void)[manager removeItemAtPath:folder error:NULL];
+					return nil;
+				}
+			} else if (![self cg_writeEntry:entry from:file toPath:destination error:error]) {
+				fclose(file);
+				(void)[manager removeItemAtPath:folder error:NULL];
+				return nil;
+			}
+			if ((mode & 07777) != 0) {
+				(void)chmod([destination fileSystemRepresentation], mode & 07777);
+			}
+		}
+		if (stamp.tv_sec != 0 && !S_ISLNK(mode)) {
+			struct timespec times[2];
+
+			times[0] = stamp;
+			times[1] = stamp;
+			(void)utimensat(AT_FDCWD, [destination fileSystemRepresentation], times, 0);
+		}
+		[self report:i + 1 total:[entries count] path:destination];
+	}
+	fclose(file);
+	[self registerUndo:@"Extract Archive" handler:^(id target) {
+		(void)[[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+		(void)target;
+	}];
+	return folder;
+}
 @end

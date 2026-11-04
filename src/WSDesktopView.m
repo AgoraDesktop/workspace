@@ -679,6 +679,36 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	[self reload];
 }
 
+/* **AN ARCHIVE ON THE DESKTOP IS EXTRACTED BESIDE ITSELF, like anywhere else.** The row is asked for rather than drawn
+ * grey: `-cg_selectionCanBeExtracted` is what `WSContextMenu` checks, and a double click takes the same command. */
+- (BOOL)cg_selectionCanBeExtracted
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSUInteger i;
+
+	if ([paths count] == 0) {
+		return NO;
+	}
+	for (i = 0; i < [paths count]; i++) {
+		if (![WSFileOperations cg_isArchivePath:[paths objectAtIndex:i]]) {
+			return NO;
+		}
+	}
+	return YES;
+}
+
+- (void)extractArchive:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSUInteger i;
+
+	(void)sender;
+	for (i = 0; i < [paths count]; i++) {
+		(void)[_fileOperations extractArchive:[paths objectAtIndex:i] error:NULL];
+	}
+	[self reload];
+}
+
 /* **COMPRESS IS THE SAME COMMAND A FILE WINDOW HAS, AIMED AT THE DESKTOP.** The archive is made in the desktop folder,
  * which is where the icons come from — so it appears in the grid beside the thing it was made from, and the grid is read
  * again to show it. */
@@ -1259,6 +1289,14 @@ NSString *WSDesktopViewPathKey = @"WSDesktopViewPath";
 	CFURLRef url = CFURLCreateWithFileSystemPath(NULL, path, kCFURLPOSIXPathStyle, [item isDirectory] ? true : false);
 
 	CFRelease(path);
+	if ([WSFileOperations cg_isArchivePath:[item path]]) {
+		/* **A DOUBLE CLICK ON A .zip UNPACKS IT.** Nothing in this tree's Launch Services opens a zip, and what a person
+		 * means by double-clicking one is its contents. */
+		CFRelease(url);
+		(void)[_fileOperations extractArchive:[item path] error:NULL];
+		[self reload];
+		return;
+	}
 	if ([item isBrowsable]) {
 		NSDictionary *info = [NSDictionary dictionaryWithObject:[item path] forKey:WSDesktopViewPathKey];
 

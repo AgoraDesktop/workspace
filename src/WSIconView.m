@@ -1109,6 +1109,36 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	(void)[WSGetInfoWindowController infoWindowForPaths:paths];
 }
 
+/* **THE GRID'S MENU ASKS THIS BEFORE IT DRAWS "Extract Archive"**, and the command is the same one the window's is. */
+- (BOOL)cg_selectionCanBeExtracted
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSUInteger i;
+
+	if ([paths count] == 0) {
+		return NO;
+	}
+	for (i = 0; i < [paths count]; i++) {
+		if (![WSFileOperations cg_isArchivePath:[paths objectAtIndex:i]]) {
+			return NO;
+		}
+	}
+	return YES;
+}
+
+- (void)extractArchive:(id)sender
+{
+	NSArray *paths = [self cg_selectedPaths];
+	NSUInteger i;
+
+	(void)sender;
+	for (i = 0; i < [paths count]; i++) {
+		(void)[_fileOperations extractArchive:[paths objectAtIndex:i] error:NULL];
+	}
+	[self reloadAfterChange];
+	[self fn_didFinishOperation];
+}
+
 - (void)compress:(id)sender
 {
 	NSArray *paths = [self cg_selectedPaths];

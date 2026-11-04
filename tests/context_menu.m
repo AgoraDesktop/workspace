@@ -33,23 +33,35 @@ static void check(int ok, const char *name)
 @interface AGMenuTarget : NSObject
 {
 	BOOL _isTrash;
+	BOOL _canExtract;
 }
 - (instancetype)initWithTrash:(BOOL)trash;
+- (instancetype)initWithTrash:(BOOL)trash canExtract:(BOOL)canExtract;
 - (BOOL)isTrashDirectory;
+- (BOOL)cg_selectionCanBeExtracted;
 @end
 
 @implementation AGMenuTarget
 - (instancetype)initWithTrash:(BOOL)trash
 {
+	return [self initWithTrash:trash canExtract:NO];
+}
+- (instancetype)initWithTrash:(BOOL)trash canExtract:(BOOL)canExtract
+{
 	self = [super init];
 	if (self != nil) {
 		_isTrash = trash;
+		_canExtract = canExtract;
 	}
 	return self;
 }
 - (BOOL)isTrashDirectory
 {
 	return _isTrash;
+}
+- (BOOL)cg_selectionCanBeExtracted
+{
+	return _canExtract;
 }
 @end
 
@@ -136,6 +148,24 @@ int main(void)
 		check(hasRow(inTrash, @"Compress", @selector(compress:)),
 		      "while Compress is still there: an archive of a trashed item is a real thing to want");
 
+		/* 3b. EXTRACT ARCHIVE IS ASKED FOR, NOT DRAWN GREY: it is about a .zip and about nothing else, so a target that
+		 * says so gets the row and a target that does not never sees it. */
+		{
+			AGMenuTarget *archive = [[[AGMenuTarget alloc] initWithTrash:NO canExtract:YES] autorelease];
+			NSMenu *withZip = [WSContextMenu menuForSingleItemWithTarget:archive];
+			NSMenu *groupWithZip = [WSContextMenu menuForMultipleItemsWithTarget:archive];
+
+			printf("  (note: an archive's menu is %s\n", [rowsOf(withZip) UTF8String]);
+			check(hasRow(withZip, @"Extract Archive", @selector(extractArchive:)),
+			      "a selection that can be extracted offers Extract Archive");
+			check(hasRow(groupWithZip, @"Extract Archive", @selector(extractArchive:)),
+			      "and a group of them does too");
+			check([withZip indexOfItemWithTitle:@"Extract Archive"] == [withZip indexOfItemWithTitle:@"Get Info"] + 1,
+			      "right under Get Info");
+			check([single indexOfItemWithTitle:@"Extract Archive"] == NSNotFound,
+			      "and a selection of folders and files never sees the row at all");
+		}
+
 		/* 4. THE BACKGROUND: a folder's own rows, and no command that is about a selection. */
 		background = [WSContextMenu menuForBackgroundWithTarget:item];
 		printf("  (note: the background's menu is %s\n", [rowsOf(background) UTF8String]);
@@ -144,6 +174,8 @@ int main(void)
 		      "and pastes and selects all");
 		check([background indexOfItemWithTitle:@"Compress"] == NSNotFound,
 		      "and never Compress, which is about what is HELD and not about where the pointer is");
+		check([background indexOfItemWithTitle:@"Extract Archive"] == NSNotFound,
+		      "nor Extract Archive, for the same reason");
 
 		printf("context_menu: %d case(s) failed\n", s_failed);
 	}
