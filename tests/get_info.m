@@ -182,6 +182,46 @@ int main(void)
 			check([[WSItemInfo dateDescription:nil] isEqual:@"—"], "a missing date is an em dash");
 		}
 
+		/* 5b. A FOLDER'S SIZE IS THE TREE, INCLUDING A PACKAGE'S. The shallow `stat` of a directory is one entry block,
+		 * so the measure walks: bytes, the space actually allocated, and every entry counted. A `.app` is a directory
+		 * like any other here, which is the whole point — the bundle reports its Contents, not one folder entry. */
+		{
+			NSString *bundle = [directory stringByAppendingPathComponent:@"Nested.app"];
+			NSString *contents = [bundle stringByAppendingPathComponent:@"Contents"];
+			NSString *macos = [contents stringByAppendingPathComponent:@"MacOS"];
+			NSString *binary = [macos stringByAppendingPathComponent:@"nested"];
+			unsigned long long bytes = 0;
+			unsigned long long onDisk = 0;
+			unsigned long long items = 0;
+			BOOL counts = NO;
+			WSItemInfo *info;
+
+			(void)[[NSFileManager defaultManager] createDirectoryAtPath:macos withIntermediateDirectories:YES
+								   attributes:nil error:NULL];
+			writeBytes(binary, 4000);
+			writeBytes([contents stringByAppendingPathComponent:@"Info.plist"], 500);
+
+			[WSItemInfo cg_measurePaths:[NSArray arrayWithObject:bundle]
+					      bytes:&bytes onDisk:&onDisk items:&items countsItems:&counts];
+			printf("  (note: Nested.app measures %llu bytes, %llu on disk, %llu entries\n", bytes, onDisk, items);
+			check(counts, "a folder is measured as a folder");
+			check(items == 4, "the walk counts what is inside it, at every depth");
+			check(bytes >= 4500, "and the bytes are the tree's, not the directory entry's");
+			check(onDisk >= 4096, "with the space actually allocated");
+
+			/* AND THE VALUE THE WINDOW IS ABOUT CAN TAKE THE ANSWER. A file still measures as itself, and a file is
+			 * not a folder, so the "for N items" half stays quiet. */
+			info = [WSItemInfo infoForPaths:[NSArray arrayWithObject:bundle]];
+			[info cg_setBytes:bytes onDisk:onDisk items:(NSUInteger)items countsItems:counts];
+			check([info byteCount] == bytes && [info onDiskByteCount] == onDisk,
+			      "the measured total replaces the shallow one");
+			check([info itemCount] == 4 && [info countsItems],
+			      "and so does the count of what the folder holds");
+			[WSItemInfo cg_measurePaths:[NSArray arrayWithObject:file]
+					      bytes:&bytes onDisk:&onDisk items:&items countsItems:&counts];
+			check(!counts && bytes == 100, "a file measures as itself and counts no items");
+		}
+
 		/* 6. THE WINDOW: six sections, and the fields say what the info says. It is opened the way the shell opens
 		 * it — through the registry — because that is the path a person's Get Info takes. */
 		{
@@ -213,6 +253,30 @@ int main(void)
 			check([[window cg_permissionTable] numberOfRows] == 3, "and three rows");
 			check([window cg_lockedButton] != nil && [[window cg_lockedButton] state] == NSOffState,
 			      "the Locked box starts unticked for a writable file");
+
+			/* 6a. THE FOLDER ON THE GLASS. The window opens on the FILE above, whose size is its own stat — so a
+			 * second window, on a folder, is where the walk is visible: it says "Calculating…" until the answer
+			 * arrives through the same door the background thread uses, and then the field is the tree's total. */
+			{
+				WSGetInfoWindowController *folderWindow = [WSGetInfoWindowController
+					infoWindowForPaths:[NSArray arrayWithObject:folder]];
+				unsigned long long bytes = 0;
+				unsigned long long onDisk = 0;
+				unsigned long long items = 0;
+				BOOL counts = NO;
+
+				check(folderWindow != nil, "a folder has a window too");
+				[WSItemInfo cg_measurePaths:[NSArray arrayWithObject:folder]
+						      bytes:&bytes onDisk:&onDisk items:&items countsItems:&counts];
+				[folderWindow cg_setMeasuredBytes:bytes onDisk:onDisk items:(NSUInteger)items countsItems:counts];
+				check([[folderWindow cg_sizeValue] stringValue] != nil
+				      && [[[folderWindow cg_sizeValue] stringValue] rangeOfString:@"Calculating"].location == NSNotFound,
+				      "and once the walk answers the Size field is a number, not a promise");
+				check([[[folderWindow cg_sizeValue] stringValue] rangeOfString:@"for 2 items"].location != NSNotFound,
+				      "with the count the walk made");
+				printf("  (note: the folder's Size field reads \"%s\"\n",
+				       [[[folderWindow cg_sizeValue] stringValue] UTF8String]);
+			}
 
 			/* 6b. IT OPENS FOLDED, AND IT FITS ITSELF. Only the first section is open — the rest are a band each —
 			 * and the window is exactly as tall as what they make, growing and shrinking as they fold. */
@@ -335,8 +399,8 @@ int main(void)
 				      "asking again for the same item reuses the window that is open on it");
 				check(different != nil && ![different cg_isShowingPaths:[window paths]],
 				      "and a different item is a different window");
-				check([[WSGetInfoWindowController cg_openInfoWindows] count] == 3,
-				      "the registry holds exactly the three that were opened");
+				check([[WSGetInfoWindowController cg_openInfoWindows] count] == 4,
+				      "the registry holds exactly the four that were opened");
 			}
 
 			/* 8. THE COMMENT IS THE SIDECAR'S, written as it is typed. */

@@ -69,6 +69,11 @@ NS_ASSUME_NONNULL_BEGIN
 	NSTableView *_permissionTable;
 	NSView *_previewBody;			/* RETAINED: the preview section's body, whose height the picture sets */
 	NSInteger _cgMenuRow;			/* the row the privilege menu was opened for */
+	/* **THE SIZE OF A FOLDER IS A WALK AND THE WALK IS NOT ON THE MAIN THREAD.** `_measuring` is one walk in flight,
+	 * `_measuredPaths` is the selection the answer belongs to (a result that arrives after the window moved on is
+	 * dropped), and the window keeps a retain of itself while a walk is out so a close mid-walk cannot free the target
+	 * of the queued continuation. */
+	BOOL _measuring;			/* one walk in flight, never two */
 	NSArray *_permissions;			/* RETAINED: NSArray<WSItemPermission *>, the table's rows */
 }
 
@@ -110,6 +115,15 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)cg_applyPrivilegeIndex:(NSInteger)index forRow:(NSInteger)row;
 /* The menu a click in the Privilege column raises, with the true choice ticked — readable without popping it up. */
 - (NSMenu *)cg_privilegeMenuForRow:(NSInteger)row;
+
+/* **THE FOLDER MEASURE'S TWO HALVES, EACH ASKABLE.** `-cg_isCalculatingSize` is what the window says while the walk is
+ * out; `-cg_setMeasuredBytes:...` is the door the answer arrives through — the same one the background thread's
+ * continuation uses, so a probe can check what the window does with a total without waiting for a thread. */
+- (BOOL)cg_isCalculatingSize;
+- (void)cg_setMeasuredBytes:(unsigned long long)bytes
+		     onDisk:(unsigned long long)onDisk
+		      items:(NSUInteger)items
+		countsItems:(BOOL)countsItems;
 /* Which sections are folded, and the fold itself — the same path a click on a band takes, minus the event. */
 - (BOOL)cg_isSectionCollapsedAtIndex:(NSUInteger)index;
 - (void)cg_setSectionAtIndex:(NSUInteger)index collapsed:(BOOL)collapsed;

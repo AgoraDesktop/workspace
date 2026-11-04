@@ -106,6 +106,31 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSArray *)permissions;		/* NSArray<WSItemPermission *>: owner, group, everyone */
 - (NSString *)permissionSummary;	/* "You can read and write", "You can only read", … */
 
+/* ---- THE SIZE A FOLDER REALLY IS ------------------------------------------------------------------------------
+ *
+ * **A DIRECTORY'S OWN `stat` IS NOT ITS SIZE.** `st_size` for a folder is one entry block — 4,096 bytes, or 140 on this
+ * machine's `/tmp` — and `st_blocks` is often zero, so the shallow number an item carries says nothing about what is
+ * inside it. The REAL total is the sum over the tree, and that is what `+cg_measurePaths:` answers: the bytes, the space
+ * actually allocated, and how many entries were counted. **A PACKAGE IS A DIRECTORY AND IS WALKED LIKE ONE**, which is
+ * what makes an application bundle report its `Contents` rather than one folder entry.
+ *
+ * **AND IT IS A SEPARATE PASS BECAUSE IT IS NOT FREE.** MEASURED here: 12.9 ms over 3,801 entries (Downloads), 41.6 ms
+ * over a 10,400-entry source tree, and 7.7 s for `/usr`. So it has no business on the main thread while a window is
+ * built: the inspector opens with the shallow number, runs this on a thread, and patches the window when it answers.
+ * Symlinks are counted, not followed — that is what stops a tree from looping.
+ */
++ (void)cg_measurePaths:(NSArray *)paths
+		  bytes:(unsigned long long *)bytes
+		 onDisk:(unsigned long long *)onDisk
+		  items:(unsigned long long *)items
+	    countsItems:(BOOL *)countsItems;
+
+/* The measured total handed back to the value the window is about. */
+- (void)cg_setBytes:(unsigned long long)bytes
+	     onDisk:(unsigned long long)onDisk
+	      items:(NSUInteger)items
+	countsItems:(BOOL)countsItems;
+
 /* ---- THE STRINGS A PERSON READS, AS CLASS FUNCTIONS ------------------------------------------------------------
  *
  * Public because the window and the probe must agree on them down to the last comma, and because each one is a

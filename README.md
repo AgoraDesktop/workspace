@@ -466,6 +466,16 @@ mode can be told. **The column is a plain field and the menu is an ordinary one*
 MEASURED in a session, that cell draws its title one line-height low inside a flipped table and the words came out cut in
 half by the row beneath them.
 
+**A FOLDER IS AS BIG AS THE TREE UNDER IT, PACKAGES INCLUDED.** A directory's own `stat` says nothing — 4,096 bytes of
+entry block, and `st_blocks` is often zero on a modern file system, so `Downloads` read "140 bytes (Zero bytes on disk)".
+`WSItemInfo +cg_measurePaths:` walks: `lstat` each entry, add its bytes and its `st_blocks`, descend into every directory
+(a `.app` is a directory like any other, which is what stops a bundle reporting one folder entry instead of its
+`Contents`), and count what it saw. It is a SEPARATE PASS from the window's facts because it is not free — MEASURED 12.9 ms
+over 3,801 entries, 41.6 ms over a 10,400-entry source tree, 7.7 s for `/usr` — so the window opens with the shallow
+number saying "Calculating…", the walk runs on a thread that touches no view, and the answer comes back through
+`-cg_setMeasuredBytes:…` on the main thread. A rename or a navigation that lands first makes the answer about an old
+subject, and it is dropped.
+
 **THE PREVIEW IS THE PICTURE ITSELF.** A preview pane is not a grid cell: `WSItemIcons -cg_pictureForPath:box:` answers
 the picture at its own shape — no square's transparent bands — decoded at the WINDOW's scale (`userSpaceScaleFactor`), so
 the compositor is not stretching 128 pixels over 170, and the pane's body takes the picture's height, so the window grows
@@ -474,9 +484,7 @@ its icon, which is square.
 
 **NAMED ABSENCES.** `Shared folder` is drawn and disabled: sharing is W12's and a tick that nothing honoured would lie.
 There is no tag field (tags are not in the metadata store), no "Hide extension" (that is a Finder flag this substrate does
-not have), no `Open With` (F1) and no custom icon (F2). A folder's size is its own directory allocation, not the total of
-the tree below it — a recursive walk would block the window — while the item count IS measured, one listing and no
-descent. **A fact the file system has no answer for is a row the window does not show** — this substrate records no birth
+not have), no `Open With` (F1) and no custom icon (F2). **A fact the file system has no answer for is a row the window does not show** — this substrate records no birth
 time, so there is no Created row here at all, and the rows under it move up while the window gets 17 points shorter;
 a file system that does report one gets the row back with no second code path. There are no ACLs to list, so the permissions table has no +/- and no gear. The inspector's own rename is not
 undoable: its `WSFileOperations` has no undo manager, because the window outlives the one that opened it and an undo entry

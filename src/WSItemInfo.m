@@ -22,7 +22,9 @@
 
 #import <AppKit/NSButtonCell.h>		/* NSOnState/NSOffState/NSMixedState */
 
+#include <dirent.h>
 #include <grp.h>
+#include <limits.h>
 #include <pwd.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -120,6 +122,44 @@ static NSString *WSWhereNameForPath(NSString *path)
 }
 
 @end
+
+/* **THE WALK ITSELF: `lstat`, ADD, DESCEND.** The directory's own block is counted with its children (which is what
+ * `du` does and what makes an empty folder report its 4 KB rather than zero), no symlink is followed, and an entry whose
+ * full path would not fit is skipped rather than counted at the wrong path. */
+static void fn_measure_directory(const char *path, unsigned long long *bytes, unsigned long long *onDisk,
+				 unsigned long long *items)
+{
+	DIR *directory;
+	struct dirent *entry;
+
+	directory = opendir(path);
+	if (directory == NULL) {
+		return;
+	}
+	while ((entry = readdir(directory)) != NULL) {
+		char child[PATH_MAX];
+		struct stat s;
+		int written;
+
+		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+			continue;
+		}
+		written = snprintf(child, sizeof(child), "%s/%s", path, entry->d_name);
+		if (written <= 0 || written >= (int)sizeof(child)) {
+			continue;
+		}
+		if (lstat(child, &s) != 0) {
+			continue;
+		}
+		*items += 1;
+		*bytes += (unsigned long long)s.st_size;
+		*onDisk += (unsigned long long)s.st_blocks * 512ULL;
+		if (S_ISDIR(s.st_mode)) {
+			fn_measure_directory(child, bytes, onDisk, items);
+		}
+	}
+	closedir(directory);
+}
 
 @implementation WSItemInfo
 
@@ -254,6 +294,59 @@ static NSString *WSWhereNameForPath(NSString *path)
 	[_ownerName release];
 	[_groupName release];
 	[super dealloc];
+}
+
++ (void)cg_measurePaths:(NSArray *)paths
+		  bytes:(unsigned long long *)bytes
+		 onDisk:(unsigned long long *)onDisk
+		  items:(unsigned long long *)items
+	    countsItems:(BOOL *)countsItems
+{
+	unsigned long long totalBytes = 0;
+	unsigned long long totalDisk = 0;
+	unsigned long long totalItems = 0;
+	BOOL allDirectories = ([paths count] > 0);
+	NSUInteger i;
+
+	for (i = 0; i < [paths count]; i++) {
+		struct stat s;
+
+		if (lstat([[paths objectAtIndex:i] fileSystemRepresentation], &s) != 0) {
+			allDirectories = NO;
+			continue;
+		}
+		totalBytes += (unsigned long long)s.st_size;
+		totalDisk += (unsigned long long)s.st_blocks * 512ULL;
+		if (S_ISDIR(s.st_mode)) {
+			fn_measure_directory([[paths objectAtIndex:i] fileSystemRepresentation],
+					     &totalBytes, &totalDisk, &totalItems);
+		} else {
+			allDirectories = NO;
+		}
+	}
+	if (bytes != NULL) {
+		*bytes = totalBytes;
+	}
+	if (onDisk != NULL) {
+		*onDisk = totalDisk;
+	}
+	if (items != NULL) {
+		*items = totalItems;
+	}
+	if (countsItems != NULL) {
+		*countsItems = allDirectories;
+	}
+}
+
+- (void)cg_setBytes:(unsigned long long)bytes
+	     onDisk:(unsigned long long)onDisk
+	      items:(NSUInteger)items
+	countsItems:(BOOL)countsItems
+{
+	_byteCount = bytes;
+	_onDiskByteCount = onDisk;
+	_itemCount = items;
+	_countsItems = countsItems;
 }
 
 - (NSArray *)paths { return _paths; }
