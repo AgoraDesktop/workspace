@@ -634,6 +634,54 @@ int main(void)
 		}
 	}
 
+	/* 10c. AN ARCHIVE OF ONE FILE IS UNPACKED AS THAT FILE. Wrapping a single document in a folder named for the
+	 * archive makes a person open a folder to reach the only thing in it, so the single-file case lands beside the
+	 * archive under its own name — and the folder case above still holds for anything with more in it. */
+	{
+		NSString *one = [base stringByAppendingPathComponent:@"one"];
+		NSString *inside = [one stringByAppendingPathComponent:@"the-file.txt"];
+		NSString *archive;
+		NSString *unpacked;
+		NSString *again;
+
+		makeDirectory(one);
+		makeFile(inside, 120);
+		archive = [ops compressPaths:[NSArray arrayWithObject:one] inDirectory:base error:NULL];
+		[[NSFileManager defaultManager] removeItemAtPath:one error:NULL];
+		check(archive != nil, "an archive of one file is made");
+		unpacked = [ops extractArchive:archive error:NULL];
+		printf("  (note: one.zip of a folder with one file unpacked to %s\n",
+		       (unpacked != nil) ? [[unpacked lastPathComponent] UTF8String] : "(nil)");
+		check(unpacked != nil && [[unpacked lastPathComponent] isEqual:@"the-file.txt"],
+		      "it comes back as the file it holds, not as a folder named for the archive");
+		check(!exists([base stringByAppendingPathComponent:@"one"]),
+		      "and no folder is made to wrap it");
+		again = [ops extractArchive:archive error:NULL];
+		check(again != nil && [[again lastPathComponent] isEqual:@"the-file 2.txt"],
+		      "and a second extraction of the same archive does not overwrite the first");
+
+		/* AN ARCHIVE WHOSE ONLY ENTRY IS A FOLDER IS NOT THE SINGLE-FILE CASE. */
+		{
+			NSString *lonely = [base stringByAppendingPathComponent:@"lonely"];
+			NSString *lonelyZip;
+
+			makeDirectory(lonely);
+			lonelyZip = [ops compressPaths:[NSArray arrayWithObject:lonely] inDirectory:base error:NULL];
+			[[NSFileManager defaultManager] removeItemAtPath:lonely error:NULL];
+			{
+				NSString *made = [ops extractArchive:lonelyZip error:NULL];
+
+				check(made != nil && exists([made stringByAppendingPathComponent:@"lonely"]),
+				      "an archive holding only an empty folder still unpacks into a folder");
+				[[NSFileManager defaultManager] removeItemAtPath:made error:NULL];
+			}
+			[[NSFileManager defaultManager] removeItemAtPath:lonelyZip error:NULL];
+		}
+		[[NSFileManager defaultManager] removeItemAtPath:again error:NULL];
+		[[NSFileManager defaultManager] removeItemAtPath:unpacked error:NULL];
+		[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
+	}
+
 	/* 11. ZIP64, MEASURED WITHOUT FOUR GIGABYTES. The format's limits are 4 GB and 65,535 entries, which no suite should
 	 * write; the writer reads its thresholds from `+cg_zip64ByteLimit`, and a probe lowers them so the SAME decision and
 	 * the SAME records are exercised on a few kilobytes. What has to be true is what a reader believes: the central

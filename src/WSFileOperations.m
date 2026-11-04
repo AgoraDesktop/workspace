@@ -1532,12 +1532,76 @@ done:
 	return ok;
 }
 
+/* **ONE ENTRY, PUT WHERE IT SAYS** — a folder made, a link made, or a file streamed — and then its mode and its time.
+ * Both extraction shapes below go through this, so a single file and a tree cannot disagree about modes, dates or the
+ * symlink rule. */
+- (BOOL)cg_materialiseEntry:(NSDictionary *)entry from:(FILE *)file atPath:(NSString *)destination
+		isDirectory:(BOOL)isDirectory error:(NSError **)error
+{
+	NSFileManager *manager = [NSFileManager defaultManager];
+	mode_t mode = (mode_t)[[entry objectForKey:@"mode"] unsignedIntValue];
+	struct timespec stamp = { 0, 0 };
+
+	fn_dos_to_time((uint16_t)[[entry objectForKey:@"date"] unsignedShortValue],
+		       (uint16_t)[[entry objectForKey:@"time"] unsignedShortValue], &stamp);
+	if (isDirectory) {
+		if (![manager createDirectoryAtPath:destination withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+			return NO;
+		}
+	} else {
+		NSString *parent = [destination stringByDeletingLastPathComponent];
+
+		if (![manager createDirectoryAtPath:parent withIntermediateDirectories:YES attributes:nil error:NULL]) {
+			if (error != NULL) *error = fn_error(32, @"a folder could not be made");
+			return NO;
+		}
+		if (S_ISLNK(mode)) {
+			/* A LINK IS WRITTEN BACK AS A LINK: its payload is the target path, and creating it needs the bytes in hand
+			 * rather than a stream. */
+			uint64_t length = [[entry objectForKey:@"usize"] unsignedLongLongValue];
+			unsigned char *target = malloc((size_t)length + 1);
+			uint64_t localOffset = [[entry objectForKey:@"offset"] unsignedLongLongValue];
+			unsigned char header[30];
+			BOOL made = NO;
+
+			if (target != NULL && fseek(file, (long)localOffset, SEEK_SET) == 0 &&
+			    fread(header, 1, sizeof header, file) == sizeof header &&
+			    fseek(file, (long)(fn_le16(header + 26) + fn_le16(header + 28)), SEEK_CUR) == 0 &&
+			    fread(target, 1, (size_t)length, file) == (size_t)length) {
+				target[length] = '\0';
+				made = (symlink((const char *)target, [destination fileSystemRepresentation]) == 0);
+			}
+			free(target);
+			if (!made) {
+				if (error != NULL) *error = fn_error(32, @"a link could not be made");
+				return NO;
+			}
+		} else if (![self cg_writeEntry:entry from:file toPath:destination error:error]) {
+			return NO;
+		}
+		if ((mode & 07777) != 0) {
+			(void)chmod([destination fileSystemRepresentation], mode & 07777);
+		}
+	}
+	if (stamp.tv_sec != 0 && !S_ISLNK(mode)) {
+		struct timespec times[2];
+
+		times[0] = stamp;
+		times[1] = stamp;
+		(void)utimensat(AT_FDCWD, [destination fileSystemRepresentation], times, 0);
+	}
+	return YES;
+}
+
 - (nullable NSString *)extractArchive:(NSString *)path error:(NSError **)error
 {
 	NSFileManager *manager = [NSFileManager defaultManager];
 	NSString *directory = [path stringByDeletingLastPathComponent];
 	NSString *base = [[path lastPathComponent] stringByDeletingPathExtension];
-	NSString *folder;
+	NSString *root;
+	NSDictionary *onlyFile = nil;
+	NSUInteger fileCount = 0;
 	NSArray *entries;
 	FILE *file;
 	uint64_t size;
@@ -1563,99 +1627,79 @@ done:
 		fclose(file);
 		return nil;
 	}
-	/* **THE FOLDER IS NAMED FOR THE ARCHIVE AND SITS BESIDE IT**, and a second extraction of the same archive gets
-	 * "Foo 2" rather than a merge into the first: what a person asked for twice is two folders. */
-	folder = [directory stringByAppendingPathComponent:fn_unique_name(directory, base)];
-	if (![manager createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:error]) {
+	/* **EVERY NAME IS CHECKED BEFORE ANYTHING IS CREATED.** A name that starts with `/` or carries a `..` component is
+	 * zip-slip, and it refuses the whole archive rather than the one entry: a partial extraction of a hostile archive is
+	 * worth less than none. */
+	for (i = 0; i < [entries count]; i++) {
+		NSDictionary *entry = [entries objectAtIndex:i];
+		NSString *name = [entry objectForKey:@"name"];
+		mode_t mode = (mode_t)[[entry objectForKey:@"mode"] unsignedIntValue];
+		BOOL isDirectory = (S_ISDIR(mode) || [name hasSuffix:@"/"]);
+
+		if (!fn_entry_name_is_safe([name UTF8String])) {
+			fclose(file);
+			if (error != NULL) {
+				*error = fn_error(35, [NSString stringWithFormat:@"%@ tries to leave the folder", name]);
+			}
+			return nil;
+		}
+		if (!isDirectory) {
+			fileCount++;
+			onlyFile = entry;
+		}
+	}
+	/* **ONE FILE IS UNPACKED AS THAT FILE, NOT AS A FOLDER THAT HOLDS IT.** An archive of one document is a document:
+	 * wrapping it in `<basename>/` makes a person open a folder to reach the only thing in it, and the reference file
+	 * manager does the same — a single-file archive lands beside itself under its own name, with " 2" if that name is
+	 * taken. A folder entry that only names the file's parent does not change that; there is nothing else to keep. */
+	if (fileCount == 1) {
+		NSString *name = [[onlyFile objectForKey:@"name"] lastPathComponent];
+
+		if ([name length] == 0) {
+			fclose(file);
+			if (error != NULL) *error = fn_error(32, @"the archive's one file has no name");
+			return nil;
+		}
+		root = [directory stringByAppendingPathComponent:fn_unique_name(directory, name)];
+		if (![self cg_materialiseEntry:onlyFile from:file atPath:root isDirectory:NO error:error]) {
+			fclose(file);
+			(void)[manager removeItemAtPath:root error:NULL];
+			return nil;
+		}
+		[self report:1 total:1 path:root];
+		fclose(file);
+		[self registerUndo:@"Extract Archive" handler:^(id target) {
+			(void)[[NSFileManager defaultManager] removeItemAtPath:root error:NULL];
+			(void)target;
+		}];
+		return root;
+	}
+	/* **OTHERWISE THE FOLDER IS NAMED FOR THE ARCHIVE AND SITS BESIDE IT**, and a second extraction of the same archive
+	 * gets "Foo 2" rather than a merge into the first: what a person asked for twice is two folders. */
+	root = [directory stringByAppendingPathComponent:fn_unique_name(directory, base)];
+	if (![manager createDirectoryAtPath:root withIntermediateDirectories:YES attributes:nil error:error]) {
 		fclose(file);
 		return nil;
 	}
 	for (i = 0; i < [entries count]; i++) {
 		NSDictionary *entry = [entries objectAtIndex:i];
 		NSString *name = [entry objectForKey:@"name"];
-		const char *utf8 = [name UTF8String];
-		NSString *destination = nil;
 		mode_t mode = (mode_t)[[entry objectForKey:@"mode"] unsignedIntValue];
-		struct timespec stamp = { 0, 0 };
-		BOOL isDirectory;
+		BOOL isDirectory = (S_ISDIR(mode) || [name hasSuffix:@"/"]);
+		NSString *destination = [root stringByAppendingPathComponent:name];
 
-		if (!fn_entry_name_is_safe(utf8)) {
-			if (error != NULL) {
-				*error = fn_error(35, [NSString stringWithFormat:@"%@ tries to leave the folder", name]);
-			}
+		if (![self cg_materialiseEntry:entry from:file atPath:destination isDirectory:isDirectory error:error]) {
 			fclose(file);
-			(void)[manager removeItemAtPath:folder error:NULL];
+			(void)[manager removeItemAtPath:root error:NULL];
 			return nil;
-		}
-		destination = [folder stringByAppendingPathComponent:name];
-		isDirectory = (S_ISDIR(mode) || ([[entry objectForKey:@"csize"] unsignedLongLongValue] == 0 &&
-						 [[entry objectForKey:@"usize"] unsignedLongLongValue] == 0 &&
-						 [name hasSuffix:@"/"]));
-		fn_dos_to_time((uint16_t)[[entry objectForKey:@"date"] unsignedShortValue],
-			       (uint16_t)[[entry objectForKey:@"time"] unsignedShortValue], &stamp);
-		if (isDirectory) {
-			if (![manager createDirectoryAtPath:destination withIntermediateDirectories:YES
-						 attributes:nil error:NULL] && error != NULL) {
-				*error = fn_error(32, @"a folder could not be made");
-				fclose(file);
-				(void)[manager removeItemAtPath:folder error:NULL];
-				return nil;
-			}
-		} else {
-			NSString *parent = [destination stringByDeletingLastPathComponent];
-
-			if (![manager createDirectoryAtPath:parent withIntermediateDirectories:YES attributes:nil error:NULL]) {
-				if (error != NULL) *error = fn_error(32, @"a folder could not be made");
-				fclose(file);
-				(void)[manager removeItemAtPath:folder error:NULL];
-				return nil;
-			}
-			if (S_ISLNK(mode)) {
-				/* A LINK IS WRITTEN BACK AS A LINK: its payload is the target path, and creating it needs the bytes in
-				 * hand rather than a stream. */
-				unsigned char *target = malloc((size_t)[[entry objectForKey:@"usize"] unsignedLongLongValue] + 1);
-				uint64_t localOffset = [[entry objectForKey:@"offset"] unsignedLongLongValue];
-				unsigned char header[30];
-				BOOL made = NO;
-
-				if (target != NULL && fseek(file, (long)localOffset, SEEK_SET) == 0 &&
-				    fread(header, 1, sizeof header, file) == sizeof header &&
-				    fseek(file, (long)(fn_le16(header + 26) + fn_le16(header + 28)), SEEK_CUR) == 0 &&
-				    fread(target, 1, (size_t)[[entry objectForKey:@"usize"] unsignedLongLongValue], file) ==
-					    (size_t)[[entry objectForKey:@"usize"] unsignedLongLongValue]) {
-					target[[[entry objectForKey:@"usize"] unsignedLongLongValue]] = '\0';
-					made = (symlink((const char *)target, [destination fileSystemRepresentation]) == 0);
-				}
-				free(target);
-				if (!made) {
-					if (error != NULL) *error = fn_error(32, @"a link could not be made");
-					fclose(file);
-					(void)[manager removeItemAtPath:folder error:NULL];
-					return nil;
-				}
-			} else if (![self cg_writeEntry:entry from:file toPath:destination error:error]) {
-				fclose(file);
-				(void)[manager removeItemAtPath:folder error:NULL];
-				return nil;
-			}
-			if ((mode & 07777) != 0) {
-				(void)chmod([destination fileSystemRepresentation], mode & 07777);
-			}
-		}
-		if (stamp.tv_sec != 0 && !S_ISLNK(mode)) {
-			struct timespec times[2];
-
-			times[0] = stamp;
-			times[1] = stamp;
-			(void)utimensat(AT_FDCWD, [destination fileSystemRepresentation], times, 0);
 		}
 		[self report:i + 1 total:[entries count] path:destination];
 	}
 	fclose(file);
 	[self registerUndo:@"Extract Archive" handler:^(id target) {
-		(void)[[NSFileManager defaultManager] removeItemAtPath:folder error:NULL];
+		(void)[[NSFileManager defaultManager] removeItemAtPath:root error:NULL];
 		(void)target;
 	}];
-	return folder;
+	return root;
 }
 @end

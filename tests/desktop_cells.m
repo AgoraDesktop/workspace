@@ -202,17 +202,20 @@ int main(void)
 		[compressing compress:nil];
 		check([[NSFileManager defaultManager] fileExistsAtPath:archive],
 		      "the desktop compresses its selection into the desktop folder");
-		/* **AND IT UNPACKS ONE, WHICH IS THE SAME COMMAND THE RIGHT-CLICK ROW AND A DOUBLE CLICK TAKE.** */
+		/* **AND IT UNPACKS ONE, WHICH IS THE SAME COMMAND THE RIGHT-CLICK ROW AND A DOUBLE CLICK TAKE.** The archive
+		 * holds ONE file, so it comes back as that file beside the archive rather than as a folder wrapping it — and the
+		 * original has to be gone first, or the extraction would have to invent a name. */
 		{
-			NSString *unpacked = [root stringByAppendingPathComponent:@"alpha"];
+			NSString *unpacked = [root stringByAppendingPathComponent:@"alpha.txt"];
 
+			[[NSFileManager defaultManager] removeItemAtPath:alpha error:NULL];
 			[compressing reload];
 			[compressing cg_selectPaths:[NSArray arrayWithObject:archive]];
 			check([compressing cg_selectionCanBeExtracted],
 			      "a selected archive on the desktop says it can be extracted");
 			[compressing extractArchive:nil];
 			check([[NSFileManager defaultManager] fileExistsAtPath:unpacked],
-			      "and the desktop unpacks it into a folder named for it");
+			      "and the desktop unpacks a one-file archive as that file, beside it");
 			[[NSFileManager defaultManager] removeItemAtPath:unpacked error:NULL];
 		}
 		[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];

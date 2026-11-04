@@ -461,7 +461,13 @@ on a 4.1 GB entry.
 **AND A .zip UNPACKS BESIDE ITSELF, INTO A FOLDER NAMED FOR IT.** `-extractArchive:` reads the archive this tree writes
 — store and raw deflate, ZIP64 when a record needed 64 bits — and makes `<folder>/<basename>/`: `trip.zip` beside `trip`,
 and "trip 2" when the name is taken, because two extractions are two folders. Every entry keeps its mode and its
-modification time, a symlink comes back as a link, empty folders survive, and each entry's CRC is checked. **A NAME THAT
+modification time, a symlink comes back as a link, empty folders survive, and each entry's CRC is checked.
+
+**AND AN ARCHIVE OF ONE FILE IS UNPACKED AS THAT FILE.** Wrapping a single document in `<basename>/` makes a person open
+a folder to reach the only thing in it, so the single-file case lands beside the archive under the ENTRY's own name —
+`photos.zip` holding `photos/cat.jpg` gives `cat.jpg` next to it, and `cat 2.jpg` if that name is taken. A folder entry
+that only names the file's parent does not change the count; anything with two files in it is a folder again, and an
+archive whose only entry is an empty folder is a folder too. **A NAME THAT
 LEAVES THE FOLDER REFUSES THE WHOLE ARCHIVE**: an entry called `../escape.txt` or `/etc/passwd` is zip-slip, so the folder
 made so far is removed and the answer is nil. Undo removes the folder. A double click on an archive takes the same command
 — there is no unarchiver registered for `.zip` in this tree's Launch Services, so the launch door would answer "no
