@@ -49,7 +49,7 @@
 #include <sys/stat.h>
 
 static const CGFloat WSInfoWindowWidth = 420.0;
-static const CGFloat WSInfoWindowMaxHeight = 660.0;
+static const CGFloat WSInfoWindowMaxHeight = 700.0;
 static const CGFloat WSInfoHeaderHeight = 58.0;
 static const CGFloat WSInfoSectionHeight = 22.0;
 static const CGFloat WSInfoMargin = 12.0;
@@ -97,6 +97,7 @@ static NSString *WSInfoValue(NSString *value)
 @interface WSInfoSectionView : NSView
 {
 	NSString *_title;		/* COPIED */
+	NSTextField *_titleLabel;	/* RETAINED by the view hierarchy */
 	NSView *_body;			/* RETAINED by the view hierarchy and by this class */
 	BOOL _collapsed;
 	id _target;			/* NOT RETAINED: the window controller owns the section */
@@ -121,6 +122,13 @@ static NSString *WSInfoValue(NSString *value)
 	_body = [body retain];
 	_target = target;
 	_action = action;
+	/* **THE TITLE IS A LABEL AND NOT A DRAWN STRING.** This view is flipped, and Core Text's line drawing takes the
+	 * point as a BASELINE in an unflipped space — MEASURED, a title drawn at the band's middle landed under the band's
+	 * bottom edge and was painted over by the next section's body. A field is laid out in its own frame and needs no
+	 * such reasoning, and it is the same label every other title in this window is. */
+	_titleLabel = [WSInfoLabel(title, 24.0, 3.0, 260.0, 16.0, 11.0) retain];
+	[_titleLabel setFont:[NSFont boldSystemFontOfSize:11.0]];
+	[self addSubview:_titleLabel];
 	[self addSubview:_body];
 	return self;
 }
@@ -128,6 +136,7 @@ static NSString *WSInfoValue(NSString *value)
 - (void)dealloc
 {
 	[_title release];
+	[_titleLabel release];
 	[_body release];
 	[super dealloc];
 }
@@ -157,8 +166,6 @@ static NSString *WSInfoValue(NSString *value)
 	NSRect band = NSMakeRect(0.0, 0.0, bounds.size.width, WSInfoSectionHeight);
 	CGFloat midY = WSInfoSectionHeight / 2.0;
 	NSBezierPath *triangle = [NSBezierPath bezierPath];
-	NSDictionary *attributes;
-	NSSize titleSize;
 
 	(void)dirtyRect;
 	[[NSColor colorWithCalibratedWhite:0.91 alpha:1.0] set];
@@ -183,13 +190,6 @@ static NSString *WSInfoValue(NSString *value)
 	[triangle closePath];
 	[[NSColor colorWithCalibratedWhite:0.33 alpha:1.0] set];
 	[triangle fill];
-
-	attributes = [NSDictionary dictionaryWithObjectsAndKeys:
-		[NSFont boldSystemFontOfSize:11.0], NSFontAttributeName,
-		[NSColor colorWithCalibratedWhite:0.2 alpha:1.0], NSForegroundColorAttributeName,
-		nil];
-	titleSize = [(NSString *)WSInfoValue(_title) sizeWithAttributes:attributes];
-	[WSInfoValue(_title) drawAtPoint:NSMakePoint(24.0, midY - titleSize.height / 2.0) withAttributes:attributes];
 }
 
 - (void)mouseDown:(NSEvent *)event
@@ -222,6 +222,7 @@ static NSString *WSInfoValue(NSString *value)
 				  width, [self cg_heightForWidth:width])];
 	[_body setFrame:NSMakeRect(WSInfoMargin, WSInfoSectionHeight + 6.0,
 				   width - 2.0 * WSInfoMargin, bodyFrame.size.height)];
+	[_titleLabel setFrame:NSMakeRect(24.0, 3.0, width - 24.0 - WSInfoMargin, 16.0)];
 }
 
 @end
@@ -511,7 +512,7 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 
 - (WSInfoSectionView *)cg_generalSection
 {
-	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WSInfoWindowWidth, 133.0)];
+	WSInfoFlippedView *body = [[WSInfoFlippedView alloc] initWithFrame:NSMakeRect(0.0, 0.0, WSInfoWindowWidth, 140.0)];
 	WSInfoSectionView *section;
 	CGFloat y = 0.0;
 
@@ -646,13 +647,24 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	NSTableColumn *name;
 	NSTableColumn *privilege;
 	NSTableView *table;
+	NSScrollView *tableScroll;
 	CGFloat tableWidth = WSInfoWindowWidth - 2.0 * WSInfoMargin;
 
 	_permissionSummary = [WSInfoLabel(nil, 0.0, 0.0, tableWidth, WSInfoRowHeight, 11.0) retain];
 	[body addSubview:_permissionSummary];
 	[_permissionSummary release];
 
-	table = [[NSTableView alloc] initWithFrame:NSMakeRect(0.0, 21.0, tableWidth, 78.0)];
+	/* **A TABLE IS THE DOCUMENT VIEW OF A SCROLL VIEW, HERE AS EVERYWHERE ELSE IN THIS TIER.** A table added bare to a
+	 * view whose window is already scrolling installs its header — and takes its own frame — from the OUTER scroll view,
+	 * which MEASURED put the permissions table across the top of the window and its header over the window's own. The
+	 * inner scroll view is the table's own enclosure, and it is the one the header belongs to. */
+	tableScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0.0, 21.0, tableWidth, 78.0)];
+	[tableScroll setHasVerticalScroller:NO];
+	[tableScroll setHasHorizontalScroller:NO];
+	[tableScroll setAutohidesScrollers:YES];
+	[tableScroll setBorderType:NSBezelBorder];
+	[tableScroll setDrawsBackground:YES];
+	table = [[NSTableView alloc] initWithFrame:[[tableScroll contentView] bounds]];
 	tableWidth -= 4.0;
 	name = [[NSTableColumn alloc] initWithIdentifier:@"Name"];
 	[name setWidth:tableWidth * 0.55];
@@ -667,9 +679,11 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[table setAllowsMultipleSelection:NO];
 	[table setDataSource:self];
 	[table setDelegate:self];
-	[body addSubview:table];
+	[tableScroll setDocumentView:table];
+	[body addSubview:tableScroll];
 	_permissionTable = [table retain];
 	[table release];
+	[tableScroll release];
 
 	section = [[WSInfoSectionView alloc] initWithTitle:@"Sharing & Permissions" body:body target:self
 						   action:@selector(cg_sectionToggled:)];

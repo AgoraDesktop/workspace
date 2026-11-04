@@ -30,8 +30,8 @@ surfaces answer the same three — a file window's grid (`WSIconView`), the desk
 
 A click on an icon that is NOT part of the held group narrows the selection to it first, and a click on the background
 leaves the selection alone. The commands behind the rows are the ones this tree already had — the inline
-rename field, W6's trash, and the pasteboard `WSItemDrag` writes — plus Paste, which a Cut needs to mean anything; Get
-Info is W8's and is drawn grey until then, the same way the menu bar says what Workspace cannot do yet.
+rename field, W6's trash, and the pasteboard `WSItemDrag` writes — plus Paste, which a Cut needs to mean anything; and
+Get Info, which opens the inspector below (`WSGetInfoWindowController`).
 
 **AND A RIGHT-CLICK ON THE EMPTY GRID RAISES THE FOLDER'S OWN.** New Folder, a separator, Paste, Select All — the rows the
 reference file manager shows when the pointer is over nothing, about the directory the grid is showing. The two menus are
@@ -438,6 +438,37 @@ archiver is run, which is why the test can read the local header and find the en
 Keep Both, progress counts, Trash/Undo/Put Back, Empty and Compress with Undo after each. `tests/trash.m` is the
 Trash's own: recycle, unique names, Put Back, a directory and an empty.
 
+### W8: Get Info
+
+**ONE WINDOW PER SUBJECT, REUSED.** `WSGetInfoWindowController` shows what `WSItemInfo` measured in six collapsible
+sections — General, More Info, Name & Extension, Comments, Preview, Sharing & Permissions — in a scrolling flipped
+container whose sections are stacked by arithmetic, because this tree has no nib compiler and every other window is built
+the same way. Asking again for the same paths brings the open window forward and re-reads it rather than stacking a
+second copy; a selection is one answer, with the facts that cannot be summed left blank rather than guessed (`9,731,676,356
+bytes (9.73 GB on disk) for 185 items` is a sum and a count, and a name is nothing at all).
+
+**THREE OF THE SIX WRITE, AND THEY WRITE WHERE THE REST OF THE SHELL READS.** The name field renames the item through
+`WSFileOperations -renamePath:toName:error:`, so the validation and the "that name is taken" refusal are the ones every
+other rename uses, and the comment is re-filed under the new name. The **Locked** box is the owner's write bit — this
+kernel has no user immutable flag, so that is what "locked" can honestly mean here — and it keeps every other mode bit.
+The **comment** goes into the enclosing folder's `.agora` sidecar, keyed by name, which is where this tier already keeps
+what a person decided about a name; it is saved as it is typed, because a window closed by its title bar never sends the
+field an "end editing".
+
+**NAMED ABSENCES.** `Shared folder` is drawn and disabled: sharing is W12's and a tick that nothing honoured would lie.
+There is no tag field (tags are not in the metadata store), no "Hide extension" (that is a Finder flag this substrate does
+not have), no `Open With` (F1) and no custom icon (F2). A folder's size is its own directory allocation, not the total of
+the tree below it — a recursive walk would block the window — while the item count IS measured, one listing and no
+descent. The creation date is the file system's when it reports one and this substrate records no birth time, so it reads
+"—". There are no ACLs to list, so the permissions table has no +/- and no gear. The inspector's own rename is not
+undoable: its `WSFileOperations` has no undo manager, because the window outlives the one that opened it and an undo entry
+pointing at a dead window's manager would be worse than none.
+
+`tests/get_info.m` is the proof: the facts for a file and for a folder, a selection's summed bytes and its blank mixed
+values, the three Locked states, the size and privilege strings, the window's six sections and their fields, the registry
+reusing one window, and the three writes checked **on the disk** — the rename, the mode bit, and the comment surviving a
+rename.
+
 ### Printing: the listing, and the launch's own door
 
 **A FILE MANAGER PRINTS WHAT IT SHOWS.** Printing a document's contents needs the application that owns it, and this
@@ -494,7 +525,9 @@ src/
   WSTrash.m                recycle, Put Back records, empty and the per-volume rule
   WSProgressWindow.m       the progress window the operations feed
   WSConflictSheet.m        the Replace/Skip/Keep Both/Cancel question (a modal panel)
-  WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions and the icon size
+  WSMetadataStore.m        the per-folder `.agora` sidecar: icon positions, the icon size and the comments
+  WSItemInfo.m             one item's — or a selection's — facts, and the sentences an inspector reads out of them
+  WSGetInfoWindowController.m  Get Info: six collapsible sections, a rename, the Locked bit and the comment
   WSPlaces.m               the sidebar's PLACES and DEVICES, and the desktop path
 Info.plist.in              the bundle's Info.plist
 Resources/Workspace.icns   the bundle's icon: the vendored theme's Home folder art, packed at five sizes (PROVENANCE.md)
@@ -509,8 +542,9 @@ files. It is derived art, packed with the recipe in [`PROVENANCE.md`](PROVENANCE
 `CFBundleIconFile`, so the icon is read the way the Mac reads one and the Dock needs no special case for its own file
 manager.
 
-The plan's later stages: the system-wide drag session (W7), Get Info (W8), Quick Look (W9), search
-(W10), volumes (W11), network shares (W12) and the shell integration (W13). Their substrate — Launch Services, Icon
+The plan's later stages: the system-wide drag session (W7), Quick Look (W9), search
+(W10), volumes (W11), network shares (W12) and the shell integration (W13). Get Info (W8) is here, with the absences
+named in its own section below. Their substrate — Launch Services, Icon
 Services and the change stream — is already built (`../libagora-launchservices`, `../libagora-iconservices`,
 `../libagora-watch`).
 

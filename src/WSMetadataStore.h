@@ -28,6 +28,8 @@
 @class NSString;
 @class NSMutableDictionary;
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface WSMetadataStore : NSObject
 {
 	NSString *_directory;
@@ -57,5 +59,7 @@
 - (BOOL)save;
 
 @end
+
+NS_ASSUME_NONNULL_END
 
 #endif /* WORKSPACE_WSMETADATASTORE_H */

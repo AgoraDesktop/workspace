@@ -32,6 +32,8 @@
 @class NSDate;
 @class NSString;
 
+NS_ASSUME_NONNULL_BEGIN
+
 /* One row of the Sharing & Permissions table: who, and what they may do. A plain object rather than a dictionary
  * because the table asks two questions of a row and a keyed lookup would make both of them strings. */
 @interface WSItemPermission : NSObject
@@ -117,5 +119,7 @@
 + (NSString *)summaryForMode:(mode_t)mode;			/* the owner's sentence */
 
 @end
+
+NS_ASSUME_NONNULL_END
 
 #endif /* WORKSPACE_WSITEMINFO_H */

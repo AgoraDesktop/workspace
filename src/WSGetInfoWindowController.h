@@ -33,6 +33,8 @@
 @class WSItemInfo;
 @class WSMetadataStore;
 
+NS_ASSUME_NONNULL_BEGIN
+
 @interface WSGetInfoWindowController : NSWindowController <NSWindowDelegate, NSTableViewDataSource,
 							  NSTableViewDelegate>
 {
@@ -68,7 +70,7 @@
 /* The windows currently on the glass, oldest first — the probe's door to "did a second Get Info stack a second window". */
 + (NSArray *)cg_openInfoWindows;
 
-- (instancetype)initWithPaths:(NSArray *)paths;
+- (nullable instancetype)initWithPaths:(NSArray *)paths;
 
 - (WSItemInfo *)info;
 - (NSArray *)paths;
@@ -95,5 +97,7 @@
 - (NSUInteger)cg_sectionCount;
 
 @end
+
+NS_ASSUME_NONNULL_END
 
 #endif /* WORKSPACE_WSGETINFOWINDOWCONTROLLER_H */
