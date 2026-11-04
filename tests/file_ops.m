@@ -14,8 +14,12 @@
 
 #import <Foundation/Foundation.h>
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/resource.h>
+#include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 static int s_failed;
@@ -36,6 +40,73 @@ static BOOL makeFile(NSString *path, NSUInteger bytes)
 {
 	return [[NSFileManager defaultManager] createFileAtPath:path contents:[NSMutableData dataWithLength:bytes]
 						      attributes:nil];
+}
+
+/* ---- THE CENTRAL DIRECTORY, WHICH IS WHAT A READER BELIEVES ------------------------------------------------
+ *
+ * A ZIP is believed through its central directory, not through its local headers: the name, the mode and the time a
+ * restored file gets all come from here. So the test reads this rather than scanning the bytes for a name. */
+static unsigned long zip_le16(const unsigned char *bytes)
+{
+	return (unsigned long)bytes[0] | ((unsigned long)bytes[1] << 8);
+}
+
+static unsigned long zip_le32(const unsigned char *bytes)
+{
+	return (unsigned long)bytes[0] | ((unsigned long)bytes[1] << 8) |
+	       ((unsigned long)bytes[2] << 16) | ((unsigned long)bytes[3] << 24);
+}
+
+static NSArray *zip_central_directory(NSData *data)
+{
+	const unsigned char *bytes = [data bytes];
+	NSUInteger length = [data length];
+	NSMutableArray *records = [[[NSMutableArray alloc] init] autorelease];
+	NSUInteger eocd = NSNotFound;
+	NSUInteger offset;
+	unsigned long count;
+	unsigned long i;
+
+	if (length < 22) {
+		return records;
+	}
+	for (i = length - 22; ; i--) {
+		if (bytes[i] == 0x50 && bytes[i + 1] == 0x4b && bytes[i + 2] == 0x05 && bytes[i + 3] == 0x06) {
+			eocd = i;
+			break;
+		}
+		if (i == 0) {
+			break;
+		}
+	}
+	if (eocd == NSNotFound) {
+		return records;
+	}
+	count = zip_le16(bytes + eocd + 10);
+	offset = zip_le32(bytes + eocd + 16);
+	for (i = 0; i < count && offset + 46 <= length; i++) {
+		unsigned long nameLength = zip_le16(bytes + offset + 28);
+		unsigned long extraLength = zip_le16(bytes + offset + 30);
+		unsigned long commentLength = zip_le16(bytes + offset + 32);
+		NSString *name;
+
+		if (offset + 46 + nameLength > length) {
+			break;
+		}
+		name = [[[NSString alloc] initWithBytes:bytes + offset + 46 length:nameLength
+					       encoding:NSUTF8StringEncoding] autorelease];
+		if (name != nil) {
+			[records addObject:[NSDictionary dictionaryWithObjectsAndKeys:
+				name, @"name",
+				[NSNumber numberWithUnsignedInt:(unsigned int)(zip_le32(bytes + offset + 38) >> 16)], @"mode",
+				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 12)], @"time",
+				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 14)], @"date",
+				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 10)], @"method",
+				[NSNumber numberWithUnsignedLong:(zip_le32(bytes + offset + 4) >> 8)], @"madeBy", nil]];
+		}
+		offset += 46 + nameLength + extraLength + commentLength;
+	}
+	return records;
 }
 
 static BOOL exists(NSString *path)
@@ -195,35 +266,155 @@ int main(void)
 		      "Empty Trash removes the items and their records");
 	}
 
-	/* 9. COMPRESS WRITES A ZIP, AND UNDO REMOVES IT. */
-	makeFile([aDir stringByAppendingPathComponent:@"file1.txt"], 12);
-	makeFile([aDir stringByAppendingPathComponent:@"file2.txt"], 24);
+	/* 9. COMPRESS WRITES A ZIP, AND EVERY ENTRY KEEPS ITS OWN TIME AND ITS OWN MODE. The archive used to stamp every
+	 * entry with "now" and mode 0, so a restored shell script was `-rw----` and would not run; a symlink was followed
+	 * rather than stored as a link. The central directory is what a reader believes, so it is what is checked. */
 	{
-		NSString *archive = [ops compressPaths:[NSArray arrayWithObject:aDir] inDirectory:base error:NULL];
-		NSData *data = (archive != nil) ? [NSData dataWithContentsOfFile:archive] : nil;
-		int hasName = 0;
+		NSString *script = [aDir stringByAppendingPathComponent:@"run.sh"];
+		NSString *nested = [aDir stringByAppendingPathComponent:@"nested"];
+		NSString *inside = [nested stringByAppendingPathComponent:@"inside.txt"];
+		NSString *empty = [aDir stringByAppendingPathComponent:@"empty"];
+		NSString *link = [aDir stringByAppendingPathComponent:@"link.txt"];
+		NSString *file1 = [aDir stringByAppendingPathComponent:@"file1.txt"];
+		NSString *file2 = [aDir stringByAppendingPathComponent:@"file2.txt"];
+		struct timespec stamps[2];
+		NSString *archive;
+		NSData *data;
+		NSArray *records;
+		NSDictionary *record;
+		NSInteger i;
 
-		if (data != nil) {
-			const unsigned char *bytes = [data bytes];
-			NSUInteger length = [data length];
-			static const char needle[] = "file1.txt";
-			NSUInteger k;
+		makeFile(file1, 12);
+		makeFile(file2, 24);
+		makeDirectory(nested);
+		makeFile(inside, 8);
+		makeDirectory(empty);
+		makeFile(script, 20);
+		(void)chmod([script fileSystemRepresentation], 0755);
+		(void)symlink("file1.txt", [link fileSystemRepresentation]);
+		/* A KNOWN MTIME, so the entry's DOS stamp can be compared with the file's own rather than with "now". */
+		stamps[0].tv_sec = 1500000000;	/* 2017-07-14, in whatever zone this runs */
+		stamps[0].tv_nsec = 0;
+		stamps[1] = stamps[0];
+		(void)utimensat(AT_FDCWD, [file1 fileSystemRepresentation], stamps, AT_SYMLINK_NOFOLLOW);
 
-			for (k = 0; k + sizeof needle - 1 <= length; k++) {
-				if (memcmp(bytes + k, needle, sizeof needle - 1) == 0) {
-					hasName = 1;
-					break;
+		archive = [ops compressPaths:[NSArray arrayWithObject:aDir] inDirectory:base error:NULL];
+		data = (archive != nil) ? [NSData dataWithContentsOfFile:archive] : nil;
+		check(data != nil && [data length] > 22 && ((const unsigned char *)[data bytes])[0] == 'P'
+		      && ((const unsigned char *)[data bytes])[1] == 'K',
+		      "Compress writes a ZIP");
+		records = (data != nil) ? zip_central_directory(data) : nil;
+		{
+			NSUInteger files = 0;
+
+			for (i = 0; i < (NSInteger)[records count]; i++) {
+				if (![[[records objectAtIndex:i] objectForKey:@"name"] hasSuffix:@"/"]) {
+					files++;
 				}
 			}
-			check([data length] > 4 && bytes[0] == 'P' && bytes[1] == 'K' && bytes[2] == 3 && bytes[3] == 4,
-			      "Compress writes a ZIP local header");
-			check(hasName, "and the archive carries the entry name");
-			[undo undo];
-			check(!exists(archive), "Undo removes the archive");
-		} else {
-			check(0, "Compress returned an archive");
-			check(0, "and the archive carries the entry name");
+			check([records count] >= 8,
+			      "the archive holds the folder, its files, a nested folder and its file, the empty folder, the script and the link");
+			printf("  (note: the archive has %lu entries, %lu of them files; the bar said %d of %u\n",
+			       (unsigned long)[records count], (unsigned long)files, progressCount, progressTotal);
+			check((NSUInteger)progressCount == files && (NSUInteger)progressTotal == files,
+			      "and the bar counts the FILES in the tree, not the one folder it was given");
 		}
+		for (i = 0; i < (NSInteger)[records count]; i++) {
+			record = [records objectAtIndex:i];
+			if ([[record objectForKey:@"name"] isEqual:@"run.sh"] ||
+			    [[record objectForKey:@"name"] hasSuffix:@"/run.sh"]) {
+				check(([[record objectForKey:@"mode"] unsignedIntValue] & 07777) == 0755,
+				      "the script keeps its executable bit in the central directory");
+				check(([[record objectForKey:@"mode"] unsignedIntValue] & S_IFMT) == S_IFREG,
+				      "and its type, which is what makes a reader restore a file rather than a link");
+			}
+			if ([[record objectForKey:@"name"] hasSuffix:@"/link.txt"]) {
+				check(([[record objectForKey:@"mode"] unsignedIntValue] & S_IFMT) == S_IFLNK,
+				      "a symlink is stored as a link, not followed");
+			}
+			if ([[record objectForKey:@"name"] hasSuffix:@"/empty/"] ||
+			    [[record objectForKey:@"name"] hasSuffix:@"/nested/"]) {
+				check(([[record objectForKey:@"mode"] unsignedIntValue] & S_IFMT) == S_IFDIR,
+				      "a folder is a folder in the archive too");
+			}
+			if ([[record objectForKey:@"name"] hasSuffix:@"/file1.txt"]) {
+				struct tm broken;
+				time_t when = (time_t)1500000000;
+				unsigned int expectedTime = 0;
+				unsigned int expectedDate = 0;
+
+				if (localtime_r(&when, &broken) != NULL) {
+					expectedTime = (unsigned int)((broken.tm_hour << 11) | (broken.tm_min << 5) | (broken.tm_sec / 2));
+					expectedDate = (unsigned int)(((broken.tm_year - 80) << 9) | ((broken.tm_mon + 1) << 5) |
+								      broken.tm_mday);
+				}
+				check([[record objectForKey:@"time"] unsignedIntValue] == expectedTime
+				      && [[record objectForKey:@"date"] unsignedIntValue] == expectedDate,
+				      "and every entry carries the file's own modification time");
+			}
+		}
+		[undo undo];
+		check(!exists(archive), "Undo removes the archive");
+	}
+
+	/* 10. THE ARCHIVE IS STREAMED, SO A BIG FILE DOES NOT COST ITS OWN SIZE IN MEMORY — TWICE. The first version read
+	 * every file into an NSData and kept the archive in another: MEASURED, a 191 MB tree took a peak RSS of 409 MB.
+	 * Here a 24 MB incompressible file is compressed and the process's high-water mark is not allowed to grow by more
+	 * than half of it (the old writer needed twice its size; the streamed one needs a 64 KB block). */
+	{
+		NSString *bulkDir = [base stringByAppendingPathComponent:@"bulk"];
+		NSString *bulk = [bulkDir stringByAppendingPathComponent:@"random.bin"];
+		struct rusage before;
+		struct rusage after;
+		NSString *archive;
+
+		makeDirectory(bulkDir);
+		{
+			/* INCOMPRESSIBLE ON PURPOSE: a zeros file would deflate to nothing and prove less. */
+			NSMutableData *noise = [[NSMutableData alloc] initWithLength:24u * 1024u * 1024u];
+			unsigned char *bytes = [noise mutableBytes];
+			FILE *urandom = fopen("/dev/urandom", "rb");
+			NSUInteger i;
+
+			if (urandom != NULL) {
+				(void)fread(bytes, 1, [noise length], urandom);
+				fclose(urandom);
+			} else {
+				for (i = 0; i < [noise length]; i++) {
+					bytes[i] = (unsigned char)(i * 31u);
+				}
+			}
+			(void)[noise writeToFile:bulk atomically:NO];
+			[noise release];
+		}
+		(void)getrusage(RUSAGE_SELF, &before);
+		archive = [ops compressPaths:[NSArray arrayWithObject:bulkDir] inDirectory:base error:NULL];
+		(void)getrusage(RUSAGE_SELF, &after);
+		printf("  (note: compressing 24 MB raised the peak RSS by %ld KB\n",
+		       after.ru_maxrss - before.ru_maxrss);
+		check(archive != nil, "a folder with a 24 MB file compresses");
+		check(after.ru_maxrss - before.ru_maxrss < 12 * 1024,
+		      "and the archive is streamed: the peak RSS does not grow by the file's size");
+		(void)[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
+		(void)[[NSFileManager defaultManager] removeItemAtPath:bulkDir error:NULL];
+	}
+
+	/* 11. A FAILED COMPRESS LEAVES NO ARCHIVE BEHIND. The writer streams into its destination now, so a half-written
+	 * file would be left beside the folder unless the failure takes it away. A file with no read permission is what
+	 * makes the write fail halfway through the tree. */
+	if (geteuid() != 0) {
+		NSString *locked = [aDir stringByAppendingPathComponent:@"locked.bin"];
+		NSString *archive;
+		NSError *error = nil;
+
+		makeFile(locked, 16);
+		(void)chmod([locked fileSystemRepresentation], 0);
+		archive = [ops compressPaths:[NSArray arrayWithObject:aDir] inDirectory:base error:&error];
+		check(archive == nil && error != nil, "compressing a tree with an unreadable file fails");
+		check(!exists([base stringByAppendingPathComponent:@"A Folder.zip"]),
+		      "and the half-written archive is not left behind");
+		(void)chmod([locked fileSystemRepresentation], 0644);
+		(void)[[NSFileManager defaultManager] removeItemAtPath:locked error:NULL];
 	}
 
 	[ops release];
