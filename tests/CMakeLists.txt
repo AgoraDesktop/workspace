@@ -42,7 +42,10 @@ add_executable(desktop_cells desktop_cells.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(desktop_cells PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(desktop_cells PRIVATE
     AgoraApp::App
@@ -74,7 +77,10 @@ add_executable(desktop_drag desktop_drag.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(desktop_drag PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(desktop_drag PRIVATE
     AgoraApp::App
@@ -104,7 +110,10 @@ add_executable(desktop_band desktop_band.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(desktop_band PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(desktop_band PRIVATE
     AgoraApp::App
@@ -164,7 +173,8 @@ add_executable(preferences preferences.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
 target_include_directories(preferences PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(preferences PRIVATE
     AgoraApp::App
@@ -289,7 +299,8 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
 target_include_directories(file_window PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(file_window PRIVATE
     AgoraApp::App
@@ -324,7 +335,8 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSPlaces.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSMetadataStore.m")
 target_include_directories(app_bundle PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(app_bundle PRIVATE
     AgoraApp::App
@@ -360,7 +372,10 @@ add_executable(icon_view icon_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(icon_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(icon_view PRIVATE
     AgoraApp::App

@@ -816,7 +816,15 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 		[_commentsName release];
 		_commentsName = [[destination lastPathComponent] copy];
 	}
-	[self reload];
+	/* **THE WINDOW'S SUBJECT IS THE NEW PATH, NOT THE OLD ONE.** `-reload` re-reads `-paths`, and the old name no longer
+	 * exists — so the rename replaces the info rather than refreshing the one that pointed at where the file used to be. */
+	{
+		WSItemInfo *updated = [[WSItemInfo infoForPaths:[NSArray arrayWithObject:destination]] retain];
+
+		[_info release];
+		_info = updated;
+	}
+	[self cg_updateFields];
 }
 
 /* **LOCKED IS THE OWNER'S WRITE BIT, WHICH IS THE HONEST READING OF IT HERE.** This kernel has no chflags(2) user

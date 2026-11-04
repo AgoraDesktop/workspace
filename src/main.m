@@ -30,6 +30,7 @@ int main(int argc, char **argv)
 	int showFileWindow = 0;
 	int showListView = 0;
 	int showColumnView = 0;
+	NSString *getInfoPath = nil;
 
 	/* **THE CHROME'S THEME, BEFORE THE FIRST WINDOW EXISTS.** `AGChromeTheme` resolves ONCE per process, and asking
 	 * after a window has been made is asking for something already decided — so this comes before anything else.
@@ -62,6 +63,10 @@ int main(int argc, char **argv)
 			/* A TEST'S DOOR, for the same reason `--show-about` is one: a file window is otherwise reached by a
 			 * menu action, and a probe cannot click. */
 			showFileWindow = 1;
+		} else if (strcmp(argv[i], "--get-info") == 0 && i + 1 < argc) {
+			/* **A TEST'S DOOR, LIKE `--show-about` AND `--file-window`**: the inspector is reached by a menu action or a
+			 * context row, and a probe cannot click either. The path is the window's subject. */
+			getInfoPath = [NSString stringWithUTF8String:argv[++i]];
 		} else if (strcmp(argv[i], "--show-about") == 0) {
 			/* **A TEST'S DOOR, AND NAMED AS ONE.** The About panel is reached by a menu action, and a menu action
 			 * needs a click — which is the one thing a probe of this tier cannot fake reliably (a synthetic click
@@ -69,7 +74,8 @@ int main(int argc, char **argv)
 			 * reproduces the same window creation, the same chrome and the same activation, on any display. */
 			showAbout = 1;
 		} else {
-			fprintf(stderr, "usage: %s [--seconds N] [--show-about] [--file-window] [--list-view] [--column-view]\n", argv[0]);
+			fprintf(stderr, "usage: %s [--seconds N] [--show-about] [--file-window] [--list-view] [--column-view]"
+				" [--get-info PATH]\n", argv[0]);
 			return 2;
 		}
 	}
@@ -91,6 +97,9 @@ int main(int argc, char **argv)
 		[workspace setShowsFileWindowOnStart:showFileWindow];
 		[workspace setFileWindowUsesListView:showListView];
 		[workspace setFileWindowUsesColumnView:showColumnView];
+		if (getInfoPath != nil) {
+			[workspace setShowsGetInfoOnStart:[NSArray arrayWithObject:getInfoPath]];
+		}
 		if (![workspace start]) {
 			fprintf(stderr, "workspace: THE DESKTOP WINDOW WAS NOT MADE\n");
 			return 1;

@@ -200,12 +200,14 @@ static NSString *WSWhereNameForPath(NSString *path)
 
 		/* THE LOCKED BOX IS THE OWNER'S WRITE BIT, which is the thing a person means by "this file is locked": the
 		 * account that owns it may no longer change it. Mixed across a selection it is a mixed state, not a lie. */
-		if ((s.st.st_mode & S_IWUSR) != 0) {
-			if (info->_lockedState == NSOnState) {
-				info->_lockedState = NSOffState;
+		{
+			NSInteger locked = ((s.st.st_mode & S_IWUSR) == 0) ? NSOnState : NSOffState;
+
+			if (i == 0) {
+				info->_lockedState = locked;
+			} else if (info->_lockedState != locked) {
+				info->_lockedState = NSMixedState;
 			}
-		} else if (info->_lockedState == NSOffState) {
-			info->_lockedState = NSMixedState;
 		}
 
 		if (i == 0) {

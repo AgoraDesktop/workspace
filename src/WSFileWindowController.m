@@ -104,8 +104,10 @@ static NSString * const WSSearchFieldItemIdentifier = @"WorkspaceSearchField";
  * break between the navigation pair and the view switch is a BLANK VIEW of its own, five spacers wide. It carries no
  * label and no action: it is width. */
 static NSString * const WSSwitcherSpacerItemIdentifier = @"WorkspaceSwitcherSpacer";
-/* THE SEARCH FIELD'S WIDTH, IN POINTS. */
-#define WS_SEARCH_FIELD_WIDTH 400.0
+/* THE SEARCH FIELD'S WIDTH, IN POINTS — about two thirds of the four hundred it was first set to, which left the field
+ * wider than the browser under it. This is the one number: the frame, the item's minimum and its ceiling all come from
+ * it. */
+#define WS_SEARCH_FIELD_WIDTH 267.0
 #define WS_SWITCHER_SPACER_WIDTH 40.0
 /* **THE ONE PREFERENCE A TOOLBAR HAS: WHETHER ITS ITEMS SAY THEIR WORDS.** A file window's band is a Back, a Forward
  * and a mode switch, so the words are useful the first time and clutter every time after — which is why the View menu
@@ -1073,8 +1075,8 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		 * **AND IT FILTERS AS THEY TYPE.** `-sendsWholeSearchString:` NO with `-sendsSearchStringImmediately:` YES is the
 		 * pair that asks the cell to send on every keystroke; left alone the cell waits for Return, which is a search
 		 * field that appears to do nothing until a person gives up and presses a key they were not told about. */
-		/* **FOUR HUNDRED POINTS, WHICH IS TWICE THE FIRST FIELD'S WIDTH** — a query is a word or two and a field that
-		 * shows six characters of it makes a person scroll their own search.
+		/* **TWO HUNDRED AND SIXTY-SEVEN POINTS, ABOUT TWO THIRDS OF THE FOUR HUNDRED IT WAS FIRST SET TO** — a query is a
+		 * word or two, and four hundred left the field wider than the browser beneath it.
 		 *
 		 * **AND THE ITEM'S `minSize` IS WHAT ACTUALLY SETS THE WIDTH.** `NSToolbar` lays a custom view out at its
 		 * minimum width (`fn_custom_width`: the frame is the fallback only when the minimum is zero), which is the

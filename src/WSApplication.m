@@ -15,6 +15,7 @@
 #import "WSPlaces.h"
 #import "WSMainMenu.h"
 #import "WSMenuBarClock.h"
+#import "WSGetInfoWindowController.h"
 #import "WSPreferencesWindow.h"
 
 #import <LaunchServices/LSOpen.h>
@@ -127,6 +128,9 @@
 	if (_showsFileWindowOnStart) {
 		[self newWorkspaceWindow:nil];
 	}
+	if ([_getInfoPaths count] > 0) {
+		(void)[WSGetInfoWindowController infoWindowForPaths:_getInfoPaths];
+	}
 
 	fprintf(stderr, "workspace: desktop window at level %ld, frame %gx%g at (%g,%g), showing %s\n",
 		(long)[_desktop level], (double)[_desktop frame].size.width, (double)[_desktop frame].size.height,
@@ -219,6 +223,14 @@
 	[_desktop close];
 	[_desktop release];
 	_desktop = nil;
+}
+
+- (void)setShowsGetInfoOnStart:(NSArray *)paths
+{
+	if (_getInfoPaths != paths) {
+		[_getInfoPaths release];
+		_getInfoPaths = [paths copy];
+	}
 }
 
 - (void)setShowsFileWindowOnStart:(BOOL)flag
@@ -403,6 +415,7 @@
 - (void)dealloc
 {
 	[self stop];
+	[_getInfoPaths release];
 	[_fileWindows release];
 	[super dealloc];
 }

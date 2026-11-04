@@ -31,6 +31,7 @@
 
 	store->_directory = [directory copy];
 	store->_positions = [[NSMutableDictionary alloc] init];
+	store->_comments = [[NSMutableDictionary alloc] init];
 	store->_iconSize = WS_ICON_DEFAULT_SIZE;
 	[store load];
 	return [store autorelease];
@@ -65,6 +66,25 @@
 	if ([icons isKindOfClass:[NSDictionary class]]) {
 		[_positions release];
 		_positions = [[NSMutableDictionary alloc] initWithDictionary:(NSDictionary *)icons];
+	}
+	/* A COMMENT IS TEXT AND NOT A POSITION, so anything that is not a string is dropped rather than drawn as one: a
+	 * sidecar a person edited by hand is still read only for the shapes it can hold. */
+	{
+		id comments = [dictionary objectForKey:@"comments"];
+
+		if ([comments isKindOfClass:[NSDictionary class]]) {
+			NSEnumerator *keys = [(NSDictionary *)comments keyEnumerator];
+			NSString *name;
+
+			while ((name = [keys nextObject]) != nil) {
+				id text = [(NSDictionary *)comments objectForKey:name];
+
+				if ([name isKindOfClass:[NSString class]] && [text isKindOfClass:[NSString class]]
+				    && [(NSString *)text length] > 0) {
+					[_comments setObject:text forKey:name];
+				}
+			}
+		}
 	}
 }
 
@@ -107,12 +127,33 @@
 	if (size >= 16 && size <= 512) _iconSize = size;
 }
 
+- (NSString *)commentForName:(NSString *)name
+{
+	return (name != nil) ? [_comments objectForKey:name] : nil;
+}
+
+- (void)setComment:(NSString *)comment forName:(NSString *)name
+{
+	if (name == nil) return;
+	if (comment == nil || [comment length] == 0) {
+		[_comments removeObjectForKey:name];
+		return;
+	}
+	[_comments setObject:comment forKey:name];
+}
+
+- (void)removeCommentForName:(NSString *)name
+{
+	if (name != nil) [_comments removeObjectForKey:name];
+}
+
 - (BOOL)save
 {
 	NSDictionary *dictionary = [NSDictionary dictionaryWithObjectsAndKeys:
 		[NSNumber numberWithInteger:WS_METADATA_VERSION], @"version",
 		[NSNumber numberWithInteger:_iconSize], @"iconSize",
 		_positions, @"icons",
+		_comments, @"comments",
 		nil];
 	NSData *data = [NSPropertyListSerialization dataWithPropertyList:dictionary
 								  format:NSPropertyListXMLFormat_v1_0

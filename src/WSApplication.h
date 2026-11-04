@@ -40,6 +40,7 @@
 	WSPreferencesWindow *_preferences;
 	NSMutableArray *_fileWindows;		/* RETAINED: WSFileWindowController */
 	BOOL _showsAboutOnStart;
+	NSArray *_getInfoPaths;			/* RETAINED: the subject the probe's Get Info window was started on */
 	BOOL _showsFileWindowOnStart;
 	NSInteger _fileWindowViewMode;
 	/* **THE BOUNDED RUN'S CLOCK AND ITS PASS COUNT**, which used to live in a throwaway delegate object. The
@@ -72,6 +73,11 @@
 /* **A FILE WINDOW AS PART OF STARTING UP**, which is `--file-window`'s door and the way a probe sees the shell
  * without clicking a menu. The window is otherwise reached by File > New Workspace Window. */
 - (void)setShowsFileWindowOnStart:(BOOL)flag;
+
+/* **A GET INFO WINDOW AS PART OF STARTING UP**, which is `--get-info`'s door and the same arrangement `--show-about`
+ * has: the inspector is otherwise reached by a menu action or a context row, and a probe cannot click. The paths are
+ * the window's subject — one item is an item's inspector, several are a selection's. */
+- (void)setShowsGetInfoOnStart:(nullable NSArray *)paths;
 
 /* **THE FIRST FILE WINDOW'S MODE, FOR THE PROBE'S DOOR.** `--list-view` is `--file-window` with W4's List chosen;
  * the switcher still works afterwards. */
