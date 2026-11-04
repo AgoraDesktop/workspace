@@ -177,6 +177,10 @@
 + (void)cg_showToolbarLabelsStateOn:(nullable NSMenuItem *)item;
 - (nullable NSSplitView *)cg_splitView;
 
+/* **WHERE A COPY OR AN ARCHIVE IS MADE**: the folder that holds the selection, which is the only thing either command is
+ * about. Exposed because a probe checks the rule rather than the pixels. */
+- (nullable NSString *)cg_destinationBesideSelection;
+
 @end
 
 #endif /* WORKSPACE_WSFILEWINDOWCONTROLLER_H */

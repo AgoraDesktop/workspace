@@ -57,6 +57,49 @@ static unsigned long zip_le32(const unsigned char *bytes)
 	       ((unsigned long)bytes[2] << 16) | ((unsigned long)bytes[3] << 24);
 }
 
+static unsigned long long zip_le64(const unsigned char *bytes)
+{
+	return (unsigned long long)zip_le32(bytes) | ((unsigned long long)zip_le32(bytes + 4) << 32);
+}
+
+/* **THE ZIP64 EXTRA FIELD, IF THE RECORD HAS ONE.** A reader finds the real size here when the 32-bit field says
+ * 0xFFFFFFFF, and the values are in the order uncompressed, compressed, offset. */
+static unsigned long long zip_extra_value(const unsigned char *extra, unsigned long length,
+					  unsigned long long *compressed, unsigned long long *offset)
+{
+	unsigned long at = 0;
+
+	*compressed = 0;
+	*offset = 0;
+	while (at + 4 <= length) {
+		unsigned long tag = zip_le16(extra + at);
+		unsigned long size = zip_le16(extra + at + 2);
+		unsigned long long value = 0;
+		unsigned long long second = 0;
+		unsigned long long third = 0;
+		unsigned long cursor = at + 4;
+
+		if (tag == 0x0001) {
+			if (cursor + 8 <= at + 4 + size) {
+				value = zip_le64(extra + cursor);
+				cursor += 8;
+			}
+			if (cursor + 8 <= at + 4 + size) {
+				second = zip_le64(extra + cursor);
+				cursor += 8;
+			}
+			if (cursor + 8 <= at + 4 + size) {
+				third = zip_le64(extra + cursor);
+			}
+			*compressed = second;
+			*offset = third;
+			return value;
+		}
+		at += 4 + size;
+	}
+	return 0;
+}
+
 static NSArray *zip_central_directory(NSData *data)
 {
 	const unsigned char *bytes = [data bytes];
@@ -82,8 +125,21 @@ static NSArray *zip_central_directory(NSData *data)
 	if (eocd == NSNotFound) {
 		return records;
 	}
+	/* **A READER WITH A ZIP64 ARCHIVE FOLLOWS THE LOCATOR FIRST.** The plain EOCD's count and offset are the 0xFFFF and
+	 * 0xFFFFFFFF sentinels in that case, and a reader that takes them at face value sees an archive with no entries —
+	 * which is what this probe did before it learned the same rule a real one uses. */
 	count = zip_le16(bytes + eocd + 10);
 	offset = zip_le32(bytes + eocd + 16);
+	if (eocd >= 20 && bytes[eocd - 20] == 0x50 && bytes[eocd - 19] == 0x4b &&
+	    bytes[eocd - 18] == 0x06 && bytes[eocd - 17] == 0x07) {
+		unsigned long long at = zip_le64(bytes + eocd - 20 + 8);
+
+		if (at + 56 <= length && bytes[at] == 0x50 && bytes[at + 1] == 0x4b &&
+		    bytes[at + 2] == 0x06 && bytes[at + 3] == 0x06) {
+			count = (unsigned long)zip_le64(bytes + at + 32);
+			offset = (NSUInteger)zip_le64(bytes + at + 48);
+		}
+	}
 	for (i = 0; i < count && offset + 46 <= length; i++) {
 		unsigned long nameLength = zip_le16(bytes + offset + 28);
 		unsigned long extraLength = zip_le16(bytes + offset + 30);
@@ -96,13 +152,24 @@ static NSArray *zip_central_directory(NSData *data)
 		name = [[[NSString alloc] initWithBytes:bytes + offset + 46 length:nameLength
 					       encoding:NSUTF8StringEncoding] autorelease];
 		if (name != nil) {
+			unsigned long extraLength = zip_le16(bytes + offset + 30);
+			unsigned long long compressed = 0;
+			unsigned long long localOffset = 0;
+			unsigned long long zip64Size = 0;
+
+			if (offset + 46 + nameLength + extraLength <= length) {
+				zip64Size = zip_extra_value(bytes + offset + 46 + nameLength, extraLength,
+							    &compressed, &localOffset);
+			}
 			[records addObject:[NSDictionary dictionaryWithObjectsAndKeys:
 				name, @"name",
 				[NSNumber numberWithUnsignedInt:(unsigned int)(zip_le32(bytes + offset + 38) >> 16)], @"mode",
 				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 12)], @"time",
 				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 14)], @"date",
 				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 10)], @"method",
-				[NSNumber numberWithUnsignedLong:(zip_le32(bytes + offset + 4) >> 8)], @"madeBy", nil]];
+				[NSNumber numberWithUnsignedLong:zip_le16(bytes + offset + 4)], @"madeBy",
+				[NSNumber numberWithUnsignedLong:zip_le32(bytes + offset + 24)], @"usize32",
+				[NSNumber numberWithUnsignedLongLong:zip64Size], @"zip64usize", nil]];
 		}
 		offset += 46 + nameLength + extraLength + commentLength;
 	}
@@ -399,7 +466,77 @@ int main(void)
 		(void)[[NSFileManager defaultManager] removeItemAtPath:bulkDir error:NULL];
 	}
 
-	/* 11. A FAILED COMPRESS LEAVES NO ARCHIVE BEHIND. The writer streams into its destination now, so a half-written
+	/* 11. ZIP64, MEASURED WITHOUT FOUR GIGABYTES. The format's limits are 4 GB and 65,535 entries, which no suite should
+	 * write; the writer reads its thresholds from `+cg_zip64ByteLimit`, and a probe lowers them so the SAME decision and
+	 * the SAME records are exercised on a few kilobytes. What has to be true is what a reader believes: the central
+	 * record's 32-bit size says "look in the extra field", the extra carries the real number, and there is a ZIP64 end
+	 * of central directory for the reader that follows it. */
+	{
+		NSString *zip64Dir = [base stringByAppendingPathComponent:@"zip64"];
+		NSString *big = [zip64Dir stringByAppendingPathComponent:@"large.bin"];
+		NSString *archive;
+		NSData *data;
+		NSArray *records;
+		const unsigned char *bytes;
+		NSUInteger length;
+		NSUInteger eocd64 = NSNotFound;
+		NSUInteger i;
+		BOOL sawLarge = NO;
+
+		makeDirectory(zip64Dir);
+		makeFile([zip64Dir stringByAppendingPathComponent:@"one.txt"], 2048);
+		makeFile([zip64Dir stringByAppendingPathComponent:@"two.txt"], 2048);
+		makeFile(big, 8192);
+		[WSFileOperations cg_setZip64LimitsForTesting:1024 entries:3];
+		archive = [ops compressPaths:[NSArray arrayWithObject:zip64Dir] inDirectory:base error:NULL];
+		[WSFileOperations cg_setZip64LimitsForTesting:0 entries:0];
+		data = (archive != nil) ? [NSData dataWithContentsOfFile:archive] : nil;
+		bytes = [data bytes];
+		length = [data length];
+		check(data != nil, "a tree compresses with the ZIP64 thresholds lowered");
+
+		/* THE ZIP64 END OF CENTRAL DIRECTORY RECORD AND ITS LOCATOR. */
+		if (length > 20) {
+			for (i = length - 20; ; i--) {
+				if (bytes[i] == 0x50 && bytes[i + 1] == 0x4b && bytes[i + 2] == 0x06 && bytes[i + 3] == 0x07) {
+					unsigned long long at = zip_le64(bytes + i + 8);
+
+					if (at + 56 <= length && bytes[at] == 0x50 && bytes[at + 1] == 0x4b &&
+					    bytes[at + 2] == 0x06 && bytes[at + 3] == 0x06) {
+						eocd64 = (NSUInteger)at;
+					}
+					break;
+				}
+				if (i == 0) {
+					break;
+				}
+			}
+		}
+		check(eocd64 != NSNotFound, "and it writes a ZIP64 end of central directory with a locator pointing at it");
+		records = (data != nil) ? zip_central_directory(data) : nil;
+		printf("  (note: the archive has %lu entries; the ZIP64 EOCD says %llu\n",
+		       (unsigned long)[records count], (unsigned long long)zip_le64(bytes + eocd64 + 32));
+		check([records count] > 0 && eocd64 != NSNotFound &&
+		      zip_le64(bytes + eocd64 + 32) == (unsigned long long)[records count],
+		      "whose entry count is the whole count, in 64 bits");
+		for (i = 0; i < [records count]; i++) {
+			NSDictionary *record = [records objectAtIndex:i];
+
+			if ([[record objectForKey:@"name"] hasSuffix:@"/large.bin"]) {
+				sawLarge = YES;
+				check([[record objectForKey:@"usize32"] unsignedLongValue] == 0xffffffffUL,
+				      "a big entry's 32-bit size is the ZIP64 sentinel");
+				check([[record objectForKey:@"zip64usize"] unsignedLongLongValue] == 8192,
+				      "and the real size is in the extra field, where a reader looks for it");
+				check(([[record objectForKey:@"madeBy"] unsignedLongValue] & 0xff) == 45
+				      && ([[record objectForKey:@"madeBy"] unsignedLongValue] >> 8) == 3,
+				      "with the version that says 64 bits are in use, and unix for the mode");
+			}
+		}
+		check(sawLarge, "the big entry is in the directory at all");
+	}
+
+	/* 12. A FAILED COMPRESS LEAVES NO ARCHIVE BEHIND. The writer streams into its destination now, so a half-written
 	 * file would be left beside the folder unless the failure takes it away. A file with no read permission is what
 	 * makes the write fail halfway through the tree. */
 	if (geteuid() != 0) {

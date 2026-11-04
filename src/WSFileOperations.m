@@ -109,7 +109,18 @@ static NSString *fn_unique_name(NSString *directory, NSString *name)
 
 #define AGZIP_CHUNK		65536		/* the block a file is read in, and the sample the store/deflate choice uses */
 #define AGZIP_DOS_DIRECTORY	0x10u		/* the DOS attribute byte's directory bit */
-#define AGZIP_MADE_BY		((3u << 8) | 20u)	/* 3 = unix, and version 2.0 */
+#define AGZIP_MADE_BY_UNIX	3u		/* the "version made by" high byte: 3 is unix */
+#define AGZIP_VERSION		20u		/* 2.0, which is what a plain entry needs */
+#define AGZIP_VERSION_ZIP64	45u		/* 4.5, which is what an entry with a 64-bit field needs */
+#define AGZIP_ZIP64_SENTINEL	0xffffffffull	/* a 32-bit field saying "the value is in the extra field" */
+#define AGZIP_MAX_ENTRIES	0xffffull	/* a 16-bit count that is full */
+
+/* **THE LIMITS ARE THE STANDARD ONES, AND A PROBE CAN LOWER THEM.** A real ZIP64 test needs four gigabytes of data or
+ * sixty-six thousand entries, which no suite should write, so `+cg_setZip64LimitsForTesting:entries:` lets a probe say
+ * "treat anything past a kilobyte as needing 64 bits" and the DECISION and the RECORDS are measured on a few bytes.
+ * Zero restores the format's own limits, and the product never sets them. */
+static unsigned long long s_zip64_byte_limit = 0;
+static unsigned long long s_zip64_entry_limit = 0;
 
 /* A LITTLE-ENDIAN SCRATCH BUFFER, because a header is built field by field before it goes out. */
 typedef struct {
@@ -124,6 +135,18 @@ static void fn_bytes16(AGBytes *buffer, uint16_t value)
 	}
 	buffer->bytes[buffer->length++] = (unsigned char)(value & 0xff);
 	buffer->bytes[buffer->length++] = (unsigned char)((value >> 8) & 0xff);
+}
+
+static void fn_bytes64(AGBytes *buffer, uint64_t value)
+{
+	int i;
+
+	if (buffer->length + 8 > sizeof buffer->bytes) {
+		return;
+	}
+	for (i = 0; i < 8; i++) {
+		buffer->bytes[buffer->length++] = (unsigned char)((value >> (8 * i)) & 0xff);
+	}
 }
 
 static void fn_bytes32(AGBytes *buffer, uint32_t value)
@@ -229,12 +252,17 @@ typedef void (^AGZipProgress)(NSString *path);
 	return YES;
 }
 
-/* THE HEADER, WITH THE THREE NUMBERS IT DOES NOT KNOW YET LEFT AT ZERO. */
+/* **THE HEADER, WITH THE THREE NUMBERS IT DOES NOT KNOW YET LEFT AT ZERO — AND WITH A ZIP64 EXTRA FIELD WHEN THE ENTRY
+ * IS TOO BIG FOR A 32-BIT SIZE.** The decision is made from the file's own `st_size` before a byte of it is read, which
+ * is the only way to put the extra field IN the local header: a ZIP64 extra cannot be added afterwards without moving
+ * everything that follows it. A file that grows past the limit between the `stat` and the last block is refused rather
+ * than written with a size that does not fit. */
 - (BOOL)beginEntry:(NSString *)entryName method:(uint16_t)method time:(uint16_t)dosTime date:(uint16_t)dosDate
-      headerAt:(unsigned long long *)headerOffset
+	     zip64:(BOOL)zip64 headerAt:(unsigned long long *)headerOffset sizesAt:(unsigned long long *)sizesAt
 {
 	const char *name = [entryName fileSystemRepresentation];
 	size_t nameLength = strlen(name);
+	uint16_t extraLength = zip64 ? 20 : 0;
 	AGBytes header;
 
 	if (nameLength == 0 || nameLength > 0xffffu) {
@@ -242,46 +270,77 @@ typedef void (^AGZipProgress)(NSString *path);
 	}
 	header.length = 0;
 	fn_bytes32(&header, 0x04034b50u);
-	fn_bytes16(&header, 20);
+	fn_bytes16(&header, zip64 ? (uint16_t)AGZIP_VERSION_ZIP64 : (uint16_t)AGZIP_VERSION);
 	fn_bytes16(&header, 0x0800u);	/* names are UTF-8 */
 	fn_bytes16(&header, method);
 	fn_bytes16(&header, dosTime);
 	fn_bytes16(&header, dosDate);
 	fn_bytes32(&header, 0);		/* crc, patched */
-	fn_bytes32(&header, 0);		/* compressed size, patched */
-	fn_bytes32(&header, 0);		/* uncompressed size, patched */
+	fn_bytes32(&header, zip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : 0);	/* compressed size, patched */
+	fn_bytes32(&header, zip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : 0);	/* uncompressed size, patched */
 	fn_bytes16(&header, (uint16_t)nameLength);
-	fn_bytes16(&header, 0);		/* extra */
+	fn_bytes16(&header, extraLength);
 	if (headerOffset != NULL) {
 		*headerOffset = _offset;
 	}
-	return [self writeBytes:header.bytes length:header.length] && [self writeBytes:name length:nameLength];
+	if (![self writeBytes:header.bytes length:header.length] || ![self writeBytes:name length:nameLength]) {
+		return NO;
+	}
+	if (zip64) {
+		AGBytes extra;
+
+		extra.length = 0;
+		fn_bytes16(&extra, 0x0001u);	/* the ZIP64 extra field */
+		fn_bytes16(&extra, 16);		/* two 8-byte values: uncompressed, then compressed */
+		fn_bytes64(&extra, 0);		/* patched */
+		fn_bytes64(&extra, 0);		/* patched */
+		if (sizesAt != NULL) {
+			*sizesAt = _offset + 4;
+		}
+		if (![self writeBytes:extra.bytes length:extra.length]) {
+			return NO;
+		}
+	} else if (sizesAt != NULL) {
+		*sizesAt = 0;
+	}
+	return YES;
 }
 
-- (BOOL)patchHeaderAt:(unsigned long long)headerOffset crc:(uint32_t)crc compressed:(uint64_t)compressed
-	 uncompressed:(uint64_t)uncompressed
+- (BOOL)patchHeaderAt:(unsigned long long)headerOffset sizesAt:(unsigned long long)sizesAt zip64:(BOOL)zip64
+		  crc:(uint32_t)crc compressed:(uint64_t)compressed uncompressed:(uint64_t)uncompressed
 {
-	unsigned char patch[12];
 	unsigned long long end = _offset;
-	unsigned long i;
+	AGBytes patch;
 
-	for (i = 0; i < 4; i++) {
-		patch[i] = (unsigned char)((crc >> (8 * i)) & 0xff);
-		patch[4 + i] = (unsigned char)((compressed >> (8 * i)) & 0xff);
-		patch[8 + i] = (unsigned char)((uncompressed >> (8 * i)) & 0xff);
-	}
+	patch.length = 0;
+	fn_bytes32(&patch, crc);
+	fn_bytes32(&patch, zip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)compressed);
+	fn_bytes32(&patch, zip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)uncompressed);
 	if (fseek(_file, (long)(headerOffset + 14), SEEK_SET) != 0) {
 		return NO;
 	}
-	if (fwrite(patch, 1, sizeof patch, _file) != sizeof patch) {
+	if (fwrite(patch.bytes, 1, patch.length, _file) != patch.length) {
 		return NO;
+	}
+	if (zip64) {
+		AGBytes sizes;
+
+		sizes.length = 0;
+		fn_bytes64(&sizes, uncompressed);
+		fn_bytes64(&sizes, compressed);
+		if (fseek(_file, (long)sizesAt, SEEK_SET) != 0) {
+			return NO;
+		}
+		if (fwrite(sizes.bytes, 1, sizes.length, _file) != sizes.length) {
+			return NO;
+		}
 	}
 	return fseek(_file, (long)end, SEEK_SET) == 0;
 }
 
 - (void)recordEntry:(NSString *)entryName crc:(uint32_t)crc compressed:(uint64_t)compressed
 	 uncompressed:(uint64_t)uncompressed method:(uint16_t)method offset:(unsigned long long)offset
-	       time:(uint16_t)dosTime date:(uint16_t)dosDate mode:(mode_t)mode
+	       time:(uint16_t)dosTime date:(uint16_t)dosDate mode:(mode_t)mode zip64:(BOOL)zip64
 {
 	[_entries addObject:[NSDictionary dictionaryWithObjectsAndKeys:
 		entryName, @"name",
@@ -292,7 +351,8 @@ typedef void (^AGZipProgress)(NSString *path);
 		[NSNumber numberWithUnsignedLongLong:offset], @"offset",
 		[NSNumber numberWithUnsignedShort:dosTime], @"time",
 		[NSNumber numberWithUnsignedShort:dosDate], @"date",
-		[NSNumber numberWithUnsignedInt:(unsigned int)mode], @"mode", nil]];
+		[NSNumber numberWithUnsignedInt:(unsigned int)mode], @"mode",
+		[NSNumber numberWithBool:zip64], @"zip64", nil]];
 }
 
 /* **THE PAYLOAD, STRAIGHT THROUGH OR THROUGH ZLIB, A BLOCK AT A TIME.** The CRC and both sizes come out of the same
@@ -303,7 +363,9 @@ typedef void (^AGZipProgress)(NSString *path);
 	unsigned char *buffer = NULL;
 	size_t sample;
 	uint16_t method = 0;
+	BOOL zip64 = ((unsigned long long)st->st_size >= [WSFileOperations cg_zip64ByteLimit]);
 	unsigned long long headerOffset = 0;
+	unsigned long long sizesAt = 0;
 	uint32_t crc = 0;
 	uint64_t total = 0;
 	uint64_t written = 0;
@@ -331,7 +393,8 @@ typedef void (^AGZipProgress)(NSString *path);
 		method = 8;
 	}
 	rewind(in);
-	if (![self beginEntry:entryName method:method time:dosTime date:dosDate headerAt:&headerOffset]) {
+	if (![self beginEntry:entryName method:method time:dosTime date:dosDate zip64:zip64 headerAt:&headerOffset
+		     sizesAt:&sizesAt]) {
 		if (error != NULL) *error = fn_error(12, @"the archive could not be written");
 		goto done;
 	}
@@ -364,8 +427,11 @@ typedef void (^AGZipProgress)(NSString *path);
 			}
 			crc = (uint32_t)crc32(crc, buffer, (uInt)got);
 			total += got;
-			if (total > 0xffffffffULL) {
-				if (error != NULL) *error = fn_error(10, @"the archive is too large for a ZIP without ZIP64");
+			/* **A FILE THAT GREW PAST THE LIMIT AFTER ITS HEADER WAS WRITTEN IS REFUSED, NOT MISCARRIED.** The ZIP64
+			 * extra field has to be in the LOCAL header, which is already on the disk by now; writing the size into a
+			 * 32-bit field instead would be an archive that lies about itself. */
+			if (!zip64 && total > [WSFileOperations cg_zip64ByteLimit]) {
+				if (error != NULL) *error = fn_error(10, @"the file grew while it was being compressed");
 				goto done;
 			}
 			if (!deflateOpen) {
@@ -424,17 +490,17 @@ typedef void (^AGZipProgress)(NSString *path);
 			deflateEnd(&stream);
 			deflateOpen = NO;
 		}
-		if (written > 0xffffffffULL) {
-			if (error != NULL) *error = fn_error(10, @"the archive is too large for a ZIP without ZIP64");
-			goto done;
+		if (zip64 && (total > AGZIP_ZIP64_SENTINEL) == 0 && written <= AGZIP_ZIP64_SENTINEL) {
+			/* nothing to do: the extra field carries the same numbers the 32-bit fields could have */
 		}
 	}
-	if (![self patchHeaderAt:headerOffset crc:crc compressed:written uncompressed:total]) {
+	if (![self patchHeaderAt:headerOffset sizesAt:sizesAt zip64:zip64 crc:crc compressed:written
+		      uncompressed:total]) {
 		if (error != NULL) *error = fn_error(12, @"the archive could not be written");
 		goto done;
 	}
 	[self recordEntry:entryName crc:crc compressed:written uncompressed:total method:method offset:headerOffset
-		     time:dosTime date:dosDate mode:st->st_mode];
+		     time:dosTime date:dosDate mode:st->st_mode zip64:zip64];
 	ok = YES;
 done:
 	free(buffer);
@@ -458,7 +524,7 @@ done:
 		dosTime = (uint16_t)((broken.tm_hour << 11) | (broken.tm_min << 5) | (broken.tm_sec / 2));
 		dosDate = (uint16_t)(((broken.tm_year - 80) << 9) | ((broken.tm_mon + 1) << 5) | broken.tm_mday);
 	}
-	if (![self beginEntry:name method:0 time:dosTime date:dosDate headerAt:&headerOffset]) {
+	if (![self beginEntry:name method:0 time:dosTime date:dosDate zip64:NO headerAt:&headerOffset sizesAt:NULL]) {
 		if (error != NULL) *error = fn_error(12, @"the archive could not be written");
 		return NO;
 	}
@@ -469,12 +535,12 @@ done:
 			return NO;
 		}
 	}
-	if (![self patchHeaderAt:headerOffset crc:crc compressed:length uncompressed:length]) {
+	if (![self patchHeaderAt:headerOffset sizesAt:0 zip64:NO crc:crc compressed:length uncompressed:length]) {
 		if (error != NULL) *error = fn_error(12, @"the archive could not be written");
 		return NO;
 	}
 	[self recordEntry:name crc:crc compressed:length uncompressed:length method:0 offset:headerOffset
-		     time:dosTime date:dosDate mode:st->st_mode];
+		     time:dosTime date:dosDate mode:st->st_mode zip64:NO];
 	return YES;
 }
 
@@ -567,12 +633,10 @@ done:
 - (BOOL)finishWithError:(NSError **)error
 {
 	unsigned long long centralOffset = _offset;
+	unsigned long long byteLimit = [WSFileOperations cg_zip64ByteLimit];
+	unsigned long long entryLimit = [WSFileOperations cg_zip64EntryLimit];
 	NSUInteger i;
 
-	if ([_entries count] > 0xffffu) {
-		if (error != NULL) *error = fn_error(13, @"too many entries for a ZIP without ZIP64");
-		return NO;
-	}
 	for (i = 0; i < [_entries count]; i++) {
 		NSDictionary *record = [_entries objectAtIndex:i];
 		NSString *name = [record objectForKey:@"name"];
@@ -580,8 +644,11 @@ done:
 		size_t length = strlen(bytes);
 		uint64_t compressed = [[record objectForKey:@"csize"] unsignedLongLongValue];
 		uint64_t uncompressed = [[record objectForKey:@"usize"] unsignedLongLongValue];
+		uint64_t offset = [[record objectForKey:@"offset"] unsignedLongLongValue];
 		mode_t mode = (mode_t)[[record objectForKey:@"mode"] unsignedIntValue];
 		uint32_t attributes = (uint32_t)(mode << 16);
+		BOOL entryZip64 = (compressed >= byteLimit || uncompressed >= byteLimit);
+		BOOL offsetZip64 = (offset >= byteLimit);
 		AGBytes header;
 
 		if (S_ISDIR(mode)) {
@@ -589,43 +656,103 @@ done:
 		}
 		header.length = 0;
 		fn_bytes32(&header, 0x02014b50u);
-		fn_bytes16(&header, (uint16_t)AGZIP_MADE_BY);
-		fn_bytes16(&header, 20);
+		fn_bytes16(&header, (uint16_t)((AGZIP_MADE_BY_UNIX << 8) |
+					     ((entryZip64 || offsetZip64) ? AGZIP_VERSION_ZIP64 : AGZIP_VERSION)));
+		fn_bytes16(&header, (uint16_t)((entryZip64 || offsetZip64) ? AGZIP_VERSION_ZIP64 : AGZIP_VERSION));
 		fn_bytes16(&header, 0x0800u);
 		fn_bytes16(&header, (uint16_t)[[record objectForKey:@"method"] unsignedShortValue]);
 		fn_bytes16(&header, (uint16_t)[[record objectForKey:@"time"] unsignedShortValue]);
 		fn_bytes16(&header, (uint16_t)[[record objectForKey:@"date"] unsignedShortValue]);
 		fn_bytes32(&header, [[record objectForKey:@"crc"] unsignedIntValue]);
-		fn_bytes32(&header, (uint32_t)compressed);
-		fn_bytes32(&header, (uint32_t)uncompressed);
+		fn_bytes32(&header, entryZip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)compressed);
+		fn_bytes32(&header, entryZip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)uncompressed);
 		fn_bytes16(&header, (uint16_t)length);
-		fn_bytes16(&header, 0);		/* extra */
+		/* **THE FIELDS A ZIP64 EXTRA CARRIES ARE THE ONES MARKED AS SENTINELS, IN THIS ORDER AND NO OTHER:**
+		 * uncompressed size, compressed size, then the local header's offset. A reader walks the extra in that order
+		 * and assigns each value to the next saturated field, so including a value that was not marked (or sharing one
+		 * that was) makes the archive a different one than it says it is. */
+		fn_bytes16(&header, (uint16_t)((entryZip64 ? 16 : 0) + (offsetZip64 ? 8 : 0) + (entryZip64 || offsetZip64 ? 4 : 0)));
 		fn_bytes16(&header, 0);		/* comment */
 		fn_bytes16(&header, 0);		/* disk */
 		fn_bytes16(&header, 0);		/* internal attributes */
 		fn_bytes32(&header, attributes);
-		fn_bytes32(&header, (uint32_t)[[record objectForKey:@"offset"] unsignedLongLongValue]);
+		fn_bytes32(&header, offsetZip64 ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)offset);
 		if (![self writeBytes:header.bytes length:header.length] || ![self writeBytes:bytes length:length]) {
 			if (error != NULL) *error = fn_error(12, @"the archive could not be written");
 			return NO;
 		}
+		if (entryZip64 || offsetZip64) {
+			AGBytes extra;
+
+			extra.length = 0;
+			fn_bytes16(&extra, 0x0001u);
+			fn_bytes16(&extra, (uint16_t)((entryZip64 ? 16 : 0) + (offsetZip64 ? 8 : 0)));
+			if (entryZip64) {
+				fn_bytes64(&extra, uncompressed);
+				fn_bytes64(&extra, compressed);
+			}
+			if (offsetZip64) {
+				fn_bytes64(&extra, offset);
+			}
+			if (![self writeBytes:extra.bytes length:extra.length]) {
+				if (error != NULL) *error = fn_error(12, @"the archive could not be written");
+				return NO;
+			}
+		}
 	}
 	{
-		AGBytes end;
-		uint32_t centralSize = (uint32_t)(_offset - centralOffset);
+		uint64_t centralSize = _offset - centralOffset;
+		uint64_t count = (uint64_t)[_entries count];
+		BOOL big = (count >= entryLimit || centralSize >= byteLimit || centralOffset >= byteLimit);
 
-		end.length = 0;
-		fn_bytes32(&end, 0x06054b50u);
-		fn_bytes16(&end, 0);
-		fn_bytes16(&end, 0);
-		fn_bytes16(&end, (uint16_t)[_entries count]);
-		fn_bytes16(&end, (uint16_t)[_entries count]);
-		fn_bytes32(&end, centralSize);
-		fn_bytes32(&end, (uint32_t)centralOffset);
-		fn_bytes16(&end, 0);
-		if (![self writeBytes:end.bytes length:end.length]) {
-			if (error != NULL) *error = fn_error(12, @"the archive could not be written");
-			return NO;
+		if (big) {
+			/* THE ZIP64 END OF CENTRAL DIRECTORY, ITS LOCATOR, AND AN EOCD THAT SAYS "LOOK ABOVE ME". */
+			unsigned long long recordAt = _offset;
+			AGBytes record;
+			AGBytes locator;
+			AGBytes end;
+
+			record.length = 0;
+			fn_bytes32(&record, 0x06064b50u);
+			fn_bytes64(&record, 44);	/* the size of the rest of this record */
+			fn_bytes16(&record, (uint16_t)((AGZIP_MADE_BY_UNIX << 8) | AGZIP_VERSION_ZIP64));
+			fn_bytes16(&record, (uint16_t)AGZIP_VERSION_ZIP64);
+			fn_bytes32(&record, 0);		/* this disk */
+			fn_bytes32(&record, 0);		/* the disk the directory starts on */
+			fn_bytes64(&record, count);	/* entries on this disk */
+			fn_bytes64(&record, count);	/* entries in total */
+			fn_bytes64(&record, centralSize);
+			fn_bytes64(&record, centralOffset);
+			if (![self writeBytes:record.bytes length:record.length]) {
+				if (error != NULL) *error = fn_error(12, @"the archive could not be written");
+				return NO;
+			}
+			locator.length = 0;
+			fn_bytes32(&locator, 0x07064b50u);
+			fn_bytes32(&locator, 0);	/* the disk the ZIP64 EOCD is on */
+			fn_bytes64(&locator, recordAt);
+			fn_bytes32(&locator, 1);	/* how many disks there are */
+			if (![self writeBytes:locator.bytes length:locator.length]) {
+				if (error != NULL) *error = fn_error(12, @"the archive could not be written");
+				return NO;
+			}
+		}
+		{
+			AGBytes end;
+
+			end.length = 0;
+			fn_bytes32(&end, 0x06054b50u);
+			fn_bytes16(&end, 0);
+			fn_bytes16(&end, 0);
+			fn_bytes16(&end, (uint16_t)(big ? AGZIP_MAX_ENTRIES : count));
+			fn_bytes16(&end, (uint16_t)(big ? AGZIP_MAX_ENTRIES : count));
+			fn_bytes32(&end, big ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)centralSize);
+			fn_bytes32(&end, big ? (uint32_t)AGZIP_ZIP64_SENTINEL : (uint32_t)centralOffset);
+			fn_bytes16(&end, 0);
+			if (![self writeBytes:end.bytes length:end.length]) {
+				if (error != NULL) *error = fn_error(12, @"the archive could not be written");
+				return NO;
+			}
 		}
 	}
 	if (fflush(_file) != 0 || fclose(_file) != 0) {
@@ -655,6 +782,25 @@ done:
 /* ---- THE OPERATIONS -------------------------------------------------------------------------- */
 
 @implementation WSFileOperations
+
+/* **THE ZIP64 THRESHOLDS, AND THE PROBE'S DOOR INTO THEM.** The format's own limits are 4 GB and 65,535 entries; a test
+ * that had to write either would be a test nobody runs, so a probe can lower them and read back what the writer did with
+ * the smaller numbers. The product never calls the setter. */
++ (unsigned long long)cg_zip64ByteLimit
+{
+	return (s_zip64_byte_limit > 0) ? s_zip64_byte_limit : AGZIP_ZIP64_SENTINEL;
+}
+
++ (unsigned long long)cg_zip64EntryLimit
+{
+	return (s_zip64_entry_limit > 0) ? s_zip64_entry_limit : AGZIP_MAX_ENTRIES;
+}
+
++ (void)cg_setZip64LimitsForTesting:(unsigned long long)bytes entries:(unsigned long long)entries
+{
+	s_zip64_byte_limit = bytes;
+	s_zip64_entry_limit = entries;
+}
 
 - (instancetype)initWithUndoManager:(NSUndoManager *)undoManager trash:(WSTrash *)trash
 {

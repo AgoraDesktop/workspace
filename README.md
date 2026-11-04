@@ -438,8 +438,21 @@ first 64 KB does not shrink (a picture, an archive, a disk image) is stored and 
 keeps its own `mtime` and its `st_mode` — `version made by` says unix, so a restored script is executable — a symlink
 is stored as a link rather than followed, and a failure takes the half-written archive away. The bar counts the FILES
 in the tree (a folder of five files says "5 of 5" instead of the "1 of 1" the window never showed). No external
-archiver is run, which is why the test can read the central directory and ask what a reader would believe. Still no
-ZIP64: over 4 GB or past 65,535 entries is a refusal, not a corruption.
+archiver is run, which is why the test can read the central directory and ask what a reader would believe.
+
+**AND IT IS ZIP64 WHEN IT HAS TO BE.** An entry at or over 4 GB, a local-header offset past 4 GB, or more than 65,535
+entries each switch the records to their 64-bit forms: the size and offset fields go to `0xFFFFFFFF` and the real values
+into a `0x0001` extra field — in the order a reader walks them, uncompressed, compressed, offset — with the `0x0001`
+extra in the LOCAL header too, which is why the decision is made from the file's `st_size` before a byte is read. A
+directory over the limits also gets the ZIP64 end of central directory, its locator, and the sentinel-filled end record
+above it. The suite cannot write four gigabytes, so `+cg_setZip64LimitsForTesting:entries:` lowers the thresholds and the
+same records are measured on a few kilobytes; the real limits were verified once against Python's `zipfile` and `unzip`
+on a 4.1 GB entry.
+
+**AND IT LANDS BESIDE WHAT IT COMPRESSED.** Compress used to write into `-cg_commandDirectory`, which answers the COLUMN
+a context menu was raised in and is the browser's ROOT when the command comes from the menu bar — so compressing
+`Applications/Forge.app` from the File menu put `Forge.zip` in the home folder, one column to the left. Duplicate had the
+same defect; both now use the SELECTION's own folder.
 
 `tests/file_ops.m` is the proof: New Folder, Duplicate, Rename, Move, Copy (including `/dev/shm`), conflict Skip and
 Keep Both, progress counts, Trash/Undo/Put Back, Empty and Compress with Undo after each. `tests/trash.m` is the

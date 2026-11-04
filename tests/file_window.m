@@ -485,6 +485,27 @@ int main(void)
 	[first cg_useIconView:nil];
 	check([first viewMode] == 0, "and choosing Icon returns to the grid");
 
+		/* **AN ARCHIVE IS MADE BESIDE THE THING IT WAS MADE FROM.** Compress used to write into
+		 * `-cg_commandDirectory`, which answers the COLUMN a context menu was raised in and is the browser's ROOT when
+		 * the command comes from the menu bar — MEASURED in a session, compressing `Applications/Forge.app` from the
+		 * File menu put `Forge.zip` in the home folder, one column to the left of the thing it was made from. The rule
+		 * is the SELECTION's own folder, and that is what this asks for. */
+		{
+			NSString *archive = [root stringByAppendingPathComponent:
+				[[subTwo lastPathComponent] stringByAppendingPathExtension:@"zip"]];
+
+			[first cg_useIconView:nil];
+			[[first cg_iconView] cg_selectPaths:[NSArray arrayWithObject:subTwo]];
+			check([[[first cg_iconView] selectedItems] count] == 1,
+			      "a folder is selected in the icon view");
+			check([[first cg_destinationBesideSelection] isEqual:root],
+			      "and the destination is the folder that holds it");
+			[first compress:nil];
+			check([[NSFileManager defaultManager] fileExistsAtPath:archive],
+			      "Compress puts the archive beside the selected item");
+			[[NSFileManager defaultManager] removeItemAtPath:archive error:NULL];
+		}
+
 	/* **A COMMAND RAISED IN A COLUMN ACTS ON THAT COLUMN'S FOLDER.** The window owns New Folder and Paste, so it has to
 	 * be told which folder the menu was raised in: MEASURED as "new directory in the third column currently creates a new
 	 * directory in the first". Here the second column lists an empty folder, and a right-click in it must put the folder
@@ -518,6 +539,7 @@ int main(void)
 			      "and the title follows with it");
 			check([[first directory] isEqual:root],
 			      "while the window itself still holds the folder it opened on");
+
 			[browser selectRow:-1 inColumn:0];
 			[browser doClick:nil];
 			[loop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
@@ -1006,6 +1028,7 @@ int main(void)
 		[third close];
 		[third release];
 	}
+
 
 	[backItem release];
 	[listItem release];

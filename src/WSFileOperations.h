@@ -91,6 +91,14 @@ typedef void (^WSFileProgressHandler)(NSUInteger completed, NSUInteger total, NS
 /* COMPRESS writes one `.zip` in `directory`; the returned path is the archive. */
 - (nullable NSString *)compressPaths:(NSArray *)paths inDirectory:(NSString *)directory error:(NSError **)error;
 
+/* **THE ZIP64 THRESHOLDS, AS A PROBE'S DOOR.** The format's limits are 4 GB and 65,535 entries, and a suite that had to
+ * write either would be a suite nobody runs: a probe lowers them to a few kilobytes and a few entries, and the same
+ * decision and the same records are measured on data that small. Zero restores the format's own limits, and the
+ * application never calls the setter. */
++ (void)cg_setZip64LimitsForTesting:(unsigned long long)bytes entries:(unsigned long long)entries;
++ (unsigned long long)cg_zip64ByteLimit;
++ (unsigned long long)cg_zip64EntryLimit;
+
 @end
 
 #endif /* WORKSPACE_WSFILEOPERATIONS_H */

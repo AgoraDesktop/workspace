@@ -1318,17 +1318,35 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[self finishOperation];
 }
 
+/* **A COPY AND AN ARCHIVE GO BESIDE WHAT THEY CAME FROM, NOT WHERE THE WINDOW HAPPENS TO LOOK.** Both used to be made
+ * in `-cg_commandDirectory`, which answers the COLUMN a context menu was raised in — and is the browser's ROOT when the
+ * command comes from the menu bar, because only a right-click sets it. MEASURED in a session: compressing
+ * `Applications/Forge.app` from the File menu put `Forge.zip` in the home folder, one column to the left of the thing it
+ * was made from. The folder of the SELECTION is the answer in every view mode, and a selection is the only thing either
+ * command is about. */
+- (NSString *)cg_destinationBesideSelection
+{
+	NSArray *paths = [self selectedPaths];
+
+	if ([paths count] == 0) {
+		return [self cg_commandDirectory];
+	}
+	return [[paths objectAtIndex:0] stringByDeletingLastPathComponent];
+}
+
 - (void)duplicate:(id)sender
 {
 	(void)sender;
-	(void)[_fileOperations duplicatePaths:[self selectedPaths] inDirectory:[self cg_commandDirectory] error:NULL];
+	(void)[_fileOperations duplicatePaths:[self selectedPaths] inDirectory:[self cg_destinationBesideSelection]
+					error:NULL];
 	[self finishOperation];
 }
 
 - (void)compress:(id)sender
 {
 	(void)sender;
-	(void)[_fileOperations compressPaths:[self selectedPaths] inDirectory:[self cg_commandDirectory] error:NULL];
+	(void)[_fileOperations compressPaths:[self selectedPaths] inDirectory:[self cg_destinationBesideSelection]
+				       error:NULL];
 	[self finishOperation];
 }
 
