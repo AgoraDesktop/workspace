@@ -371,6 +371,10 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	[_status setBezeled:NO];
 	[_status setDrawsBackground:NO];
 	[_status setTextColor:[NSColor darkGrayColor]];
+	/* **THE STATUS LINE IS CENTRED, AND THE FIELD IS WHAT SAYS SO.** It spans the window's whole width — its leading and
+	 * trailing anchors are the content view's — so its ALIGNMENT is the only thing that decides where the words sit, and
+	 * a line like "4 items" pinned to the left edge reads as the first column of a table that has no columns. */
+	[_status setAlignment:NSCenterTextAlignment];
 	[_status setStringValue:@""];
 	[[[self window] contentView] addSubview:_status];
 
