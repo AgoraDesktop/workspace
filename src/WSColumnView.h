@@ -51,6 +51,9 @@
 	 * not the window's. A browser shows a chain of folders at once, so "New Folder" in the third column belongs in the
 	 * third column's folder, and the window that owns the command has to be told which one the click landed in. */
 	NSString *_commandDirectory;		/* RETAINED */
+	/* **THE PREVIEW'S SIZE IS A WALK FOR A FOLDER, AND THE WALK IS NOT ON THE MAIN THREAD.** `_previewPath` is the item
+	 * the pane is showing, so an answer about a row the person has already left is dropped rather than drawn. */
+	NSString *_previewPath;			/* RETAINED */
 }
 - (instancetype)initWithFrame:(NSRect)frame model:(WSItemModel *)model;
 
@@ -85,6 +88,10 @@
 /* **HOW WIDE THE PREVIEW PANE IS**, so a probe measures the pane the code draws rather than a number it copied. */
 + (CGFloat)cg_previewWidth;
 - (nullable WSItem *)cg_previewItem;
+/* The size line the preview is showing, and the door a measured total arrives through — the same one the background
+ * walk's continuation uses, so a probe can check what the pane does with a folder's total without waiting for a thread. */
+- (nullable NSString *)cg_previewSizeText;
+- (void)cg_setPreviewMeasuredBytes:(unsigned long long)bytes;
 - (nullable NSString *)cg_previewText;
 
 @end

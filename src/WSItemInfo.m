@@ -10,6 +10,7 @@
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 
+#import <Foundation/NSAutoreleasePool.h>
 #import <Foundation/NSByteCountFormatter.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSDateFormatter.h>
@@ -19,6 +20,7 @@
 #import <Foundation/NSNumberFormatter.h>
 #import <Foundation/NSPathUtilities.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSThread.h>
 
 #import <AppKit/NSButtonCell.h>		/* NSOnState/NSOffState/NSMixedState */
 
@@ -161,6 +163,74 @@ static void fn_measure_directory(const char *path, unsigned long long *bytes, un
 	closedir(directory);
 }
 
+/* **ONE WALK IN FLIGHT AND ONE ANSWER, AND THE REQUEST OWNS ITSELF UNTIL IT DELIVERS.** `-cg_run:` is the thread — it
+ * touches no view, no window and no image, and keeps a pool of its own — and `-cg_deliver:` is the main thread's half. The
+ * object starts with a retain that only `-cg_deliver:` lets go, so neither the walking thread nor the queued continuation
+ * can find it freed. */
+@interface WSItemMeasureRequest : NSObject
+{
+	NSArray *_paths;	/* COPIED */
+	id _target;		/* RETAINED until the answer has been delivered */
+	SEL _selector;
+	NSArray *_result;	/* RETAINED once the walk has answered */
+}
+- (instancetype)initWithPaths:(NSArray *)paths target:(id)target selector:(SEL)selector;
+@end
+
+@implementation WSItemMeasureRequest
+
+- (instancetype)initWithPaths:(NSArray *)paths target:(id)target selector:(SEL)selector
+{
+	self = [super init];
+	if (self == nil) {
+		return nil;
+	}
+	_paths = [paths copy];
+	_target = [target retain];
+	_selector = selector;
+	return self;
+}
+
+- (void)dealloc
+{
+	[_paths release];
+	[_target release];
+	[_result release];
+	[super dealloc];
+}
+
+- (void)cg_run:(id)ignored
+{
+	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+	unsigned long long bytes = 0;
+	unsigned long long onDisk = 0;
+	unsigned long long items = 0;
+	BOOL countsItems = NO;
+
+	(void)ignored;
+	[WSItemInfo cg_measurePaths:_paths bytes:&bytes onDisk:&onDisk items:&items countsItems:&countsItems];
+	_result = [[NSArray alloc] initWithObjects:
+		[NSNumber numberWithUnsignedLongLong:bytes],
+		[NSNumber numberWithUnsignedLongLong:onDisk],
+		[NSNumber numberWithUnsignedLongLong:items],
+		[NSNumber numberWithBool:countsItems],
+		_paths,
+		nil];
+	[self performSelectorOnMainThread:@selector(cg_deliver:) withObject:nil waitUntilDone:NO];
+	[pool release];
+}
+
+- (void)cg_deliver:(id)ignored
+{
+	NSArray *result = [[_result retain] autorelease];
+
+	(void)ignored;
+	[_target performSelector:_selector withObject:result];
+	[self release];			/* the retain that kept the request alive from -cg_run: */
+}
+
+@end
+
 @implementation WSItemInfo
 
 + (instancetype)infoForPaths:(NSArray *)paths
@@ -294,6 +364,20 @@ static void fn_measure_directory(const char *path, unsigned long long *bytes, un
 	[_ownerName release];
 	[_groupName release];
 	[super dealloc];
+}
+
+
++ (void)cg_measurePathsInBackground:(NSArray *)paths target:(id)target selector:(SEL)selector
+{
+	WSItemMeasureRequest *request;
+
+	if ([paths count] == 0 || target == nil || selector == NULL) {
+		return;
+	}
+	request = [[WSItemMeasureRequest alloc] initWithPaths:paths target:target selector:selector];
+	/* **THE REQUEST IS NOT RELEASED HERE.** Its first retain is the thread's until `-cg_deliver:` drops it; releasing it
+	 * after handing it to a detached thread would be the object freeing itself while `-cg_run:` is still walking. */
+	[NSThread detachNewThreadSelector:@selector(cg_run:) toTarget:request withObject:nil];
 }
 
 + (void)cg_measurePaths:(NSArray *)paths

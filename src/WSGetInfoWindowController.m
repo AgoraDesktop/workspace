@@ -45,9 +45,7 @@
 #import <Foundation/NSByteCountFormatter.h>
 #import <Foundation/NSFileManager.h>
 #import <Foundation/NSNotification.h>
-#import <Foundation/NSAutoreleasePool.h>
 #import <Foundation/NSNotificationCenter.h>
-#import <Foundation/NSThread.h>
 #import <Foundation/NSString.h>
 
 #include <sys/stat.h>
@@ -1051,30 +1049,9 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	}
 	_measuring = YES;
 	[_sizeValue setStringValue:@"Calculating…"];
-	[self retain];			/* released when the answer is put on the glass */
-	[NSThread detachNewThreadSelector:@selector(cg_measureThread:) toTarget:self withObject:paths];
-}
-
-/* **THE THREAD TOUCHES NO VIEW, NO WINDOW AND NO IMAGE.** It walks with `lstat` and `opendir` and answers four numbers;
- * everything that draws happens in the continuation on the main thread. */
-- (void)cg_measureThread:(NSArray *)paths
-{
-	NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-	unsigned long long bytes = 0;
-	unsigned long long onDisk = 0;
-	unsigned long long items = 0;
-	BOOL countsItems = NO;
-	NSArray *result;
-
-	[WSItemInfo cg_measurePaths:paths bytes:&bytes onDisk:&onDisk items:&items countsItems:&countsItems];
-	result = [NSArray arrayWithObjects:[NSNumber numberWithUnsignedLongLong:bytes],
-					   [NSNumber numberWithUnsignedLongLong:onDisk],
-					   [NSNumber numberWithUnsignedLongLong:items],
-					   [NSNumber numberWithBool:countsItems],
-					   paths,
-					   nil];
-	[self performSelectorOnMainThread:@selector(cg_measureDone:) withObject:result waitUntilDone:NO];
-	[pool release];
+	/* THE WALK IS THE HELPER'S: off the main thread, and it keeps this controller alive until it answers, so a window
+	 * closed mid-walk cannot be freed out from under the queued continuation. */
+	[WSItemInfo cg_measurePathsInBackground:paths target:self selector:@selector(cg_measureDone:)];
 }
 
 - (void)cg_measureDone:(NSArray *)result
@@ -1083,7 +1060,6 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	 * is dropped with it: a rename or a navigation between the two can leave a walk talking about an old subject. */
 	if (![[result lastObject] isEqualToArray:[_info paths]]) {
 		_measuring = NO;
-		[self autorelease];
 		return;
 	}
 	[self cg_setMeasuredBytes:[[result objectAtIndex:0] unsignedLongLongValue]
@@ -1091,7 +1067,6 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 			    items:(NSUInteger)[[result objectAtIndex:2] unsignedLongLongValue]
 		      countsItems:[[result objectAtIndex:3] boolValue]];
 	_measuring = NO;
-	[self autorelease];		/* the start's retain */
 }
 
 - (void)cg_setMeasuredBytes:(unsigned long long)bytes

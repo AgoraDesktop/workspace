@@ -422,7 +422,8 @@ add_executable(column_view column_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m")
 target_include_directories(column_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(column_view PRIVATE
     AgoraApp::App

@@ -125,6 +125,13 @@ NS_ASSUME_NONNULL_BEGIN
 		  items:(unsigned long long *)items
 	    countsItems:(BOOL *)countsItems;
 
+/* **THE SAME WALK, OFF THE MAIN THREAD, FOR A CALLER THAT HAS A WINDOW TO KEEP RESPONSIVE.** The target hears
+ * `selector` on the MAIN thread with one argument: an array of `@[ bytes, onDisk, items, countsItems, paths ]` — the four
+ * numbers `+cg_measurePaths:` answers and the selection they answer about, so a caller whose subject changed while the
+ * walk was out can tell and drop it. The helper KEEPS THE TARGET ALIVE until it has delivered, which is what makes a
+ * view that is removed mid-walk safe; a target that wants the answer to outlive itself must copy what it needs. */
++ (void)cg_measurePathsInBackground:(NSArray *)paths target:(id)target selector:(SEL)selector;
+
 /* The measured total handed back to the value the window is about. */
 - (void)cg_setBytes:(unsigned long long)bytes
 	     onDisk:(unsigned long long)onDisk

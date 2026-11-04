@@ -476,6 +476,12 @@ number saying "Calculating…", the walk runs on a thread that touches no view, 
 `-cg_setMeasuredBytes:…` on the main thread. A rename or a navigation that lands first makes the answer about an old
 subject, and it is dropped.
 
+**AND THE COLUMN VIEW'S PREVIEW PANE ASKS THE SAME QUESTION.** Its size line used to read "--" for a directory — the
+pane's own admission that it had not measured one. It now says "Calculating…" while the walk is out (`WSItemInfo
++cg_measurePathsInBackground:target:selector:`, the same off-main-thread door the inspector uses, which keeps its target
+alive until it answers) and takes the total when it lands; an answer that names a path the person has since left is
+dropped. A file's line is still its own `stat`, because that is the whole of a file's size.
+
 **THE PREVIEW IS THE PICTURE ITSELF.** A preview pane is not a grid cell: `WSItemIcons -cg_pictureForPath:box:` answers
 the picture at its own shape — no square's transparent bands — decoded at the WINDOW's scale (`userSpaceScaleFactor`), so
 the compositor is not stretching 128 pixels over 170, and the pane's body takes the picture's height, so the window grows

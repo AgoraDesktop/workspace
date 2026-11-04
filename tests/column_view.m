@@ -10,6 +10,7 @@
  * the rightmost part of the view and shows the selected item's name, Kind, size and date.
  */
 #import "WSColumnView.h"
+#import "WSItemInfo.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
 
@@ -219,6 +220,39 @@ int main(void)
 	      "and the preview is the selected folder");
 	check([[view cg_previewText] rangeOfString:@"Folder"].location != NSNotFound,
 	      "with a Kind in its text");
+	/* **A FOLDER'S SIZE IS THE TREE UNDER IT, WHICH THE PANE HAS TO BE TOLD.** The pane used to answer "--" for a
+	 * directory — a number it had not measured. Now it says "Calculating…" while the walk is out and takes the total
+	 * when the walk answers, through `-cg_measuredPreview:` — the same door the background walk's continuation uses. */
+	{
+		NSString *path = [[view cg_previewItem] path];
+		unsigned long long bytes = 0;
+		unsigned long long onDisk = 0;
+		unsigned long long items = 0;
+		BOOL countsItems = NO;
+		NSInteger pass;
+		NSString *expected;
+
+		check(![[view cg_previewSizeText] isEqual:@"--"],
+		      "a folder's size line is not the dash that means \"not measured\"");
+		for (pass = 0; pass < 200 && [[view cg_previewSizeText] isEqual:@"Calculating…"]; pass++) {
+			[[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+		}
+		[WSItemInfo cg_measurePaths:[NSArray arrayWithObject:path]
+				      bytes:&bytes onDisk:&onDisk items:&items countsItems:&countsItems];
+		expected = [NSString stringWithFormat:@"%llu bytes", bytes];	/* the fixture is small enough to be one */
+		printf("  (note: A Folder's size line is \"%s\" (walk: %llu bytes, %llu entries)\n",
+		       [[view cg_previewSizeText] UTF8String], bytes, items);
+		check([[view cg_previewSizeText] isEqual:expected],
+		      "and it is the walk's total for the tree, not the directory's own stat");
+		/* AN ANSWER ABOUT A ROW THE PERSON HAS LEFT IS DROPPED. */
+		[view cg_measuredPreview:[NSArray arrayWithObjects:[NSNumber numberWithUnsignedLongLong:4096],
+						  [NSNumber numberWithUnsignedLongLong:4096],
+						  [NSNumber numberWithUnsignedLongLong:1],
+						  [NSNumber numberWithBool:YES],
+						  [NSArray arrayWithObject:@"/somewhere/else"], nil]];
+		check([[view cg_previewSizeText] isEqual:expected],
+		      "and an answer about another path does not overwrite it");
+	}
 
 	[browser selectRow:0 inColumn:1];
 	check([browser cg_activeColumnCount] == 3 && [browser numberOfRowsInColumn:2] == 1,
