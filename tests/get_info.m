@@ -206,6 +206,41 @@ int main(void)
 			check([window cg_lockedButton] != nil && [[window cg_lockedButton] state] == NSOffState,
 			      "the Locked box starts unticked for a writable file");
 
+			/* 6b. IT OPENS FOLDED, AND IT FITS ITSELF. Only the first section is open — the rest are a band each —
+			 * and the window is exactly as tall as what they make, growing and shrinking as they fold. */
+			{
+				CGFloat folded = [[[window window] contentView] frame].size.height;
+				CGFloat opened;
+				CGFloat refolded;
+				BOOL restFolded = YES;
+				NSUInteger i;
+
+				check(![window cg_isSectionCollapsedAtIndex:0], "the window opens with General open");
+				for (i = 1; i < [window cg_sectionCount]; i++) {
+					if (![window cg_isSectionCollapsedAtIndex:i]) {
+						restFolded = NO;
+					}
+				}
+				check(restFolded, "and every other section folded, so the window is short");
+				printf("  (note: the folded window's content is %g points tall\n", (double)folded);
+				check(folded > 300.0 && folded < 400.0,
+				      "a folded window is one section tall, not the whole inspector");
+
+				[window cg_setSectionAtIndex:3 collapsed:NO];
+				opened = [[[window window] contentView] frame].size.height;
+				printf("  (note: with Comments open it is %g points tall\n", (double)opened);
+				check(opened > folded + 40.0, "opening Comments makes the window taller by the section");
+				[window cg_setSectionAtIndex:3 collapsed:YES];
+				refolded = [[[window window] contentView] frame].size.height;
+				check(refolded < folded + 0.5 && refolded > folded - 0.5,
+				      "and folding it again puts the window back where it was");
+
+				[window cg_setSectionAtIndex:0 collapsed:YES];
+				check([[[window window] contentView] frame].size.height < folded,
+				      "folding the last open section shrinks the window to its bands");
+				[window cg_setSectionAtIndex:0 collapsed:NO];
+			}
+
 			/* 7. TWO WINDOWS ON ONE SUBJECT ARE ONE WINDOW. */
 			{
 				WSGetInfoWindowController *again = [WSGetInfoWindowController

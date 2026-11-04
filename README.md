@@ -441,9 +441,11 @@ Trash's own: recycle, unique names, Put Back, a directory and an empty.
 ### W8: Get Info
 
 **ONE WINDOW PER SUBJECT, REUSED.** `WSGetInfoWindowController` shows what `WSItemInfo` measured in six collapsible
-sections — General, More Info, Name & Extension, Comments, Preview, Sharing & Permissions — in a scrolling flipped
-container whose sections are stacked by arithmetic, because this tree has no nib compiler and every other window is built
-the same way. Asking again for the same paths brings the open window forward and re-reads it rather than stacking a
+sections — General, More Info, Name & Extension, Comments, Preview, Sharing & Permissions — in a flipped container whose
+sections are stacked by arithmetic, because this tree has no nib compiler and every other window is built the same way.
+**Only General starts unfolded**: a window that showed all six at once would be taller than the desktop it sits on before
+it said anything. Folding a section shrink-wraps the window to the bands that are left and unfolding one grows it, top
+edge kept where it was; past a ceiling the document scrolls. Asking again for the same paths brings the open window forward and re-reads it rather than stacking a
 second copy; a selection is one answer, with the facts that cannot be summed left blank rather than guessed (`9,731,676,356
 bytes (9.73 GB on disk) for 185 items` is a sum and a count, and a name is nothing at all).
 

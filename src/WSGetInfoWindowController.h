@@ -95,6 +95,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSImageView *)cg_previewView;
 - (NSButton *)cg_lockedButton;
 - (NSUInteger)cg_sectionCount;
+/* Which sections are folded, and the fold itself — the same path a click on a band takes, minus the event. */
+- (BOOL)cg_isSectionCollapsedAtIndex:(NSUInteger)index;
+- (void)cg_setSectionAtIndex:(NSUInteger)index collapsed:(BOOL)collapsed;
 
 @end
 

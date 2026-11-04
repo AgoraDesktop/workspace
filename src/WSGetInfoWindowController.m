@@ -29,6 +29,7 @@
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSImageView.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSScreen.h>
 #import <AppKit/NSScrollView.h>
 #import <AppKit/NSTableColumn.h>
 #import <AppKit/NSTextContainer.h>
@@ -406,18 +407,22 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 	[sections addObject:[self cg_sharingSection]];
 	_sections = [sections copy];
 	[sections release];
+	/* **THE WINDOW OPENS WITH ONLY THE FIRST SECTION OPEN**, which is the shape the reference file manager's inspector
+	 * has: General is what a person came to read, the other five are a fold away, and a window that showed all six at
+	 * once would be taller than the desktop it sits on before it said anything. */
+	{
+		NSUInteger i;
+
+		for (i = 1; i < [_sections count]; i++) {
+			[[_sections objectAtIndex:i] cg_setCollapsed:YES];
+		}
+	}
 	[document cg_setSections:_sections];
 
 	contentHeight = [document cg_layoutWidth:WSInfoWindowWidth];
 	[window setContentView:scroll];
 	[scroll release];
-	{
-		NSRect frame = [window frame];
-
-		if (contentHeight + 4.0 < frame.size.height) {
-			[window setContentSize:NSMakeSize(WSInfoWindowWidth, contentHeight + 4.0)];
-		}
-	}
+	[self cg_fitWindowToHeight:contentHeight];
 
 	[self cg_updateFields];
 	return self;
@@ -770,8 +775,52 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 {
 	CGFloat height = [(WSInfoDocumentView *)_documentView cg_layoutWidth:WSInfoWindowWidth];
 
-	(void)height;
+	[self cg_fitWindowToHeight:height];
 	[[self window] displayIfNeeded];
+}
+
+/* **THE WINDOW IS AS TALL AS ITS SECTIONS, UP TO A CEILING.** Folding one shrink-wraps the window instead of leaving a
+ * lane of empty grey below it, and unfolding one grows it — with the TOP edge kept where it was, because that is the
+ * edge a person is reading from and a window that grew upward would move the text under the pointer. Past the ceiling
+ * (a big window's five open sections) the document scrolls, which is what the scroll view is for.
+ *
+ * **AND IT IS KEPT ON THE SCREEN.** Growing downward from a window that was centred can put the bottom edge below the
+ * display, so the frame is pulled back inside the screen's own visible rectangle when there is a screen to ask — a
+ * headless run has none, and then there is nothing to clamp to. */
+- (void)cg_fitWindowToHeight:(CGFloat)height
+{
+	NSWindow *window = [self window];
+	NSRect frame;
+	CGFloat chrome;
+	CGFloat wanted;
+	NSScreen *screen;
+	NSRect visible;
+
+	if (window == nil) {
+		return;
+	}
+	wanted = (height < WSInfoWindowMaxHeight) ? height : WSInfoWindowMaxHeight;
+	if (wanted < WSInfoSectionHeight) {
+		wanted = WSInfoSectionHeight;
+	}
+	frame = [window frame];
+	chrome = frame.size.height - [[window contentView] frame].size.height;
+	if (chrome < 0.0) {
+		chrome = 0.0;
+	}
+	frame = NSMakeRect(frame.origin.x, NSMaxY(frame) - (wanted + chrome), frame.size.width, wanted + chrome);
+
+	screen = [NSScreen mainScreen];
+	if (screen != nil) {
+		visible = [screen visibleFrame];
+		if (NSMaxY(frame) > NSMaxY(visible)) {
+			frame.origin.y = NSMaxY(visible) - frame.size.height;
+		}
+		if (frame.origin.y < NSMinY(visible)) {
+			frame.origin.y = NSMinY(visible);
+		}
+	}
+	[window setFrame:frame display:YES];
 }
 
 - (void)orderFront
@@ -936,5 +985,19 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 - (NSImageView *)cg_previewView { return _previewView; }
 - (NSButton *)cg_lockedButton { return _lockedButton; }
 - (NSUInteger)cg_sectionCount { return [_sections count]; }
+
+- (BOOL)cg_isSectionCollapsedAtIndex:(NSUInteger)index
+{
+	return (index < [_sections count]) ? [[_sections objectAtIndex:index] isCollapsed] : YES;
+}
+
+- (void)cg_setSectionAtIndex:(NSUInteger)index collapsed:(BOOL)collapsed
+{
+	if (index >= [_sections count]) {
+		return;
+	}
+	[[_sections objectAtIndex:index] cg_setCollapsed:collapsed];
+	[self cg_layout];
+}
 
 @end
