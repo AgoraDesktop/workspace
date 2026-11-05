@@ -188,11 +188,17 @@ static NSMenu *WSViewMenu(void)
 	WSRow(menu, @"as Columns", @selector(cg_useColumnView:), nil, @"3", NSCommandKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Show Toolbar", @selector(toggleToolbarShown:), nil, @"t", NSCommandKeyMask | NSAlternateKeyMask);
-	/* **AND THE SAME PAIR FORGE'S PROJECT WINDOW HAS: THE BAND'S WORDS CAN BE PUT AWAY.** A file window's band is a Back, a
+	/* **AND THE SAME ROW FORGE'S PROJECT WINDOW HAS: THE BAND'S WORDS CAN BE PUT AWAY.** A file window's band is a Back, a
 	 * Forward and a mode switch, so the words are useful the first time and clutter every time after — and the choice is
-	 * the APPLICATION's, applied to every window, which is why its action is the delegate's and not a window's. */
+	 * the APPLICATION's, applied to every window, which is why its action is the delegate's and not a window's.
+	 *
+	 * **AND THERE IS NO "CUSTOMIZE TOOLBAR…" ROW, BECAUSE THERE IS NOTHING TO CUSTOMIZE WITH.** This tier's AppKit has no
+	 * customization palette — `NSToolbar.h` says why (a panel and a drag session, neither of which exists) and
+	 * `-runCustomizationPalette:` refuses by name — so a row here would be a command that prints a refusal and changes
+	 * nothing. MEASURED as exactly that, and the row is gone until the palette is real. The doors stay
+	 * (`-runToolbarCustomizationPalette:`, `-customizationPaletteIsRunning`), because they are Apple's surface and a
+	 * program written against 10.6 may still call them; what is gone is the menu telling a person to. */
 	WSRow(menu, @"Show Toolbar Labels", @selector(toggleToolbarLabels:), nil, nil, 0);
-	WSRow(menu, @"Customize Toolbar…", @selector(runToolbarCustomizationPalette:), nil, nil, 0);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Show View Options", @selector(showViewOptions:), nil, @"j", NSCommandKeyMask);
 	return menu;
