@@ -403,6 +403,39 @@ int main(void)
 				      "the registry holds exactly the four that were opened");
 			}
 
+			/* 7b. A SELECTION IS ONE INSPECTOR PER ITEM. The collective shape still exists in `WSItemInfo` — it sums
+			 * a selection's bytes and leaves the facts that disagree blank — but no command opens it: a person who asks
+			 * about two files wants two windows, each about one file, and they cascade so they are not one window in
+			 * the same place twice. */
+			{
+				/* TWO FILES NOBODY HAS INSPECTED YET, because a window already open is reused and left where it
+				 * is — which is the rule this check is not about. */
+				NSString *first = [directory stringByAppendingPathComponent:@"cascade-a.txt"];
+				NSString *second = [directory stringByAppendingPathComponent:@"cascade-b.txt"];
+				NSArray *selection;
+
+				writeBytes(first, 3);
+				writeBytes(second, 4);
+				selection = [NSArray arrayWithObjects:first, second, nil];
+				NSArray *opened = [WSGetInfoWindowController infoWindowsForPaths:selection];
+				NSUInteger registryBefore;
+
+				check([opened count] == 2, "two selected items open two inspectors");
+				check(opened != nil && [[opened objectAtIndex:0] paths].count == 1
+				      && [[opened objectAtIndex:1] paths].count == 1,
+				      "each about one item, not about the selection");
+				check(![[[opened objectAtIndex:0] paths] isEqual:[[opened objectAtIndex:1] paths]],
+				      "and each about a different one");
+				check(!NSEqualPoints([[[opened objectAtIndex:0] window] frame].origin,
+						     [[[opened objectAtIndex:1] window] frame].origin),
+				      "and they cascade rather than landing on top of each other");
+				registryBefore = [[WSGetInfoWindowController cg_openInfoWindows] count];
+				opened = [WSGetInfoWindowController infoWindowsForPaths:selection];
+				check([opened count] == 2
+				      && [[WSGetInfoWindowController cg_openInfoWindows] count] == registryBefore,
+				      "asking again brings the same two forward rather than opening two more");
+			}
+
 			/* 8. THE COMMENT IS THE SIDECAR'S, written as it is typed. */
 			{
 				NSString *comment = @"A note about this file.";

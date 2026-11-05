@@ -500,6 +500,13 @@ Trash's own: recycle, unique names, Put Back, a directory and an empty.
 
 ### W8: Get Info
 
+**A SELECTION IS ONE INSPECTOR PER ITEM, NOT ONE INSPECTOR ABOUT ALL OF THEM.** Asking about four files opens four
+windows, each about one file — cascaded, because every window is centred as it opens and four in the same place look
+like one — and a window already open on a subject is brought forward and re-read rather than duplicated. `WSItemInfo`
+still knows how to sum a selection and leave the facts that disagree blank, and `-initWithPaths:` still takes several
+paths, but no command asks for that: a window that says "Kind: —" about four different things answers a question nobody
+asked.
+
 **ONE WINDOW PER SUBJECT, REUSED.** `WSGetInfoWindowController` shows what `WSItemInfo` measured in six collapsible
 sections — General, More Info, Name & Extension, Comments, Preview, Sharing & Permissions — in a flipped container whose
 sections are stacked by arithmetic, because this tree has no nib compiler and every other window is built the same way.

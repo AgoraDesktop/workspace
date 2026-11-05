@@ -77,8 +77,13 @@ NS_ASSUME_NONNULL_BEGIN
 	NSArray *_permissions;			/* RETAINED: NSArray<WSItemPermission *>, the table's rows */
 }
 
-/* **THE DOOR A COMMAND USES.** The same paths again reuses the window that is already open on them; different paths
- * make a new one. Nil for an empty array. */
+/* **THE DOOR A COMMAND USES: ONE INSPECTOR PER ITEM.** A selection of four files opens four windows, each about one
+ * file, and they cascade so they are not four windows in the same place. A window already open on a subject is brought
+ * forward and re-read rather than duplicated, and the answer is the windows involved (the caller may ignore it). */
++ (NSArray *)infoWindowsForPaths:(NSArray *)paths;
+
+/* One subject, one window — the door the fan-out above is built from, and the one a probe uses. The same paths again
+ * reuse the window that is already open on them; nil for an empty array. */
 + (nullable instancetype)infoWindowForPaths:(NSArray *)paths;
 
 /* The windows currently on the glass, oldest first — the probe's door to "did a second Get Info stack a second window". */

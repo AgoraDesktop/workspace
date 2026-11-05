@@ -1464,7 +1464,7 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 	if ([paths count] == 0) {
 		return;
 	}
-	(void)[WSGetInfoWindowController infoWindowForPaths:paths];
+	(void)[WSGetInfoWindowController infoWindowsForPaths:paths];
 }
 
 /* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN**, the reference file manager's own way to

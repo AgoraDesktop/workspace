@@ -129,7 +129,7 @@
 		[self newWorkspaceWindow:nil];
 	}
 	if ([_getInfoPaths count] > 0) {
-		(void)[WSGetInfoWindowController infoWindowForPaths:_getInfoPaths];
+		(void)[WSGetInfoWindowController infoWindowsForPaths:_getInfoPaths];
 	}
 
 	fprintf(stderr, "workspace: desktop window at level %ld, frame %gx%g at (%g,%g), showing %s\n",

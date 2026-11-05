@@ -380,6 +380,10 @@ static NSString *WSInfoValue(NSString *value)
 
 #pragma mark - The window
 
+/* HOW FAR EACH NEW INSPECTOR STEPS DOWN AND RIGHT FROM THE ONE BEFORE IT, which is what makes a selection's windows read
+ * as several windows rather than one. */
+static const CGFloat WS_INFO_CASCADE_STEP = 24.0;
+
 static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest first */
 
 @implementation WSGetInfoWindowController
@@ -387,6 +391,44 @@ static NSMutableArray *s_infoWindows;		/* RETAINED: the open inspectors, oldest 
 + (NSArray *)cg_openInfoWindows
 {
 	return (s_infoWindows != nil) ? s_infoWindows : [NSArray array];
+}
+
+/* **A SELECTION IS ONE INSPECTOR PER ITEM, NOT ONE INSPECTOR ABOUT ALL OF THEM.** The collective shape exists —
+ * `WSItemInfo` still sums a selection's bytes and leaves the facts that disagree blank — but it is not what a command
+ * opens: a person who asks about four files wants four windows, each about one file, and a single window that says
+ * "Kind: —" about four different things is a window that answers a question nobody asked. So the door a command uses
+ * takes the selection and hands back one window per item.
+ *
+ * **AND THEY CASCADE.** Every window is centred as it is opened, so four inspectors would be four windows in exactly the
+ * same place — which looks like one. Each NEW one steps down and right from the one before it, and a window that was
+ * already open is left where the person put it. */
++ (NSArray *)infoWindowsForPaths:(NSArray *)paths
+{
+	NSMutableArray *windows = [[NSMutableArray alloc] init];
+	NSArray *alreadyOpen = [[self cg_openInfoWindows] copy];
+	NSUInteger i;
+
+	for (i = 0; i < [paths count]; i++) {
+		WSGetInfoWindowController *window = [self infoWindowForPaths:[NSArray arrayWithObject:
+			[paths objectAtIndex:i]]];
+		NSRect frame;
+		CGFloat step;
+
+		if (window == nil) {
+			continue;
+		}
+		[windows addObject:window];
+		if ([alreadyOpen containsObject:window]) {
+			continue;
+		}
+		step = WS_INFO_CASCADE_STEP * (CGFloat)[windows count];
+		frame = [[window window] frame];
+		frame.origin.x += step;
+		frame.origin.y -= step;
+		[[window window] setFrame:frame display:NO];
+	}
+	[alreadyOpen release];
+	return [windows autorelease];
 }
 
 + (instancetype)infoWindowForPaths:(NSArray *)paths

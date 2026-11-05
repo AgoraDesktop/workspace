@@ -1106,7 +1106,7 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 	if ([paths count] == 0) {
 		return;
 	}
-	(void)[WSGetInfoWindowController infoWindowForPaths:paths];
+	(void)[WSGetInfoWindowController infoWindowsForPaths:paths];
 }
 
 /* **THE GRID'S MENU ASKS THIS BEFORE IT DRAWS "Extract Archive"**, and the command is the same one the window's is. */
