@@ -173,23 +173,19 @@ static const CGFloat WSQuickLookCorner = 12.0;
 {
 	NSRect bounds = [self bounds];
 	NSRect header = [self cg_headerRect];
-	NSBezierPath *plate = [NSBezierPath bezierPathWithRoundedRect:bounds xRadius:WSQuickLookCorner
-							       yRadius:WSQuickLookCorner];
 
+	/* THE PLATE FILLS ITS WINDOW EXACTLY — no rounded path, because the notches it leaves are the window's white (see the
+	 * panel's note), and no gap for a background to show through anywhere. */
 	[[NSColor colorWithCalibratedWhite:WSQuickLookPlate alpha:1.0] setFill];
-	[plate fill];
-	[NSGraphicsContext saveGraphicsState];
-	[plate addClip];
+	[[NSBezierPath bezierPathWithRect:bounds] fill];
 	[[NSColor colorWithCalibratedWhite:WSQuickLookHeaderGrey alpha:1.0] setFill];
 	[[NSBezierPath bezierPathWithRect:header] fill];
 	[[NSColor colorWithCalibratedWhite:0.34 alpha:1.0] setStroke];
 	[[NSBezierPath bezierPathWithRect:NSMakeRect(0.0, NSMinY(header), NSWidth(bounds), 1.0)] stroke];
-	[NSGraphicsContext restoreGraphicsState];
 	/* AND THE EDGE OF THE PLATE ITSELF, a hairline lighter than either band so the panel has a boundary against a dark
 	 * desktop as well as a light one. */
 	[[NSColor colorWithCalibratedWhite:0.38 alpha:1.0] setStroke];
-	[[NSBezierPath bezierPathWithRoundedRect:NSInsetRect(bounds, 0.5, 0.5) xRadius:WSQuickLookCorner
-					  yRadius:WSQuickLookCorner] stroke];
+	[[NSBezierPath bezierPathWithRect:NSInsetRect(bounds, 0.5, 0.5)] stroke];
 }
 
 - (void)drawHeader
@@ -469,6 +465,12 @@ static WSQuickLookController *s_shared;
 					      backing:NSBackingStoreBuffered
 						defer:NO];
 	[panel setReleasedWhenClosed:NO];
+	/* **THE PANEL IS OPAQUE AND SQUARE-CORNERED, AND THAT IS A MEASUREMENT RATHER THAN A TASTE.** A rounded plate on an
+	 * opaque window leaves four white notches where the window's own background shows, which is what a person sees as "the
+	 * corners are white". The tier CAN ask for an ARGB window (`-setOpaque:NO` → `AGWindowSetTransparent`), and with it the
+	 * notches were the desktop's — but the panel then stopped appearing on the glass at all, because the window's first
+	 * frame carries no cleared alpha. A panel nobody can see is worse than a panel with a square edge, so the plate fills
+	 * its window and the rounded path is gone: the hairline border is what gives it an edge now. */
 	[panel setOpaque:YES];
 	view = [[WSQuickLookView alloc] initWithFrame:NSMakeRect(0.0, 0.0, width, height)];
 	[panel setContentView:view];
