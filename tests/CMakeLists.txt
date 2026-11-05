@@ -44,6 +44,7 @@ add_executable(desktop_cells desktop_cells.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(desktop_cells PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
@@ -80,6 +81,7 @@ add_executable(desktop_drag desktop_drag.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(desktop_drag PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
@@ -114,6 +116,7 @@ add_executable(desktop_band desktop_band.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(desktop_band PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
@@ -158,6 +161,7 @@ add_executable(preferences preferences.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
@@ -289,6 +293,7 @@ add_executable(file_window file_window.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
@@ -326,6 +331,7 @@ add_executable(app_bundle app_bundle.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSColumnView.m"
@@ -384,6 +390,7 @@ add_executable(icon_view icon_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m")
 target_include_directories(icon_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
@@ -402,6 +409,23 @@ set_tests_properties(workspace-icon-view PROPERTIES ENVIRONMENT
 # **W4'S LIST VIEW.** Columns, directories-first natural order, the expansion across a reload and a rename through
 # the field editor, and the row's icon. Needs the AppKit, Icon Services (the row icon) and Launch Services (the Kind
 # column) but no compositor.
+find_package(Foundation CONFIG REQUIRED)
+
+# **THE GLANCE'S DECISIONS, WITHOUT A DISPLAY.** The panel is a window and needs a server; which kind a path is and what
+# text it contributes are the half where a mistake is silent, and they are class doors for exactly this reason.
+add_executable(quick_look quick_look.m
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m")
+target_include_directories(quick_look PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(quick_look PRIVATE
+    AgoraApp::App
+    AgoraIconServices::IconServices
+    Foundation::Foundation
+    objc)
+add_test(NAME workspace-quick-look COMMAND quick_look)
+set_tests_properties(workspace-quick-look PROPERTIES ENVIRONMENT
+    "LD_LIBRARY_PATH=$<TARGET_FILE_DIR:Foundation::Foundation>:$<TARGET_FILE_DIR:AgoraApp::App>:$<TARGET_FILE_DIR:AgoraIconServices::IconServices>")
+
 add_executable(list_view list_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSListView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSContextMenu.m"
@@ -411,7 +435,8 @@ add_executable(list_view list_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m")
 target_include_directories(list_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(list_view PRIVATE
     AgoraApp::App
@@ -436,6 +461,7 @@ add_executable(column_view column_view.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemSort.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileOperations.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSTrash.m")
 target_include_directories(column_view PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
@@ -482,6 +508,7 @@ add_executable(printing printing.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSFileWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSHairlineView.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSDirectoryWatcher.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSAboutPanel.m"
@@ -538,6 +565,7 @@ set_tests_properties(workspace-printing PROPERTIES ENVIRONMENT
 add_executable(get_info get_info.m
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSGetInfoWindowController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemInfo.m"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSQuickLookController.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemKind.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemModel.m"
     "${CMAKE_CURRENT_SOURCE_DIR}/../src/WSItemIcons.m"

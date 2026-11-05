@@ -25,6 +25,7 @@
 #import "WSSelectionOwner.h"
 #import "WSGetInfoWindowController.h"
 #import "WSItemIcons.h"
+#import "WSQuickLookController.h"
 #import "WSItemDrag.h"
 #import "WSItemModel.h"
 
@@ -786,9 +787,20 @@ NSString *WSIconViewFolderPathKey = @"WSIconViewFolderPath";
 		[self beginRenamingSelectedItem];
 		return;
 	}
+	/* **SPACE IS THE GLANCE, NOT A NAME.** It used to fall through to `-typeSelectWithCharacter:` — a file whose name begins
+	 * with a space was the only thing it could ever find — while every other desktop gives the key to Quick Look. The command
+	 * goes up the responder chain to the window, which knows what is selected. */
+	if (character == ' ' && (flags & (NSCommandKeyMask | NSControlKeyMask)) == 0) {
+		[NSApp sendAction:@selector(quickLook:) to:nil from:self];
+		return;
+	}
 	if (character == 0x1b) {
 		if (_renaming) {
 			[self cancelRenaming];
+		} else if ([[WSQuickLookController sharedController] isShowing]) {
+			/* ESC CLOSES THE GLANCE BEFORE IT CLEARS THE SELECTION, which is the order a person expects: the panel is on
+			 * top of the window, so it is what the key is aimed at. */
+			[[WSQuickLookController sharedController] hide];
 		} else {
 			[self selectIndex:-1];
 		}

@@ -28,6 +28,7 @@
 #import "WSHistory.h"
 #import "WSItemDrag.h"
 #import "WSItemIcons.h"
+#import "WSQuickLookController.h"
 #import "WSItemModel.h"
 #import "WSPlaces.h"
 #import "WSProgressWindow.h"
@@ -1465,6 +1466,32 @@ static void fn_resetContentScroll(NSScrollView *scroll)
 		return;
 	}
 	(void)[WSGetInfoWindowController infoWindowsForPaths:paths];
+}
+
+/* **A GLANCE AT THE SELECTION, AND A GLANCE AT ONE THING ONLY.** Finder's panel previews the item a person is looking at;
+ * a selection of six has no one picture to show, so the panel closes and says nothing — which is also what pressing space
+ * again does.
+ *
+ * The panel is the application's (`WSQuickLookController`), not this window's: a glance replaces the last one rather than
+ * leaving a panel per window behind, and the keys stay with whichever file window holds the selection. */
+- (void)quickLook:(id)sender
+{
+	NSArray *paths = [self selectedPaths];
+	WSQuickLookController *look = [WSQuickLookController sharedController];
+
+	(void)sender;
+	if ([paths count] == 1) {
+		NSString *path = [paths objectAtIndex:0];
+
+		/* SPACE TWICE ON THE SAME FILE CLOSES IT; SPACE ON ANOTHER REPLACES IT IN PLACE. */
+		if ([look isShowing] && [[look path] isEqualToString:path]) {
+			[look hide];
+		} else {
+			[look showForPath:path];
+		}
+		return;
+	}
+	[look hide];
 }
 
 /* **NEW FOLDER WITH SELECTION GATHERS WHAT IS HELD INTO A FOLDER OF ITS OWN**, the reference file manager's own way to

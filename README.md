@@ -507,6 +507,19 @@ still knows how to sum a selection and leave the facts that disagree blank, and 
 paths, but no command asks for that: a window that says "Kind: —" about four different things answers a question nobody
 asked.
 
+**A QUICK LOOK IS THE SPACEBAR, AND IT SHOWS THE FIVE KINDS THIS TREE CAN DRAW.** `WSQuickLookController` opens one
+borderless panel at the floating level — not activatable, so the keys stay with the file window that has the selection — and
+it decides what to show from the file itself: an image through the representation registry (`AGImageSourceRep`, so every
+format the drawing library decodes is a picture here), a PDF as a VECTOR page through `NSPDFImageRep`, a text file's first
+eight kilobytes in a fixed-pitch face, and a folder or anything else as its own icon. Space opens it and Space or Esc closes
+it, in the icon, list and column views; File → Quick Look is the same command for a pointer.
+
+**THE PLATE COMES UP BEFORE THE FILE IS READ.** The panel is built, titled and ordered front with nothing in it, and only
+then is the file decoded — so a glance costs a frame rather than a decode, whatever the file's size. MEASURED
+(`WS_QUICKLOOK_DIAG`): plate on the glass in 5–23 ms, the picture 16 ms later for a 187 KB JPEG. The panel is built on the
+first `-window` (`-loadWindow`), because a controller built before the application has connected cannot make a window at
+all — MEASURED as a panel that was 320×240 at (0,0) and never mapped.
+
 **ONE WINDOW PER SUBJECT, REUSED.** `WSGetInfoWindowController` shows what `WSItemInfo` measured in six collapsible
 sections — General, More Info, Name & Extension, Comments, Preview, Sharing & Permissions — in a flipped container whose
 sections are stacked by arithmetic, because this tree has no nib compiler and every other window is built the same way.

@@ -12,9 +12,11 @@
  * nothing else does. The default is not a short deadline — it is no deadline at all.
  */
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSWindow.h>
 #import <Foundation/NSAutoreleasePool.h>
 
 #import "WSApplication.h"
+#import "WSQuickLookController.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +25,7 @@
 int main(int argc, char **argv)
 {
 	double seconds = 0.0;
+	NSString *quickLookPath = nil;
 	int bounded = 0;
 	WSApplication *workspace;
 	int i;
@@ -67,6 +70,10 @@ int main(int argc, char **argv)
 			/* **A TEST'S DOOR, LIKE `--show-about` AND `--file-window`**: the inspector is reached by a menu action or a
 			 * context row, and a probe cannot click either. The path is the window's subject. */
 			[getInfoPaths addObject:[NSString stringWithUTF8String:argv[++i]]];
+		} else if (strcmp(argv[i], "--quick-look") == 0 && i + 1 < argc) {
+			/* **A TEST'S DOOR, LIKE `--get-info`**: the panel is reached by the spacebar in a file window, which a probe
+			 * cannot press. The path is the glance's subject. */
+			quickLookPath = [NSString stringWithUTF8String:argv[++i]];
 		} else if (strcmp(argv[i], "--show-about") == 0) {
 			/* **A TEST'S DOOR, AND NAMED AS ONE.** The About panel is reached by a menu action, and a menu action
 			 * needs a click — which is the one thing a probe of this tier cannot fake reliably (a synthetic click
@@ -75,7 +82,7 @@ int main(int argc, char **argv)
 			showAbout = 1;
 		} else {
 			fprintf(stderr, "usage: %s [--seconds N] [--show-about] [--file-window] [--list-view] [--column-view]"
-				" [--get-info PATH]\n", argv[0]);
+				" [--get-info PATH] [--quick-look PATH]\n", argv[0]);
 			return 2;
 		}
 	}
@@ -104,6 +111,18 @@ int main(int argc, char **argv)
 		if (![workspace start]) {
 			fprintf(stderr, "workspace: THE DESKTOP WINDOW WAS NOT MADE\n");
 			return 1;
+		}
+		if (quickLookPath != nil) {
+			WSQuickLookController *look = [WSQuickLookController sharedController];
+			NSRect qlFrame;
+
+			[look showForPath:quickLookPath];
+			qlFrame = [(NSWindow *)[look window] frame];
+			fprintf(stderr, "QL-DIAG showing %d path %s frame %.0fx%.0f at %.0f,%.0f visible %d level %ld\n",
+				(int)[look isShowing], [[look path] UTF8String],
+				(double)qlFrame.size.width, (double)qlFrame.size.height,
+				(double)qlFrame.origin.x, (double)qlFrame.origin.y,
+				(int)[(NSWindow *)[look window] isVisible], (long)[(NSWindow *)[look window] level]);
 		}
 		/* **THE ONLY BOUNDED RUN IS THE ONE THAT WAS ASKED FOR.** `--seconds 0` is still a bounded run — a caller that
 		 * named zero asked for a loop that leaves immediately — so the flag, not the value, decides. */

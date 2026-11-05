@@ -12,6 +12,7 @@
 #import "WSContextMenu.h"
 #import "WSFileOperations.h"
 #import "WSItemIcons.h"
+#import "WSQuickLookController.h"
 #import "WSItemDrag.h"
 #import "WSItemKind.h"
 #import "WSItemModel.h"
@@ -938,6 +939,15 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 		return;
 	}
 	item = [self selectedItem];
+	/* SPACE IS THE GLANCE AND ESCAPE PUTS IT AWAY, the same two keys the icon view answers (see its `-keyDown:`). */
+	if (character == ' ' && (flags & (NSCommandKeyMask | NSControlKeyMask)) == 0) {
+		[NSApp sendAction:@selector(quickLook:) to:nil from:self];
+		return;
+	}
+	if (character == 0x1b && [[WSQuickLookController sharedController] isShowing]) {
+		[[WSQuickLookController sharedController] hide];
+		return;
+	}
 	if (character == NSRightArrowFunctionKey && item != nil && [item isBrowsable]
 	    && ![self isItemExpanded:item]) {
 		[self expandItem:item];

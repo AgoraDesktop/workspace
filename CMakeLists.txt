@@ -71,6 +71,7 @@ add_executable(Workspace
     src/WSFileWindowController.m
     src/WSGetInfoWindowController.m
     src/WSItemInfo.m
+    src/WSQuickLookController.m
     src/WSPrintService.m
     src/WSPrintView.m
     src/WSHistory.m

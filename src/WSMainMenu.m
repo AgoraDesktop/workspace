@@ -137,6 +137,10 @@ static NSMenu *WSFileMenu(id target)
 	WSRow(menu, @"Close Window", @selector(performClose:), nil, @"w", NSCommandKeyMask);
 	[menu addItem:[NSMenuItem separatorItem]];
 	WSRow(menu, @"Get Info", @selector(getInfo:), nil, @"i", NSCommandKeyMask);
+	/* **QUICK LOOK IS THE SPACEBAR, AND THE ROW SAYS SO WITHOUT TAKING THE KEY.** A menu's key equivalent cannot be a bare
+	 * space without making every space in the application a menu command, so the row carries no key and the file window's
+	 * views answer the key themselves — the same arrangement Finder uses, where Space is a key a VIEW handles. */
+	WSRow(menu, @"Quick Look", @selector(quickLook:), nil, nil, 0);
 	WSRow(menu, @"Duplicate", @selector(duplicate:), nil, @"d", NSCommandKeyMask);
 	/* **AND THE SAME CHOICE THE RIGHT-CLICK MENU OFFERS.** One "Compress" row can only mean the format its author picked;
 	 * the submenu is where the choice lives, and every leaf is the one command with a tag naming the format. The rows are

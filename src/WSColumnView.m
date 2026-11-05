@@ -15,6 +15,7 @@
 #import "WSItemInfo.h"
 #import "WSItemModel.h"
 #import "WSItemSort.h"
+#import "WSQuickLookController.h"
 
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSBrowserCell.h>
@@ -880,5 +881,29 @@ static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat p
 	return ([lines count] > 2) ? [lines objectAtIndex:2] : nil;
 }
 - (NSString *)cg_previewText { return [_preview previewText]; }
+
+
+/* **SPACE IS THE GLANCE HERE TOO.** The icon and list views answer it themselves; a column view is an `NSBrowser` subclass,
+ * which would otherwise hand the key to the browser's own type-select — so it answers the same two keys the same way and
+ * forwards everything else. */
+- (void)keyDown:(NSEvent *)event
+{
+	NSString *characters = [event characters];
+	NSUInteger flags = [event modifierFlags];
+
+	if ([characters length] > 0) {
+		unichar character = [characters characterAtIndex:0];
+
+		if (character == ' ' && (flags & (NSCommandKeyMask | NSControlKeyMask)) == 0) {
+			[NSApp sendAction:@selector(quickLook:) to:nil from:self];
+			return;
+		}
+		if (character == 0x1b && [[WSQuickLookController sharedController] isShowing]) {
+			[[WSQuickLookController sharedController] hide];
+			return;
+		}
+	}
+	[super keyDown:event];
+}
 
 @end
