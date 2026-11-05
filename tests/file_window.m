@@ -459,8 +459,8 @@ int main(void)
 
 	outline = [first cg_sidebarOutline];
 	check([first cg_splitView].dividerStyle == NSSplitViewDividerStylePaneSplitter
-	      && [[first cg_splitView] dividerThickness] == 18.0,
-	      "the sidebar's divider is the split view's eighteen-point gutter");
+	      && [[first cg_splitView] dividerThickness] == 12.0,
+	      "the sidebar's divider is the split view's twelve-point gutter");
 	check([outline numberOfRows] == 6, "the sidebar expands two sections and their four places");
 	{
 		NSScrollView *sidebarScroll = [outline enclosingScrollView];
@@ -621,7 +621,7 @@ int main(void)
 		NSScrollView *firstColumn = [browser cg_scrollViewForColumn:0];
 		NSScrollView *secondColumn = [browser cg_scrollViewForColumn:1];
 		NSView *document = [browser cg_documentView];
-		CGFloat expectedSecond = [browser widthOfColumn:0] + 18.0;
+		CGFloat expectedSecond = [browser widthOfColumn:0] + 12.0;
 
 		check([browser cg_columnCount] == 256 && [browser cg_activeColumnCount] == 1
 		      && [browser numberOfRowsInColumn:0] == 4,
