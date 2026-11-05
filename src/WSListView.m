@@ -918,6 +918,14 @@ static NSInteger fn_path_depth_compare(id left, id right, void *context)
 	}
 }
 
+/* **A VIEW THAT CANNOT BE FIRST RESPONDER NEVER SEES A KEY.** `-keyDown:` was implemented here and the space handler added
+ * to it, and neither ever ran: `NSView`'s answer is NO, and `WSOutlineView` does not override it — so the file window's
+ * outline view never had the keyboard and space went to the window. MEASURED as "space does nothing". */
+- (BOOL)acceptsFirstResponder
+{
+	return YES;
+}
+
 - (void)keyDown:(NSEvent *)event
 {
 	NSString *characters = [event characters];

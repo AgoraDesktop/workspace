@@ -886,6 +886,13 @@ static void fn_draw_centred(NSString *text, CGFloat y, CGFloat height, CGFloat p
 /* **SPACE IS THE GLANCE HERE TOO.** The icon and list views answer it themselves; a column view is an `NSBrowser` subclass,
  * which would otherwise hand the key to the browser's own type-select — so it answers the same two keys the same way and
  * forwards everything else. */
+/* **A VIEW THAT CANNOT BE FIRST RESPONDER NEVER SEES A KEY** — see `WSListView`'s note. The column view is an `NSView`
+ * holding browsers, so it had no keyboard at all until this door existed. */
+- (BOOL)acceptsFirstResponder
+{
+	return YES;
+}
+
 - (void)keyDown:(NSEvent *)event
 {
 	NSString *characters = [event characters];

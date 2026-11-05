@@ -1474,6 +1474,29 @@ static void fn_resetContentScroll(NSScrollView *scroll)
  *
  * The panel is the application's (`WSQuickLookController`), not this window's: a glance replaces the last one rather than
  * leaving a panel per window behind, and the keys stay with whichever file window holds the selection. */
+/* **AND THE WINDOW ANSWERS IT TOO, FOR WHEN NO VIEW HAS THE KEYBOARD.** `[window setNextResponder:self]` puts this controller
+ * after the window, so a key the window itself receives — before any view is focused — is answered here rather than dropped.
+ * A text field still types its own spaces: the field is the first responder and never reaches this door. */
+- (void)keyDown:(NSEvent *)event
+{
+	NSString *characters = [event characters];
+	NSUInteger flags = [event modifierFlags];
+
+	if ([characters length] > 0) {
+		unichar character = [characters characterAtIndex:0];
+
+		if (character == ' ' && (flags & (NSCommandKeyMask | NSControlKeyMask)) == 0) {
+			[self quickLook:nil];
+			return;
+		}
+		if (character == 0x1b && [[WSQuickLookController sharedController] isShowing]) {
+			[[WSQuickLookController sharedController] hide];
+			return;
+		}
+	}
+	[super keyDown:event];
+}
+
 - (void)quickLook:(id)sender
 {
 	NSArray *paths = [self selectedPaths];
